@@ -37,7 +37,7 @@ class RecipeUiTests(unittest.TestCase):
                 self.assertEqual(find_recipe("WP7",catalog(load_profile(path))),"weaponpart_7")
                 self.assertEqual(app.construction_recipe.get(),"Tangent Weaponpart 7")
                 # Persisted counts remain independent of recipe removal/restoration.
-                self.assertEqual(app.profile["construction"]["available"],1)
+                self.assertEqual(app.profile["construction"]["available"],10000)
                 self.assertIsNone(app.countdown);self.assertIsNone(app.worker)
             finally:app.close()
 

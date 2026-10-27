@@ -22,7 +22,7 @@ def default_profile():
         "operation": "tech_parts",
         "research_operation": "tech_parts",
         "blueprints": {"count": 1},
-        "construction": {"recipe": "weaponpart_7", "available": 1, "count": 1, "count_slots":False},
+        "construction": {"recipe": "weaponpart_7", "available": 10000, "count": 0, "count_slots":False},
         "custom_recipes": {},
         "hidden_recipes": [],
         "materials": {},

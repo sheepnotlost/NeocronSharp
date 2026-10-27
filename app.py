@@ -343,7 +343,7 @@ class App:
         form.columnconfigure(1,weight=1)
         self.construction_recipe=tk.StringVar()
         self.construction_available=tk.StringVar(value="1")
-        self.construction_count=tk.StringVar(value="1")
+        self.construction_count=tk.StringVar(value="0")
         for row,label in ((0,"Recipe"),(2,"Build this batch")):
             ttk.Label(form,text=label).grid(row=row,column=0,sticky="w",pady=5)
         choice=self.construction_choice=ttk.Combobox(form,textvariable=self.construction_recipe,
