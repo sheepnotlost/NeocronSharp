@@ -33,20 +33,18 @@ class LayoutTests(unittest.TestCase):
         self.app.close()
         self.temp.cleanup()
 
-    def test_research_paragraph_uses_settings_panel_width_in_every_skin(self):
+    def test_interface_stays_terse_and_has_no_setup_essay_panels(self):
         app = self.app
-        label = next(w for w in app.settings_frame.winfo_children() if isinstance(w, ttk.Label))
-        for skin in SKINS:
-            apply_skin(self.root, skin, app.heading)
-            for geometry in ("960x800", "1040x840", "2560x1390"):
-                with self.subTest(skin=skin, geometry=geometry):
-                    self.root.geometry(geometry + "+0+0")
-                    self.root.update_idletasks()
-                    self.assertGreater(label.winfo_width(), 180)
-                    self.assertLess(app.settings_frame.winfo_width() - label.winfo_width(), 70)
-                    self.assertAlmostEqual(float(label.cget("wraplength")), label.winfo_width() - 4, delta=1)
-                    self.assertLess(label.winfo_reqheight(), 160)
-                    self.assertLess(app.operation_frame.winfo_y(), 300)
+        self.assertFalse(hasattr(app, "settings_frame"))
+        def walk(widget):
+            yield widget
+            for child in widget.winfo_children():
+                yield from walk(child)
+        titles = [w.cget("text") for w in walk(self.root) if isinstance(w, ttk.LabelFrame)]
+        self.assertNotIn("Prepare in Neocron", titles)
+        for widget in walk(self.root):
+            if isinstance(widget, ttk.Label) and not str(widget.cget("textvariable")):
+                self.assertLessEqual(len(widget.cget("text")), 60, widget.cget("text"))
 
     def test_divider_changes_log_height_while_start_and_tabs_remain_available(self):
         app = self.app

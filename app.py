@@ -78,9 +78,8 @@ class App:
         outer.rowconfigure(3, weight=1)
         self.heading=ttk.Label(outer, text="Neocron Macro Suite", font=("Segoe UI", 22, "bold"))
         self.heading.grid(row=0, column=0, sticky="w")
-        ttk.Label(outer, text="Research, construction, recycling and tech counting",wraplength=980).grid(row=1, column=0, sticky="ew", pady=(2, 12))
-        self.bound = tk.StringVar(value="Automatic detection · click Start, then focus Neocron within 3 seconds.")
-        ttk.Label(outer, textvariable=self.bound, wraplength=980).grid(row=2, column=0, sticky="w", pady=(0, 12))
+        self.bound = tk.StringVar(value="")
+        ttk.Label(outer, textvariable=self.bound).grid(row=2, column=0, sticky="w", pady=(0, 12))
 
         self.main_split = tk.PanedWindow(outer, orient="vertical", sashwidth=9,
                                         sashrelief="raised", showhandle=True,
@@ -126,7 +125,7 @@ class App:
         right = ttk.Frame(columns)
         right.grid(row=0, column=1, sticky="nsew")
 
-        mode = ttk.LabelFrame(left, text="1. Research type", padding=12)
+        mode = ttk.LabelFrame(left, text="Research", padding=12)
         mode.pack(fill="x", pady=(0, 14))
         self.operation_var = tk.StringVar()
         mode_choice = ttk.Combobox(mode, textvariable=self.operation_var,
@@ -135,7 +134,7 @@ class App:
         mode_choice.bind("<<ComboboxSelected>>", lambda event: self.update_mode())
         self.editable.append(mode_choice)
 
-        stacks = self.stacks_frame = ttk.LabelFrame(left, text="Stack sizes and batch counts", padding=12)
+        stacks = self.stacks_frame = ttk.LabelFrame(left, text="Stacks", padding=12)
         stacks.pack(fill="x")
         for col, title in enumerate(("Stack", "Available", "Research", "Position")):
             ttk.Label(stacks, text=title).grid(row=0, column=col, padx=5, pady=(0, 8), sticky="w")
@@ -152,8 +151,7 @@ class App:
             var = tk.StringVar()
             self.position_labels[name] = var
             ttk.Label(stacks, textvariable=var, width=12).grid(row=row, column=3, padx=5)
-        ttk.Label(stacks, text="Research = 0 skips a stack. Available must match the actual stack size.",
-                  wraplength=510).grid(row=5, column=0, columnspan=4, sticky="w", pady=(9, 0))
+        ttk.Label(stacks, text="0 skips a stack").grid(row=5, column=0, columnspan=4, sticky="w", pady=(9, 0))
 
         self.blueprint_frame = ttk.LabelFrame(left, text="Blueprint copies", padding=12)
         self.blueprint_count = tk.StringVar(value="1")
@@ -161,31 +159,11 @@ class App:
         copies = ttk.Entry(self.blueprint_frame, textvariable=self.blueprint_count, width=10)
         copies.grid(row=0, column=1, padx=10, sticky="w")
         self.editable.append(copies)
-        ttk.Label(self.blueprint_frame, text="0 repeats until you switch away from Neocron. "
-                  "The macro only clicks Start. Prepare the research tool, item, and empty datacubes "
-                  "in the game first. This mode supports different researchable items and blueprint colors.", wraplength=510).grid(
+        ttk.Label(self.blueprint_frame, text="0 repeats until stopped").grid(
                       row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
-        detection = self.detection_frame = ttk.LabelFrame(left, text="Automatic window detection", padding=12)
-        detection.pack(fill="x", pady=(14, 0))
-        self.detection_description = tk.StringVar()
-        ttk.Label(detection, textvariable=self.detection_description, wraplength=510).pack(anchor="w")
-        self.processor_position = tk.StringVar(value="Processor: awaiting detection")
-        ttk.Label(detection, textvariable=self.processor_position,wraplength=510).pack(anchor="w", pady=10)
-        self.setup_description = tk.StringVar()
-        ttk.Label(detection, textvariable=self.setup_description, wraplength=510).pack(anchor="w")
-        settings = self.settings_frame = ttk.LabelFrame(right, text="2. Sequence settings", padding=12)
-        settings.pack(fill="x")
-        ttk.Label(settings, text="Completion is monitor-only. There is no fixed research wait or research time limit.", wraplength=340).grid(
-                      row=0, column=0, columnspan=2, sticky="w")
-
-        operation = self.operation_frame = ttk.LabelFrame(right, text="3. Start and stop", padding=12)
-        operation.pack(fill="x", pady=(14, 0))
-        ttk.Label(operation, text="Click Start in 3 seconds, then switch to Neocron. "
-                  "Settings are saved automatically when you start.", wraplength=340).pack(anchor="w")
-        ttk.Label(operation, text="Switch away from Neocron to stop the batch. It will not resume "
-                  "automatically. Check the current item and counts before starting again.",
-                  wraplength=340).pack(anchor="w", pady=(10, 0))
+        self.processor_position = tk.StringVar(value="")
+        self.detection_frame = None
 
         actions = ttk.Frame(workspace)
         actions.grid(row=1, column=0, sticky="ew", pady=(16, 8))
@@ -199,13 +177,13 @@ class App:
         skin=ttk.Combobox(actions,textvariable=self.skin_var,values=[s["name"] for s in SKINS.values()],state="readonly",width=22)
         skin.pack(side="right",padx=6);skin.bind("<<ComboboxSelected>>",lambda e:self.save_preferences());self.editable.append(skin)
         ttk.Label(actions,text="Skin").pack(side="right")
-        self.status = tk.StringVar(value="Choose a tab, then click Start in 3 seconds.")
+        self.status = tk.StringVar(value="Ready")
         ttk.Label(workspace, textvariable=self.status, wraplength=980, font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="ew", pady=6)
         self.log_panel = ttk.Frame(self.main_split)
         self.log_panel.columnconfigure(0, weight=1)
         self.log_panel.rowconfigure(1, weight=1)
         self.main_split.add(self.log_panel, minsize=70, height=120, stretch="never")
-        ttk.Label(self.log_panel, text="Activity log · drag the divider above to resize").grid(
+        ttk.Label(self.log_panel, text="Log").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(2, 4))
         self.log = tk.Text(self.log_panel, height=5, wrap="word", state="disabled", font=("Consolas", 9),
                            background="#e6eceb", relief="flat", padx=8, pady=6)
@@ -294,11 +272,6 @@ class App:
         ttk.Label(details,textvariable=self.recycle_description,wraplength=340,justify="left").pack(anchor="nw")
         source=ttk.Button(details,text="Open recipe source",command=self.open_recycle_source)
         source.pack(anchor="w",pady=(10,14));self.editable.append(source)
-        ttk.Label(details,text="Prepared Processor mode\n\nPut the Recycling Tool in slot 1 and load this recipe's exact inputs yourself. "
-                  "Start in 3 seconds clicks Start once, watches progress, verifies the result name, and stops. "
-                  "It does not move recycling ingredients or automatically repeat consumed inputs.\n\n"
-                  "Part upgrades combine two identical lower-tier parts. Cloning uses a sample plus suitable junk; salvage uses a different tool. "
-                  "These general operations are described in the spec.",wraplength=340).pack(anchor="w")
         self.recycle_query.trace_add("write",lambda *args:self.filter_recycling())
         self.recycle_category.trace_add("write",lambda *args:self.filter_recycling())
         self.filter_recycling()
@@ -321,9 +294,6 @@ class App:
         text=row["name"]+"\n"+row["category"]+f" · TL {row['tech_level'] if row['tech_level'] is not None else 'not listed'}\n\nIngredients:\n"
         text+="\n".join(f"{p['quantity']} × {p['name']}" for p in row["ingredients"])
         if row["requirements"]:text+="\n\nItem requirements: "+row["requirements"]
-        text+="\n\nSource: "+("Legacy community listing" if row.get("verification") else "Tech Haven Items DB")
-        text+="\nRetrieved 26 October 2026. Recipe data has not been live verified."
-        if row.get("verification"):text+="\n"+row["verification"]
         self.recycle_description.set(text)
 
     def open_recycle_source(self):
@@ -389,11 +359,8 @@ class App:
             entry=ttk.Entry(form,textvariable=var,width=10)
             entry.grid(row=row,column=1,sticky="w",padx=(10,0),pady=5)
             self.editable.append(entry)
-        ttk.Label(form,text="Build = 0 keeps going until your blueprints run out. No stack size to enter.",
-                  wraplength=485).grid(row=3,column=0,columnspan=2,sticky="w",pady=(8,0))
+        ttk.Label(form,text="0 = until blueprints run out").grid(row=3,column=1,sticky="w",padx=(10,0))
         self.recipe_description=tk.StringVar()
-        ttk.Label(form,textvariable=self.recipe_description,wraplength=485).grid(
-            row=4,column=0,columnspan=2,sticky="w",pady=(12,0))
         ttk.Label(form,text="Aliases (optional)").grid(row=5,column=0,sticky="w",pady=(12,4))
         self.recipe_aliases=tk.StringVar()
         aliases=ttk.Entry(form,textvariable=self.recipe_aliases,width=1)
@@ -405,14 +372,11 @@ class App:
         self.editable.append(save)
         remove=self.remove_recipe_button=ttk.Button(form,text="Remove recipe",command=self.remove_job_recipe)
         remove.grid(in_=actions,row=0,column=1,sticky="w",padx=8);self.editable.append(remove)
-        ttk.Label(form,text="Type the blueprint item name above to add any recipe. Comma-separated aliases let you select it by shorthand. "
-                  "WP7, WP9 and HH are already recognized. Custom results are checked by their tooltip names.",
-                  wraplength=485).grid(row=7,column=0,columnspan=2,sticky="w",pady=(4,0))
         self.count_slots=tk.BooleanVar(value=False)
         counter=ttk.Checkbutton(form,text="Count slots on constructed weapons / spells",variable=self.count_slots)
         counter.grid(row=8,column=0,columnspan=2,sticky="w",pady=(12,0))
         self.editable.append(counter)
-        self.slot_summary=tk.StringVar(value="Optional: reads the result tooltip after each build. Totals reset each batch.")
+        self.slot_summary=tk.StringVar(value="")
         ttk.Label(form,textvariable=self.slot_summary,wraplength=485).grid(row=9,column=0,columnspan=2,sticky="w",pady=(4,0))
         stop_row=ttk.Frame(form)
         stop_row.grid(row=10,column=0,columnspan=2,sticky="ew",pady=(8,0))
@@ -423,34 +387,19 @@ class App:
         stop_check.pack(side="left")
         stop_value=ttk.Combobox(stop_row,textvariable=self.minimum_slots,values=list(range(6)),state="readonly",width=3)
         stop_value.pack(side="left",padx=6)
-        ttk.Label(stop_row,text="or more slots; leave the result in the Processor",wraplength=320).pack(side="left")
+        ttk.Label(stop_row,text="or more slots").pack(side="left")
         self.editable.extend((stop_check,stop_value))
         self.gogo_refill=tk.BooleanVar(value=False)
         gogo_check=ttk.Checkbutton(form,text="More Materials in GoGo",variable=self.gogo_refill)
         gogo_check.grid(row=11,column=0,columnspan=2,sticky="w",pady=(12,0));self.editable.append(gogo_check)
-        ttk.Label(form,text="Keep a GoGuardian window open. When a build is refused for missing materials, up to 15 of each "
-                  "needed ingredient are moved into Inventory, then Start is pressed again. Built-in recipes only.",
-                  wraplength=485).grid(row=12,column=0,columnspan=2,sticky="w",pady=(4,0))
-        settings=ttk.LabelFrame(body,text="Transfer controls",padding=12)
+        ttk.Label(form,text="Keep GoGuardian open").grid(row=12,column=0,columnspan=2,sticky="w",pady=(2,0))
+        settings=ttk.LabelFrame(body,text="Search",padding=12)
         settings.grid(row=1,column=0,sticky="new",padx=(0,14),pady=(12,0))
         settings.columnconfigure(1,weight=1)
         self.search_mode=tk.StringVar(value=SEARCH_LABELS["fast"])
         ttk.Label(settings,text="Inventory search").grid(row=0,column=0,sticky="w",pady=4)
         search=ttk.Combobox(settings,textvariable=self.search_mode,values=list(SEARCH_LABELS.values()),state="readonly",width=1)
         search.grid(row=0,column=1,padx=10,pady=4,sticky="ew");self.editable.append(search)
-        ttk.Label(settings,text="Fast finds possible datacubes from the image, then verifies their names. Thorough hovers every cell.",wraplength=475).grid(row=1,column=0,columnspan=2,sticky="w",pady=(4,0))
-        instructions=ttk.LabelFrame(body,text="Prepare in Neocron",padding=12)
-        instructions.grid(row=0,column=1,rowspan=2,sticky="new")
-        ttk.Label(instructions,text="\n".join("• "+line for line in (
-                  "Inventory + Processor open and visible.",
-                  "Slot 1: construction tool.",
-                  "Inventory scrolled to top; search runs downward.",
-                  "Stack size = actual blueprint count.",
-                  "Ingredients stay in Inventory; Neocron loads them.",
-                  "Empty cubes / previous result may stay.",
-                  "Stop: switch away from Neocron. No auto-resume.")),
-                  wraplength=340,justify="left").pack(anchor="w")
-        ttk.Label(instructions,textvariable=self.processor_position,wraplength=340).pack(anchor="w",pady=(12,0))
         self.build_construction_catalog()
 
     def refresh_recipe(self):
@@ -512,9 +461,6 @@ class App:
         self.use_build_button.pack(anchor="w",pady=(12,5))
         source=ttk.Button(body,text="Open item source",command=self.open_build_source);source.pack(anchor="w",pady=5)
         self.editable.extend((self.use_build_button,source))
-        ttk.Label(body,text="Only the item you save/select is added to the active recipe book. Browsing this catalog does not slow inventory matching. "
-                  "You must own its blueprint. Rare-part assembly and recycled-only entries cannot be loaded into the blueprint workflow. "
-                  "Published item listings do not establish blueprint availability for every item; check the in-game blueprint for materials.",wraplength=330).pack(anchor="w",pady=(14,0))
         self.build_query.trace_add("write",lambda *args:self.filter_build_catalog())
         self.build_category.trace_add("write",lambda *args:self.filter_build_catalog())
         self.construction_pages.bind("<<NotebookTabChanged>>",lambda e:self.sync_start_button())
@@ -538,7 +484,8 @@ class App:
         if row is None:self.build_description.set("No matching item.")
         else:
             materials="\n".join(row["ingredients"]) if row["ingredients"] else "Not published in the imported category listing. Read the actual blueprint in game."
-            self.build_description.set(f"{row['name']}\n{row['category']} · TL {row['level'] if row['level'] is not None else 'not listed'}\n\nMaterials:\n{materials}\n\n{row['notes']}\n\nSource: Tech Haven Items DB / supplied examples. Retrieved 26 October 2026.")
+            self.build_description.set(f"{row['name']}\n{row['category']} · TL {row['level'] if row['level'] is not None else '—'}"
+                                       +(f"\n\n{materials}" if row["ingredients"] else ""))
         state="normal" if row and row["method"] in ("verified_example","check_blueprint") and not self.locked() else "disabled"
         self.use_build_button.configure(state=state)
 
@@ -641,23 +588,7 @@ class App:
         blueprint = self.operation_var.get() == OPERATION_LABELS["blueprints"]
         self.stacks_frame.pack_forget()
         self.blueprint_frame.pack_forget()
-        (self.blueprint_frame if blueprint else self.stacks_frame).pack(fill="x", before=self.detection_frame)
-        self.settings_frame.pack_forget()
-        if not blueprint:
-            self.settings_frame.pack(fill="x", before=self.operation_frame)
-        if blueprint:
-            self.detection_description.set("The Processor and its current Start button are found from fresh "
-                                           "screenshots, including after the window moves.")
-            self.setup_description.set("Keep the Processor visible. The macro watches progress and confirms "
-                                       "a blueprint in the result slot before starting the next copy. Inputs stay "
-                                       "in place; previous results return on the next Start. No fixed research timer. "
-                                       "Hidden or ambiguous controls stop the batch.")
-        else:
-            self.detection_description.set("Processor, Inventory, stack labels, and the quantity dialog are found "
-                                           "from fresh screenshots. No coordinate or empty-slot calibration is required.")
-            self.setup_description.set("Open Inventory and Processor, keep the research tool in slot 1, "
-                                       "and leave the other input slots empty. Keep one visible source stack "
-                                       "of each type. Hidden or ambiguous controls stop the batch.")
+        (self.blueprint_frame if blueprint else self.stacks_frame).pack(fill="x")
 
     def refresh_positions(self):
         for name, var in self.position_labels.items():

@@ -125,9 +125,7 @@ class TechCounterPanel(CounterApp):
                 migration = "Imported existing counter data; the standalone files are unchanged."
         except (OSError, ValueError) as exc:
             migration = f"Existing counter data was not imported: {exc}"
-        instructions = ttk.Label(host, text="Open a cabinet and/or Inventory, click Start in 3 seconds, then focus Neocron. "
-                                 "The counter hovers and scrolls; it never clicks or moves items. "
-                                 "Switch away or move the mouse to stop. Partial scans are marked.", wraplength=900)
+        instructions = ttk.Label(host, text="Open a cabinet or Inventory, then Start.", wraplength=900)
         instructions.pack(fill="x", padx=8, pady=6)
         body = ttk.Frame(host)
         body.pack(fill="both", expand=True)

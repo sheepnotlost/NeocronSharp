@@ -12,7 +12,7 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 
 - Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button.
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
-- Construction Job's Prepare in Neocron panel is terse bullets: Inventory + Processor visible; slot 1 construction tool; Inventory scrolled to top (search runs downward); stack size = actual count; ingredients stay in Inventory; empty cubes/previous result may stay; stop by switching away, no auto-resume.
+
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
 - Bind the exact foreground Neocron window/process/client size at countdown end.
 - Stop on focus loss, minimization, game closure/identity change, changed client dimensions, app closure, or an unverified action/state.

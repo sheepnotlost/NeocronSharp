@@ -67,7 +67,7 @@ Processor preflight now rejects busy jobs, pending quantity dialogs and unproces
 
 ## Other delivered features and scope limits
 
-- Research, Construction and Recycling tabs. Construction has Job/Catalog pages; Job's Prepare in Neocron panel is minimal bullets (Inventory scrolled to top; search runs downward).
+- Research, Construction, Recycling and Tech Counter tabs; Construction has Job/Catalog pages. The UI is deliberately terse (no setup/explainer panels).
 - Broad searchable construction catalog: 1,263 **item entries**, 38 categories. Only WP7/WP9/Holy Heal have supplied material examples; most entries say Check blueprint. Rare-part/recycling-only rows are reference-only. Do not market all rows as verified construction recipes or invent materials/quantities.
 - Only saved/chosen construction names enter active matching, not all 1,263 browse entries.
 - Favorites and the Drag button / Drag modifier selectors were removed 26 Oct 2026 at the user's request. Old profile "favorites" keys are dropped on load; drags are always plain left drags. Start is disabled only on the construction Catalog page (plus countdown/execution).

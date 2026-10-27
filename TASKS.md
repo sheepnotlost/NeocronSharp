@@ -173,6 +173,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] Removed the "Blueprints in stack" field. Build = 0 now runs until no blueprint can be found (the batch then ends as "Out of ... blueprints", not an error, once at least one build finished). Internally the stack is saved as 10000 = unknown; a lone-item stack that transfers without a dialog is accepted when the blueprint is visibly loaded.
 
+- [x] Interface trimmed (27 Oct): removed the "Prepare in Neocron" panel, the Research detection/sequence/start-and-stop explainer panels, recipe ingredient and catalog paragraphs, the recycling explainer and the source/retrieval boilerplate. Remaining static labels are one short line each; a test guards against wordy labels returning.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.
