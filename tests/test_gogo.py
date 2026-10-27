@@ -113,6 +113,15 @@ class RefillSequenceTests(unittest.TestCase):
         self.assertTrue(typed and all(n <= gogo.BATCH for n in typed), typed)
         self.assertEqual(sum(e == ("click", (20, 10)) for e in events), 5)  # Ok once per ingredient
 
+    def test_a_dialog_that_opens_at_one_is_still_filled_to_fifteen(self):
+        # Live: the first ingredient came across as a single item because the dialog
+        # reopened at the previous quantity (1). Every ingredient must be typed.
+        runner, events, _ = self.runner(dialog_defaults=(1, 15, 15, 15, 15))
+        runner.refill_from_gogo()
+        typed = [e[1] for e in events if e[0] == "type"]
+        self.assertGreaterEqual(len(typed), 1)
+        self.assertEqual(typed[0], gogo.BATCH)
+
     def test_a_missing_gogo_window_stops_with_a_clear_message(self):
         runner, events, _ = self.runner(window_present=False)
         with self.assertRaisesRegex(Interrupted, "GoGuardian window not found"):

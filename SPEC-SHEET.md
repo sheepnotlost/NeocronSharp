@@ -134,7 +134,7 @@ Use blueprint recipe saves the selected name to the custom recipe book and opens
 ### More Materials in GoGo (optional)
 
 - Off by default. When on, a Start that is not followed by visible progress within 5 s while the blueprint remains loaded is treated as refused for missing materials. The macro finds an open GoGuardian window (OCR of its Take All / Sort / Stack strip, any scale), reads each stack's three-letter label, and moves at most 15 of each ingredient the built-in recipe needs into Inventory, then presses Start again (at most twice per build). Ingredient labels are known only for Weaponpart 7/9; other recipes report that refills are unavailable.
-- Quantities: the dialog opens at the full stack; the macro enters min(15, stack), reads the field back, and only then presses Ok. An unreadable field stops with the dialog left open.
+- Quantities: the dialog reopens at the last quantity entered, so the macro always types 15, reads the field back (a smaller shown number means the game clamped it to a smaller stack) and only then presses Ok. An unreadable field stops with the dialog left open.
 - Stops with a clear message when the GoGuardian window is not found, holds none of the materials, or Inventory has no free slot.
 
 ### Transfer, Start and completion

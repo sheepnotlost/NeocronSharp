@@ -318,17 +318,20 @@ class ConstructionRunner(VisualRunner):
             crop=self.detector.gray(frame[y-r:y+r,x-wide:x+wide])
             digits=re.sub(r"\D","",self.detector.read_text(cv2.resize(crop,None,fx=4,fy=4,interpolation=cv2.INTER_CUBIC)))
             return int(digits) if digits else (1 if dialog.get("one") else None)
-        # The dialog opens at the full stack: never ask for more than it holds.
-        stack=field_number(self.frame(),dialog)
-        target=min(amount,stack) if stack else amount
-        if stack!=target:
-            self.click(dialog["field"]);self.type_number(target)
-            self.move((24,80));self.wait(self.settings["settle_seconds"])
-            frame=self.frame()
-            dialog=self.detector.quantity(frame,checkpoint=self.guard)
-            if dialog is None:raise Interrupted("Quantity dialog disappeared before confirmation.")
-            if field_number(frame,dialog)!=target:
-                raise Interrupted(f"Could not verify quantity {target}. The dialog was left open; nothing was confirmed.")
+        # The dialog opens at the last quantity entered (live: 1 left over from the blueprint
+        # drag), not at the full stack. Always type the wanted amount and read it back; a
+        # smaller shown number means the game clamped it to a smaller stack.
+        if field_number(self.frame(),dialog)!=amount:
+            for attempt in range(2):
+                self.click(dialog["field"]);self.type_number(amount)
+                self.move((24,80));self.wait(self.settings["settle_seconds"])
+                frame=self.frame()
+                dialog=self.detector.quantity(frame,checkpoint=self.guard)
+                if dialog is None:raise Interrupted("Quantity dialog disappeared before confirmation.")
+                shown=field_number(frame,dialog)
+                if shown is None or shown>amount:
+                    raise Interrupted(f"Could not verify quantity {amount}. The dialog was left open; nothing was confirmed.")
+                if shown>1 or amount==1:break
         self.click(dialog["ok"]);self.move((24,80));self.wait(self.settings["settle_seconds"])
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")

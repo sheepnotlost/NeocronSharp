@@ -165,9 +165,9 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] Optional Construction checkbox (saved as construction.gogo_refill, default off). Built-in recipes only (material labels known: WP7 TRS/MET/ARI/SOL; WP9 GAM/MET/SOL/STS/TIB).
 - [x] Trigger: with the option on, a Start that never turns busy for 5 s while the blueprint stays loaded counts as refused (missing materials). The macro then refills and presses Start again, at most twice per build.
-- [x] GoGuardian is located from its "Take All / Sort / Stack" strip by local OCR at any scale; stacks are read by their 3-letter label. Up to 15 of each needed ingredient are dragged into Inventory (onto the same stack when present, else the first empty cell). The quantity dialog opens at the full stack, so the amount is capped to what it holds and read back before Ok.
+- [x] GoGuardian is located from its "Take All / Sort / Stack" strip by local OCR at any scale; stacks are read by their 3-letter label. Up to 15 of each needed ingredient are dragged into Inventory (onto the same stack when present, else the first empty cell). The quantity dialog reopens at the last quantity entered (not the full stack), so 15 is always typed and read back before Ok; a smaller number shown means the game clamped it to a smaller stack.
 - [x] The GoGuardian window must be open beside Inventory and Processor. 202 tests incl. two real captures.
-- [ ] Not verified live: the GoGuardian drags, quantity entry above 1, and the refused-start trigger. Stack counts (xN) on the live capture could not be read by OCR, so the dialog's default is used instead.
+- [ ] Not verified live: the GoGuardian drags, quantity entry above 1, and the refused-start trigger. Stack counts (xN) on the live capture could not be read by OCR.
 
 - [x] Fullscreen 2560x1440 at UI scale ~1.02 (27 Oct 05:49): the macro hovered the blueprint but never proceeded. The cheap Inventory re-check used template correlation that fails between reference scales, so every hover looked like a moved window and the page restarted. Grid-fitted windows now keep their grid-based re-check at any scale. Regression test uses the real capture.
 
