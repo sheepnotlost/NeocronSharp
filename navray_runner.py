@@ -115,10 +115,15 @@ class NavRayRunner(VisualRunner):
         self.move(window.wheel_point(which))
         self.backend.scroll(10)                      # to the top of the list
         self.wait(.2)
-        previous = None
+        previous, empty, saw = None, 0, []
         for _ in range(PAGES):
             self.clear_pointer()
             rows = navray.read_rows(self.detector.gray(self.frame()), window, which)
+            if not rows and empty < 8:
+                empty += 1                       # the list may not have redrawn after the last click yet
+                self.wait(.3)
+                continue
+            saw = [text for _, text in rows] or saw
             row = navray.find_row(rows, label)
             if row is not None:
                 if occurrence > 1:
@@ -132,7 +137,8 @@ class NavRayRunner(VisualRunner):
             self.move(window.wheel_point(which))
             self.backend.scroll(-self.notches)
             self.wait(.25)
-        raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list.")
+        shown = "; ".join(saw[:8]) if saw else "nothing readable"
+        raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list. Last rows read: {shown}.")
 
     notches = 2
 

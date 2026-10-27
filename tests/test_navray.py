@@ -87,6 +87,10 @@ class NavRayReadingTests(unittest.TestCase):
         self.assertEqual(destination[4], "Outzone 3 - Water Cleaning Sec 9 (hard)")
         self.assertEqual(destination[6], "Outzone 5 - Storage Halls 5 (hard)")
 
+    def test_find_row_never_accepts_a_near_match(self):
+        self.assertIsNone(navray.find_row([(0, "Enter A"), (1, "Enter B")], "Enter C"))
+        self.assertIsNone(navray.find_row([(0, "WEAP0NS")], "WEAPONS"))
+
     def test_tidy_removes_edge_junk_only(self):
         self.assertEqual(navray.tidy("lOUTZONE DUNGEONS ="), "OUTZONE DUNGEONS")
         self.assertEqual(navray.tidy("Outzone 4 - Storage Halls 4 (hard) ia"), "Outzone 4 - Storage Halls 4 (hard)")

@@ -197,6 +197,22 @@ class OccurrenceTests(unittest.TestCase):
         row = round((point[1] - (self.navray.DEST_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
         return self.start["destination"] + row         # the clicked entry's index in the whole list
 
+    def test_a_list_that_has_not_redrawn_yet_is_read_again_instead_of_giving_up(self):
+        real = self.navray.read_rows
+        calls = {"n": 0}
+
+        def slow(gray, window, which):
+            calls["n"] += 1
+            return [] if calls["n"] <= 3 else real(gray, window, which)
+        self.navray.read_rows = slow
+        index = self.pick("TRADER DIRECTORY", "WEAPONS")
+        self.assertEqual(self.catalog["TRADER DIRECTORY"][index], "WEAPONS")
+
+    def test_not_found_names_what_was_read(self):
+        self.lists["destination"] = ["ALPHA", "BETA"]
+        with self.assertRaisesRegex(Interrupted, "Last rows read: ALPHA; BETA"):
+            self.runner.choose("destination", "GAMMA TOWERS", None)
+
     def test_a_plain_name_is_found_after_scrolling(self):
         index = self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
         self.assertEqual(self.catalog["VIAROSSO APARTMENTS"][index], "Viarosso / Alamo Living / Enter C")

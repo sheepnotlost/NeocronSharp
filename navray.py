@@ -84,7 +84,11 @@ def _norm(text):
 
 
 def find_row(rows, wanted):
-    """Row number whose text is `wanted` (a trailing "..." means the game cut the label short)."""
+    """Row number whose text is `wanted` (a trailing "..." means the game cut the label short).
+
+    Letters and digits only are compared. No near-match is allowed: names such as "Enter A" and
+    "Enter C" differ by one character and mean different places.
+    """
     target = _norm(wanted)
     for row, text in rows:
         seen = _norm(text)
