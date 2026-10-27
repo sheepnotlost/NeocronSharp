@@ -102,6 +102,23 @@ class WindowedQuantityDialogTests(unittest.TestCase):
         self.assertIsNone(detector.quantity(np.zeros_like(frame)))
 
 
+class FullscreenIntermediateScaleTests(unittest.TestCase):
+    def test_inventory_stays_put_on_hover_checks_at_a_non_reference_scale(self):
+        # Fullscreen 2560x1440 with the UI scale at ~1.02 (between reference values),
+        # hovering the Weaponpart 9 stack. The cheap re-check used to report "moved"
+        # on every hover, so the macro restarted its page forever. Replay, not live.
+        from recipes import catalog
+        frame=cv2.cvtColor(cv2.imread(str(Path(__file__).parent/"fixtures"/"fullscreen_2560_scale_102.png")),cv2.COLOR_BGR2RGB)
+        detector=Detector();detector.recipes=catalog({})
+        inventory=detector.inventory(frame)
+        self.assertAlmostEqual(inventory.scale,1.02,delta=.03)
+        self.assertEqual(detector.current_inventory(frame,inventory),inventory)
+        _,candidates=detector.fast_blueprint_candidates(frame)
+        self.assertEqual(sorted(c["cell"] for c in candidates),[(0,5),(0,6)])
+        for candidate in candidates:
+            self.assertEqual(detector.tooltip_recipe(frame,candidate["point"],inventory.scale),"weaponpart_9")
+
+
 class UniformIntermediateScaleTests(unittest.TestCase):
     def test_processor_is_found_at_scales_between_the_reference_values(self):
         folder=Path(__file__).parent/"fixtures"

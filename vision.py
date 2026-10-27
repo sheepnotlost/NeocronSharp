@@ -1087,7 +1087,10 @@ class Detector:
         split = abs(anchor.heading-anchor.scale) > .02
         if split:
             self.heading_ratio = anchor.heading/anchor.scale
-        return Anchor(anchor.x, anchor.y, anchor.scale, anchor.score, None, anchor.heading if split else None)
+        # Any window found by the grid fit keeps its grid-based hot-path check, uniform
+        # or not: at scales without shipped bitmaps the title/label correlation is too
+        # weak for the cheap re-check and would report "moved" on every hover.
+        return Anchor(anchor.x, anchor.y, anchor.scale, anchor.score, None, anchor.heading)
 
     def stacks(self, frame, checkpoint=lambda: None):
         anchor = self.inventory(frame, checkpoint=checkpoint)

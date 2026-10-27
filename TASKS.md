@@ -169,6 +169,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] The GoGuardian window must be open beside Inventory and Processor. 202 tests incl. two real captures.
 - [ ] Not verified live: the GoGuardian drags, quantity entry above 1, and the refused-start trigger. Stack counts (xN) on the live capture could not be read by OCR, so the dialog's default is used instead.
 
+- [x] Fullscreen 2560x1440 at UI scale ~1.02 (27 Oct 05:49): the macro hovered the blueprint but never proceeded. The cheap Inventory re-check used template correlation that fails between reference scales, so every hover looked like a moved window and the page restarted. Grid-fitted windows now keep their grid-based re-check at any scale. Regression test uses the real capture.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.
