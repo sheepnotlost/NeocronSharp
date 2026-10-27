@@ -796,6 +796,14 @@ class App:
                 self.counter.fail_scan(payload)
                 self.report("Tech Counter: " + payload)
                 self.notify_stop()
+            elif kind == "materials":
+                self.profile.setdefault("materials",{})[payload["recipe"]]=payload["codes"]
+                try:
+                    if find_recipe(self.construction_recipe.get(),self.recipes)==payload["recipe"]:
+                        self.materials_text.set(gogo.format_materials(payload["codes"]))
+                except ValueError:pass
+                try:save_profile(self.profile_path,self.profile)
+                except (ValueError,OSError) as exc:self.report("Could not save material labels: "+str(exc))
             elif kind == "detected":
                 self.show_detected(payload)
             elif kind == "blueprint_cycle":

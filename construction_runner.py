@@ -339,6 +339,28 @@ class ConstructionRunner(VisualRunner):
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
 
+    def learn_gogo_labels(self,reader,window,cells,missing):
+        """{ingredient: label} found by hovering GoGuardian stacks and reading the tooltip name."""
+        learned={};todo=list(missing)
+        for _,info in gogo.hover_order(cells,todo)[:gogo.MAX_HOVERS]:
+            if not todo:break
+            # The game hides a tooltip when the cursor leaves, so a stale one is never read.
+            self.move((24,80));self.wait(.1)
+            self.move(info["point"])
+            last=None
+            for attempt in range(4):
+                self.wait(.3 if attempt==0 else .2)
+                texts=gogo.tooltip_texts(reader,self.detector.gray(self.frame()),info["point"],window.scale)
+                name=gogo.match_name(texts,todo)
+                if name:
+                    learned[name]=info["code"];todo.remove(name)
+                    self.emit("status",f"GoGuardian: {name} is labelled {info['code']}.")
+                    break
+                if texts and texts==last:break
+                last=texts
+        self.move((24,80))
+        return learned
+
     def refill_from_gogo(self):
         """Pull at most BATCH of each needed ingredient from an open GoGuardian into Inventory."""
         self.emit("status",f"{self.name}: materials ran out; refilling from GoGuardian.")
@@ -349,7 +371,19 @@ class ConstructionRunner(VisualRunner):
             raise Interrupted("GoGuardian window not found. Open it with its Take All / Sort / Stack buttons visible, or turn off More Materials in GoGo.")
         codes=gogo.ingredients_for(self.recipe,self.profile)
         wanted=set((codes or {}).values())
-        try:plan=gogo.plan_refill(self.recipe,gogo.read_cells(reader,gray,window,wanted),codes)
+        cells=gogo.read_cells(reader,gray,window,wanted)
+        if codes:
+            # A label may be a wrong guess. Learn it from the stacks' own tooltips instead of
+            # relying on what the window happens to hold.
+            seen={info["code"] for info in cells.values()}
+            missing=[name for name,code in codes.items() if code not in seen]
+            if missing and cells:
+                learned=self.learn_gogo_labels(reader,window,cells,missing)
+                if learned:
+                    codes={**codes,**learned}
+                    self.profile.setdefault("materials",{})[self.recipe]=dict(codes)
+                    self.emit("materials",{"recipe":self.recipe,"codes":dict(codes)})
+        try:plan=gogo.plan_refill(self.recipe,cells,codes)
         except LookupError as exc:raise Interrupted(str(exc)) from None
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
         for name,code,point,amount in plan:

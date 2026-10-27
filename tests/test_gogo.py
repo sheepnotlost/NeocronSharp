@@ -129,6 +129,57 @@ class RefillSequenceTests(unittest.TestCase):
         self.assertGreaterEqual(len(typed), 1)
         self.assertEqual(typed[0], gogo.BATCH)
 
+    def hover_runner(self, labels, tooltips, materials):
+        """Runner whose frame shows a tooltip (named by `tooltips`, keyed by label) after a hover."""
+        runner, events, _ = self.runner()
+        base = runner.detector.gray(None)
+        reader = runner.detector.text_reader()
+        window = gogo.find_gogo(reader, base)
+        cells = gogo.read_cells(reader, base, window)
+        by_point = {tuple(info["point"]): tooltips.get(info["code"], "Something Else") for info in cells.values()}
+        cursor = {"point": None}
+        hovered = []
+        def move(point):
+            cursor["point"] = tuple(point)
+            if tuple(point) in by_point:hovered.append(by_point[tuple(point)])
+        def gray(_frame):
+            image = base.copy()
+            text = by_point.get(cursor["point"])
+            if text:
+                x, y = cursor["point"][0] + 20, cursor["point"][1] + 30
+                image[y:y+22, x:x+170] = 200
+                image[y+1:y+21, x+1:x+169] = 0
+                cv2.putText(image, text, (x+6, y+16), cv2.FONT_HERSHEY_SIMPLEX, .5, 255, 1, cv2.LINE_AA)
+            return image
+        runner.move = move
+        runner.detector.gray = gray
+        runner.profile = {"materials": {"weaponpart_9": materials}}
+        return runner, events, hovered
+
+    def test_a_wrong_label_is_learned_from_the_stacks_tooltip_and_saved(self):
+        wrong = {"Gamonin": "GAM", "Metal D": "MET", "Solantium": "SOL", "Strastin": "STX", "Tiberal": "TIB"}
+        runner, events, hovered = self.hover_runner(None, {"STS": "Strastin"}, wrong)
+        self.assertEqual(runner.refill_from_gogo(), 5)
+        saved = [e[1] for e in events if e[0] == "materials"]
+        self.assertEqual(saved, [{"recipe": "weaponpart_9", "codes": {**wrong, "Strastin": "STS"}}])
+        self.assertEqual(runner.profile["materials"]["weaponpart_9"]["Strastin"], "STS")
+        self.assertEqual(hovered[0], "Strastin")
+        self.assertLess(len(hovered), 5)
+        self.assertEqual(sum(e[0] == "drag" for e in events), 5)
+
+    def test_correct_labels_need_no_hovering(self):
+        runner, events, hovered = self.hover_runner(None, {}, {"Gamonin": "GAM", "Metal D": "MET", "Solantium": "SOL", "Strastin": "STS", "Tiberal": "TIB"})
+        runner.refill_from_gogo()
+        self.assertEqual(hovered, [])
+        self.assertFalse([e for e in events if e[0] == "materials"])
+
+    def test_an_unreadable_tooltip_stops_and_lists_the_labels_seen(self):
+        wrong = {"Gamonin": "GAM", "Metal D": "MET", "Solantium": "SOL", "Strastin": "STX", "Tiberal": "TIB"}
+        runner, events, _ = self.hover_runner(None, {}, wrong)
+        with self.assertRaisesRegex(Interrupted, r"Strastin \(STX\).*Labels seen: .*STS"):
+            runner.refill_from_gogo()
+        self.assertFalse([e for e in events if e[0] in ("drag", "materials")])
+
     def test_a_missing_gogo_window_stops_with_a_clear_message(self):
         runner, events, _ = self.runner(window_present=False)
         with self.assertRaisesRegex(Interrupted, "GoGuardian window not found"):
@@ -218,3 +269,18 @@ class RefusedStartTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TooltipNameTests(unittest.TestCase):
+    def test_names_match_whole_words_only(self):
+        names = ["Tangent Weaponpart 1", "Metal D"]
+        self.assertEqual(gogo.match_name(["Metal D"], names), "Metal D")
+        self.assertEqual(gogo.match_name(["Tangent Weaponpart 10"], names), None)
+        self.assertEqual(gogo.match_name(["Quality 80 Tangent Weaponpart 1"], names), "Tangent Weaponpart 1")
+        self.assertIsNone(gogo.match_name([], names))
+
+    def test_likely_cells_are_hovered_first(self):
+        cells = {(0, 0): {"code": "CUBE"}, (1, 0): {"code": "STS"}, (2, 0): {"code": "W7"}}
+        self.assertEqual([k for k, _ in gogo.hover_order(cells, ["Strastin"])][0], (1, 0))
+        self.assertTrue(gogo.is_abbreviation("W4", "Tangent Weaponpart 4"))
+        self.assertFalse(gogo.is_abbreviation("W5", "Tangent Weaponpart 4"))

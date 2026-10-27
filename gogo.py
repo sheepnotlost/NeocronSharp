@@ -9,6 +9,9 @@ scale comes from the spacing of the button words, and every other position follo
 import re
 from dataclasses import dataclass
 
+import cv2
+import numpy as np
+
 # Measured on a real capture at its own scale (taken as 1.0): the "Take" word's left edge,
 # the "Stack" word's left edge, cell pitch, and the first cell's offset from "Take".
 STACK_DX = 128.0
@@ -16,6 +19,7 @@ CELL_W, CELL_H = 93.5, 46.3
 FIRST_CELL_FROM_TAKE = (-37.0, -472.0)
 COLUMNS, ROWS = 5, 9
 BATCH = 15
+MAX_HOVERS = 20
 
 # Ingredient label codes shown on stacks, per built-in recipe (exactly as the game prints them).
 INGREDIENT_CODES = {
@@ -211,3 +215,59 @@ def plan_refill(recipe_key, cells, codes=None):
         amount = min(BATCH, info["count"]) if info["count"] else BATCH
         plan.append((name, code, info["point"], amount))
     return plan
+
+
+def _alnum(text):
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+
+def is_abbreviation(label, name):
+    """True when the label starts a word of the name and its characters follow in order
+    (GAM / Gamonin, W4 / Tangent Weaponpart 4). One-character labels prove nothing."""
+    label = _alnum(label)
+    initials = {word[0] for word in re.findall(r"[a-z0-9]+", (name or "").lower())}
+    rest = iter(_alnum(name))
+    return len(label) >= 2 and label[0] in initials and all(char in rest for char in label)
+
+
+def hover_order(cells, names):
+    """[(key, info)] worth hovering: labels that abbreviate a wanted name first, the rest after."""
+    items = sorted(cells.items(), key=lambda item: (item[0][1], item[0][0]))
+    likely = [item for item in items if any(is_abbreviation(item[1]["code"], name) for name in names)]
+    return likely + [item for item in items if item not in likely]
+
+
+def match_name(texts, names):
+    """The wanted ingredient whose whole name a tooltip's text contains, else None."""
+    best = None
+    for text in texts:
+        words = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+        for name in names:
+            wanted = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+            if wanted and re.search(r"(?<![a-z0-9])" + re.escape(wanted) + r"(?![a-z0-9])", words):
+                if best is None or len(wanted) > len(re.sub(r"[^a-z0-9]+", " ", best.lower()).strip()):
+                    best = name
+    return best
+
+
+def tooltip_texts(reader, gray, point, scale):
+    """Text of each tooltip panel (black box with a light border) near `point`, nearest first.
+
+    The panel is found from its pixels, not from where the game happens to draw it, so any
+    window position and UI scale works.
+    """
+    height, width = gray.shape[:2]
+    scale = max(scale, .5)
+    left, top = max(0, round(point[0] - 500*scale)), max(0, round(point[1] - 140*scale))
+    right, bottom = min(width, round(point[0] + 900*scale)), min(height, round(point[1] + 200*scale))
+    patch = gray[top:bottom, left:right]
+    if patch.size == 0:
+        return []
+    _, _, stats, _ = cv2.connectedComponentsWithStats((patch < 42).astype(np.uint8))
+    found = []
+    for x, y, w, h, area in stats[1:].tolist():
+        if w < 40*scale*.6 or not 7 <= h <= 90*scale or area/(w*h) < .45 or y == 0 or y + h >= patch.shape[0]:
+            continue
+        if (patch[y-1, x:x+w] > 90).mean() > .8 and (patch[y+h, x:x+w] > 90).mean() > .8:
+            found.append((abs(top + y + h/2 - point[1]) + abs(left + x + w/2 - point[0])/4, x, y, w, h))
+    return [reader.read(patch[y:y+h, x:x+w]) for _, x, y, w, h in sorted(found)[:3]]

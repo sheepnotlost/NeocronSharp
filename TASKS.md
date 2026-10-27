@@ -183,6 +183,9 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Full fetch done: 478/1,263 items list Parts; WP7, WP9 and Holy Heal match the built-ins; tests updated; Catalog shows parts; Materials row prefills from them; data committed.
 - [ ] Not verified live: GoGuardian refills for any recipe beyond Weaponpart 9; Holy Heal labels W5/W4/W1 are inferred.
 
+- [x] GoGuardian labels no longer depend on the window's contents (27 Oct): when an expected label is not among the stacks read, the macro hovers the most likely stacks (labels that abbreviate the missing name), reads the tooltip name, and saves name->label in the profile and Materials row. Failure messages list the labels seen. 223 tests incl. synthetic tooltips.
+- [ ] Not verified live: the GoGuardian tooltip's real appearance (assumed a black, light-bordered panel containing the item name). If it differs, hovering finds no name and the run stops with the labels seen.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.
