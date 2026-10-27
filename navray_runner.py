@@ -21,7 +21,8 @@ CAL_DAMP = .85           # share of a measured correction applied in one turn
 CAL_MAX_PX = 260         # largest single mouse move, in screen pixels
 LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
 DASHES_PER_LEG = 4       # dashes read in front of the character, then walked, before reading the next four
-LINED_UP = .03           # steering error (fraction of width) below which the character walks
+LINED_UP = .03           # steering error (fraction of width) the on-the-move corrections aim for
+TURN_FIRST = .08         # a bigger heading error than this: stand still and turn before walking (a smaller one is corrected on the move)
 AGREE = .05              # the three looks before a move must agree on the heading to within this
 VEER = .22               # while walking, an error this big (after corrections) stops the leg and re-reads the path (a corner)
 WALK_DAMP = .5           # share of the measured error corrected on each look while walking
@@ -476,8 +477,11 @@ class NavRayRunner(VisualRunner):
                 state["last_path"] = self.clock()
                 error = self.aim_error(view, frame)
                 last_side = 1 if error >= 0 else -1
-                if abs(error) > LINED_UP:
+                if abs(error) > TURN_FIRST:
                     turns_in_row += 1
+                    first = view.points[0] if view.points else view.aim
+                    self.emit("status", f"Nav-Ray: turn {turns_in_row}, aim {error:+.3f}, {len(view.points)} marks, "
+                              f"nearest ({first[0]:.0f}, {first[1]:.0f}).")
                     if turns_in_row > MAX_TURNS:
                         raise Interrupted("Nav-Ray: turning does not line the dashes up. Check the mouse look and try again.")
                     turned += self.turn(error, frame.shape[1])

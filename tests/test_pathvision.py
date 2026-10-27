@@ -87,6 +87,13 @@ class PathVisionTests(unittest.TestCase):
         # Live frame where a walk reported 20-30 "dashes" with none on screen: green-lit walls and a lettered panel.
         self.assertIsNone(pathvision.find_path(load("navray_teal_walls_no_path_2560.png")))
 
+    def test_specks_of_lettering_never_pass_for_the_path_being_followed(self):
+        # Live frame with no dashes at all: the walk, holding a path, "found" vertical strokes of text on a screen.
+        frame = load("navray_plaza_no_dashes_2560.png")
+        self.assertIsNone(pathvision.find_path(frame))
+        prior = pathvision.PathView(((1016.0, 480.0), (1000.0, 250.0)), (1016.0, 480.0), 0.0, 0.0, .07, 1258.0, (1000.0, 250.0))
+        self.assertIsNone(pathvision.find_path(frame, prior=prior, tube=.25))
+
     def test_one_big_dash_of_the_path_being_followed_is_enough_to_carry_on(self):
         # Live frame: the walk was following a path and only one big dash (lower left) and a marker were still in view.
         frame = load("navray_one_dash_left_2560.png")

@@ -187,14 +187,15 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
     return []
 
 
-def _continuation(candidates, prior, height):
+def _continuation(candidates, prior, height, width):
     """The next stretch of the path being followed when too few dashes show to make a chain (a corner, a
     pillar): marks on the prior line, pointing along it, with at least one clear dash among them.
     Never used to start following a path, only to carry on with one."""
     line = np.arctan2(1.0, prior.slope)                    # direction of the prior line in image axes
     picks = []
+    big = 300*(width/2000)**2                              # a real dash, not a speck of lettering
     for x, y, area, angle in sorted(candidates, key=lambda c: -c[1]):
-        if y > .90*height:
+        if y > .90*height or area < big:
             continue
         if angle == angle:
             if abs((angle - line + np.pi/2) % np.pi - np.pi/2) > np.radians(35):
@@ -221,7 +222,7 @@ def find_path(frame, ignore=(), prior=None, tube=.18):
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
     chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height))
     if not chain and prior is not None:
-        chain = _continuation(candidates, prior, height)    # one or two dashes of the path already being followed
+        chain = _continuation(candidates, prior, height, width)    # one or two dashes of the path already being followed
     if not chain:
         return None
     ys = np.array([p[1] for p in chain])
