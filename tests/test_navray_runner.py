@@ -74,7 +74,7 @@ class WalkTests(unittest.TestCase):
         recorded = runner.backend.events
         self.assertEqual(recorded[0], ("key", "shift", True))                              # run, but stand still until lined up
         self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])
-        turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0]
+        turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0][2:]       # after the two calibration nudges
         self.assertTrue(turns and all(t < 0 for t in turns[:5]), turns[:5])      # path is to the left
         self.assertTrue(all(abs(t) <= navray_runner.MAX_STEP for t in turns))
         done = [p for k, p in events if k == "done"]
@@ -107,8 +107,8 @@ class WalkTests(unittest.TestCase):
         runner, events = make_runner(lambda i: DARK)
         with self.assertRaisesRegex(Interrupted, "turning all the way round"):
             runner.walk()
-        turns = [e[1] for e in runner.backend.events if e[0] == "rel"]
-        self.assertGreaterEqual(sum(turns), navray_runner.SEARCH_COUNTS - navray_runner.SEARCH_STEP)
+        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]         # after the calibration nudges
+        self.assertTrue(turns and all(t > 0 for t in turns))                       # sweeping round in one direction
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
 
     def test_it_walks_only_once_the_path_is_lined_up(self):
@@ -139,6 +139,49 @@ class WalkTests(unittest.TestCase):
         self.assertLess(navray_runner.steer_step(-.05), 0)
         self.assertEqual(navray_runner.steer_step(-.5), -navray_runner.MAX_STEP)
         self.assertEqual(navray_runner.steer_step(.5), navray_runner.MAX_STEP)
+
+
+def turning_runner(sign, pixels_per_count=2.0):
+    """A runner whose picture slides with the mouse: sign +1 = turning right slides the scene left (normal),
+    -1 = an inverted mouse."""
+    holder = {}
+    runner, events = make_runner(lambda i: np.roll(STAIRS, -sign*round(holder["b"].yaw*pixels_per_count), axis=1))
+    backend = holder["b"] = runner.backend
+    backend.yaw = 0
+    original = backend.move_relative
+
+    def move_relative(dx, dy):
+        backend.yaw += dx
+        original(dx, dy)
+    backend.move_relative = move_relative
+    return runner
+
+
+class FocusTests(unittest.TestCase):
+    def test_calibration_measures_how_the_view_slides_per_count(self):
+        self.assertAlmostEqual(turning_runner(+1).calibrate_turn(), -2.0, delta=.3)   # scene slides left when turning right
+        self.assertAlmostEqual(turning_runner(-1).calibrate_turn(), +2.0, delta=.3)
+        static, _ = make_runner(lambda i: STAIRS)
+        self.assertIsNone(static.calibrate_turn())                               # nothing moved: no reading
+
+    def test_the_turn_follows_the_path_even_with_an_inverted_mouse(self):
+        for sign in (+1, -1):
+            with self.subTest(sign=sign):
+                runner = turning_runner(sign)
+                try:
+                    runner.walk()
+                except Interrupted:
+                    pass
+                moves = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]    # after the calibration nudges
+                steering = [m for m in moves if m != 0][:6]
+                # the path in the frame lies to the left: a normal mouse turns left (negative counts), an inverted one right
+                self.assertTrue(steering and all(m*sign < 0 for m in steering), steering)
+
+    def test_a_turn_is_limited_per_look_and_ignores_tiny_errors(self):
+        runner, _ = make_runner(lambda i: STAIRS)
+        runner.px_per_count = -2.0
+        self.assertLessEqual(abs(runner.counts(-.5, 2000)), navray_runner.CAL_MAX_PX/2.0 + 1)
+        self.assertEqual(runner.counts(.005, 2000), 0)
 
 
 class SelectionTests(unittest.TestCase):
@@ -175,13 +218,13 @@ class SelectionTests(unittest.TestCase):
 class OccurrenceTests(unittest.TestCase):
     """choose() against a simulated Nav-Ray whose lists scroll only by dragging their scroll thumb."""
 
-    TRACK_TOP, TRACK = 100, 150
+    TRACK = 150
 
     def setUp(self):
         import navray
         self.navray = navray
         self.catalog = navray.load_catalog()
-        self.window = navray.NavRay(0, 0, 1.0)
+        self.window = navray.NavRay(1000, 1000, 1.0)
         self.original = (navray.read_rows, navray.find_thumb)
         self.start = {"select": 0, "destination": 0}
         self.lists = {"select": list(self.catalog), "destination": []}
@@ -200,7 +243,8 @@ class OccurrenceTests(unittest.TestCase):
             if size <= visible:
                 return None
             length = round(self.TRACK*visible/size)
-            top = self.TRACK_TOP + round((self.TRACK - length)*self.start[which]/(size - visible))
+            track_top = self.window.thumb_strip(which)[1] + 14
+            top = track_top + round((self.TRACK - length)*self.start[which]/(size - visible))
             return (500, top, top + length)
 
         def drag(source, destination):
@@ -227,7 +271,7 @@ class OccurrenceTests(unittest.TestCase):
         self.clicks.clear()
         self.runner.choose("destination", wanted, None)
         point = self.clicks[-1]
-        row = round((point[1] - (self.navray.DEST_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
+        row = round((point[1] - (self.window.y + self.navray.DEST_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
         return self.start["destination"] + row         # the clicked entry's index in the whole list
 
     def test_a_plain_name_is_found_after_scrolling_by_the_scroll_thumb(self):

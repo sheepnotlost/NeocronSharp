@@ -16,6 +16,9 @@ class PathView:
     aim: tuple         # the point to turn towards
     error: float       # look-ahead aim x relative to the view centre, as a fraction of the width (-.5 .. .5)
     lateral: float = 0.0   # how far the line passes from the character, same units, measured near the character
+    slope: float = 0.0     # the fitted line: x = slope * y + intercept
+    intercept: float = 0.0
+    forward_point: tuple = (0.0, 0.0)   # the far end of the chain: the way on
 
 
 def _excluded(fx, fy):
@@ -145,20 +148,32 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
     return []
 
 
-def find_path(frame, ignore=()):
-    """PathView for a BGR frame, or None when no path is visible.
+def find_path(frame, ignore=(), prior=None, tube=.18):
+    """PathView for a BGR frame, or None when no path is visible in front of the character.
+
+    The dashes ahead of the character are the way on. A chain lying wholly below the character's feet
+    is behind it and is not followed. With `prior` (the view being followed) only marks within `tube`
+    (a fraction of the width) of its line are considered, so the macro stays on the path it is
+    following and ignores everything else.
 
     The steering point comes from a straight-line fit through the whole chain, evaluated at a
     look-ahead height, so one stray or flickering dash cannot jerk the aim around.
     """
-    chain = best_chain(dash_candidates(frame, ignore), height=frame.shape[0])
+    candidates = dash_candidates(frame, ignore)
+    height, width = frame.shape[:2]
+    if prior is not None:
+        candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
+    chain = best_chain(candidates, height=height)
     if not chain:
         return None
-    height, width = frame.shape[:2]
     ys = np.array([p[1] for p in chain])
     xs = np.array([p[0] for p in chain])
+    if ys.min() > .80*height:
+        return None                                        # all of it is at or behind the character's feet
     slope, intercept = np.polyfit(ys, xs, 1)
+    centre = width/2
     look_y = min(max(.5*height, float(ys.min())), float(ys.max()))
     look_x = min(max(float(slope*look_y + intercept), 0.0), float(width))
     near_x = min(max(float(slope*.75*height + intercept), 0.0), float(width))
-    return PathView(tuple(chain), (look_x, look_y), (look_x - width/2)/width, (near_x - width/2)/width)
+    return PathView(tuple(chain), (look_x, look_y), (look_x - centre)/width, (near_x - centre)/width,
+                    float(slope), float(intercept), chain[-1])

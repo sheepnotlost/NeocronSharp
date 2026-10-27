@@ -45,6 +45,32 @@ class PathVisionTests(unittest.TestCase):
         self.assertGreater(view.error, .1)                         # the path lies to the right of the character
         self.assertTrue(all(x > 1500 for x, _ in view.points), view.points)  # nothing from the sign or the character
 
+    def test_following_a_path_ignores_marks_away_from_it(self):
+        stairs = load("navray_path_stairs_2000.png")
+        view = pathvision.find_path(stairs)
+        again = pathvision.find_path(stairs, prior=view)
+        self.assertIsNotNone(again)
+        self.assertEqual(len(again.points), len(view.points))
+        far_off = pathvision.PathView(view.points, view.aim, view.error, view.lateral, 0.0, 1900.0, (1900.0, 300.0))
+        self.assertIsNone(pathvision.find_path(stairs, prior=far_off, tube=.05))
+
+    def test_the_far_end_of_the_dashes_ahead_is_the_way_on(self):
+        view = pathvision.find_path(load("navray_path_hall_2000.png"))
+        self.assertLess(view.forward_point[1], view.points[0][1])      # the far (upper) end, not the near one
+
+    def test_dashes_wholly_behind_the_character_are_not_followed(self):
+        import cv2
+        import numpy as np
+        frame = np.full((1440, 2560, 3), 35, np.uint8)
+        colour = tuple(int(v) for v in cv2.cvtColor(np.uint8([[[70, 110, 130]]]), cv2.COLOR_HSV2BGR)[0, 0])
+        direction = np.array([-70.0, 40.0]); direction /= np.hypot(*direction)
+        normal = np.array([-direction[1], direction[0]])
+        for i, centre in enumerate([(1000, 1160), (930, 1200), (860, 1240), (790, 1280), (720, 1320), (650, 1360)]):
+            c = np.array(centre, float)
+            corners = [c + s1*(14 + 4*i)*direction + s2*(5 + i)*normal for s1, s2 in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+            cv2.fillConvexPoly(frame, np.round(corners).astype(np.int32), colour)
+        self.assertIsNone(pathvision.find_path(frame))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

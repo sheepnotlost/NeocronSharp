@@ -14,12 +14,18 @@ from macro_core import Interrupted
 from vision_runner import VisualRunner
 
 GAIN = .16               # mouse counts per pixel of steering error at 2560 wide
-MAX_STEP = 45            # largest single mouse move
+MAX_STEP = 45            # largest single mouse move (before the turn is calibrated)
+CAL_COUNTS = 120         # mouse counts used to measure how far the view slides per count
+CAL_DAMP = .6            # share of the measured correction applied per look (the rest avoids overshoot)
+CAL_MAX_PX = 260         # largest turn per look, in screen pixels
+LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
 DEADZONE = .02           # steering error (fraction of width) treated as straight ahead
 SMOOTH = .5              # share of each new reading blended into the smoothed error
 LEAD = .12               # seconds of error trend added, so the turn eases off before the aim is reached
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path
-SEARCH_COUNTS = 7000     # total turning allowed to find the first path (a bit more than a full circle)
+SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
+SCAN_PX = 220            # how far the view sweeps per look while scanning all round for the path
+SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
 LATERAL_W = .35          # share of the steering that pulls the character back onto the line itself
 JUMP = .25               # a reading this far from the smoothed one is held back for a moment (stray dashes)
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
@@ -49,6 +55,7 @@ class Steering:
         self.held = 0
 
     def step(self, error, now):
+        """The (smoothed, damped) steering error to act on."""
         if self.smooth is not None and abs(error - self.smooth) > JUMP and self.held < 2:
             self.held += 1                    # probably a stray detection: ignore it for up to two readings
             error = self.smooth
@@ -57,7 +64,7 @@ class Steering:
         self.smooth = error if self.smooth is None else self.smooth + SMOOTH*(error - self.smooth)
         rate = 0.0 if self.last is None or now <= self.time else (self.smooth - self.last)/(now - self.time)
         self.last, self.time = self.smooth, now
-        return steer_step(self.smooth + LEAD*rate)
+        return self.smooth + LEAD*rate
 
     def reset(self):
         self.smooth = self.last = self.time = None
@@ -66,6 +73,14 @@ class Steering:
 
 def _bgr(frame):
     return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+
+def slide_pixels(first_gray, second_gray):
+    """How far (in pixels of the inputs) the picture slid horizontally between two frames, and how sure we are."""
+    first, second = np.float32(first_gray), np.float32(second_gray)
+    window = cv2.createHanningWindow((first.shape[1], first.shape[0]), cv2.CV_32F)
+    (dx, _), response = cv2.phaseCorrelate(first, second, window)
+    return float(dx), float(response)
 
 
 class NavRayRunner(VisualRunner):
@@ -90,29 +105,58 @@ class NavRayRunner(VisualRunner):
         return navray.read_rows(self.detector.gray(self.frame()), window, which)
 
     def drag_thumb(self, which, window, rows):
-        """Drag the scroll thumb so the list moves `rows` rows (negative = up).
+        """Scroll the list `rows` rows (negative = up) by dragging its scroll thumb, falling back to single
+        mouse-wheel notches when the thumb cannot be found or does not move.
 
-        Returns how many rows it actually moved, measured from where the thumb ended up (so it is
-        right even when the list hit its end and the page cannot tell), or None if there is no thumb.
+        Returns how many rows it moved, measured from the thumb (right even at the end of a list, where
+        the page cannot tell), or None when nothing could move the list at all.
         """
         found = navray.find_thumb(self.detector.gray(self.frame()), window, which)
         if found is None:
-            return None
+            self.emit("status", f"Nav-Ray: no scroll thumb found on the {which} list.")
+            return self.wheel(which, window, rows)
         x, top, bottom = found
         middle = (top + bottom)//2
         # The thumb moves the list in proportion to its size: d pixels = d * visible rows / thumb length.
         distance = rows*(bottom - top)/navray.LIST_ROWS[which]
+        distance = max(-3000, min(3000, distance))                 # a drag far past the bar is the same as to its end
         self.drag((x, middle), (x, round(middle + distance)))
         self.move((24, 80))
         self.wait(.3)
         after = navray.find_thumb(self.detector.gray(self.frame()), window, which)
-        if after is None:
-            return 0.0
-        return (after[1] - top)*navray.LIST_ROWS[which]/(bottom - top)
+        moved = 0.0 if after is None else (after[1] - top)*navray.LIST_ROWS[which]/(bottom - top)
+        self.emit("status", f"Nav-Ray: {which} list asked {rows:+.0f} rows, thumb {top}-{bottom} -> "
+                  f"{'none' if after is None else after[1]}, moved {moved:+.1f}.")
+        if abs(rows) <= 2*navray.LIST_ROWS[which] and abs(moved) < .3*abs(rows) and not self.at_end(which, window, rows):
+            return self.wheel(which, window, rows)
+        return moved
+
+    def at_end(self, which, window, rows):
+        """Is the thumb already at the end the move was heading for (so no movement is expected)?"""
+        found = navray.find_thumb(self.detector.gray(self.frame()), window, which)
+        if found is None:
+            return False
+        left, top, right, bottom = window.thumb_strip(which)
+        margin = 26*window.scale                                  # the track starts a little inside the strip
+        return found[1] <= top + margin if rows < 0 else found[2] >= bottom - margin
+
+    def wheel(self, which, window, rows):
+        """Fallback: one mouse-wheel notch at a time over the list (a notch may be several rows)."""
+        notches = 12 if abs(rows) > 2*navray.LIST_ROWS[which] else 1
+        self.move(window.wheel_point(which))
+        self.backend.scroll(notches if rows < 0 else -notches)
+        self.move((24, 80))
+        self.wait(.3)
+        self.emit("status", f"Nav-Ray: {which} list scrolled with the mouse wheel instead ({'up' if rows < 0 else 'down'}).")
+        return float(navray.LIST_ROWS[which] - 2) if rows > 0 else -float(navray.LIST_ROWS[which] - 2)
 
     def to_top(self, which, window):
         self.clear_pointer()
         self.drag_thumb(which, window, -10000)
+        for _ in range(3):
+            if navray.find_thumb(self.detector.gray(self.frame()), window, which) is None or self.at_end(which, window, -1):
+                break
+            self.wheel(which, window, -10000)                      # the drag did not reach the top: use the wheel
         self.wait(.1)
 
     def page_down(self, which, window):
@@ -244,6 +288,35 @@ class NavRayRunner(VisualRunner):
         centre = cv2.cvtColor(frame[int(.3*height):int(.75*height), int(.3*width):int(.7*width)], cv2.COLOR_RGB2GRAY)
         return cv2.resize(centre, (64, 36), interpolation=cv2.INTER_AREA).astype(np.int16)
 
+    px_per_count = None
+
+    def calibrate_turn(self):
+        """Measure how far the view slides per mouse count (negative = turning right slides the scene left).
+        This makes the steering independent of mouse sensitivity and of an inverted mouse. None if the
+        picture does not give a clear reading, in which case the default gain is used."""
+        def grab():
+            frame = self.frame()
+            return cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (640, 360), interpolation=cv2.INTER_AREA), frame.shape[1]
+        first, width = grab()
+        self.backend.move_relative(CAL_COUNTS, 0)
+        self.wait(.3)
+        second, _ = grab()
+        self.backend.move_relative(-CAL_COUNTS, 0)             # put the view back
+        self.wait(.25)
+        dx, response = slide_pixels(first, second)
+        if response < .1 or abs(dx) < 1.5:
+            return None
+        return dx*(width/640)/CAL_COUNTS
+
+    def counts(self, error, width):
+        """Mouse counts to correct a steering error (fraction of the width)."""
+        if abs(error) < DEADZONE:
+            return 0
+        if self.px_per_count:
+            limit = CAL_MAX_PX/abs(self.px_per_count)
+            return round(max(-limit, min(limit, -(error*width)*CAL_DAMP/self.px_per_count)))
+        return steer_step(error)
+
     def walk(self):
         reader = self.detector.text_reader()
         self.backend.key("shift", True)                  # run (only acts while moving)
@@ -256,11 +329,18 @@ class NavRayRunner(VisualRunner):
                 self.backend.key("w", on)
                 forward = on
         try:
+            self.px_per_count = self.calibrate_turn()
+            if self.px_per_count:
+                self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
+            else:
+                self.emit("status", "Nav-Ray: turning could not be calibrated; using the default gain.")
+            track, lost = None, 0
             started = self.clock()
             seen_path, last_path = False, started
             last_health_check, baseline = started, None
             previous_thumb, still_since = None, None
             last_report, turned, searched, last_side = started, 0, 0, 1
+            scan_first, scan_looks = None, 0
             while True:
                 self.checkpoint()
                 now = self.clock()
@@ -277,14 +357,18 @@ class NavRayRunner(VisualRunner):
                             baseline = reading[0]
                         elif reading[0] < baseline - max(1, reading[1]*.02):
                             raise Interrupted(f"Health dropped ({baseline} to {reading[0]}). Stopped.")
-                view = pathvision.find_path(_bgr(frame))
+                bgr = _bgr(frame)
+                view = pathvision.find_path(bgr, prior=track if lost < LOST_FRAMES else None,
+                                            tube=min(.18 + .03*lost, .4))
                 if view is not None:
+                    track, lost = view, 0
                     seen_path, last_path = True, now
                     # Aim along the line ahead and also pull back onto the line itself, so the character
                     # follows the dashes instead of running parallel to them.
-                    step = steering.step((1 - LATERAL_W)*view.error + LATERAL_W*view.lateral, now)
+                    wanted = steering.step((1 - LATERAL_W)*view.error + LATERAL_W*view.lateral, now)
                     last_side = 1 if steering.smooth >= 0 else -1
                     go(abs(steering.smooth) < (TURN_IN_PLACE if forward else ALIGNED))
+                    step = self.counts(wanted, frame.shape[1])
                     if step:
                         self.backend.move_relative(step, 0)
                         turned += step
@@ -303,14 +387,21 @@ class NavRayRunner(VisualRunner):
                 else:
                     still_since, previous_thumb = None, None
                     steering.reset()
+                    lost += 1                            # keep to the followed path for a moment before searching wide
                     go(False)                            # path out of view: stand and look for it
                     if not seen_path:
                         # Just after Start the route begins at the character, but it may lead out of view:
-                        # turn all the way round looking for it.
-                        if searched >= SEARCH_COUNTS:
+                        # sweep all the way round looking for the dashes ahead.
+                        small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
+                        scan_looks += 1
+                        if scan_first is None:
+                            scan_first = small
+                        back_where_it_began = scan_looks > 15 and float(np.abs(small - scan_first).mean()) < SAME_VIEW
+                        if back_where_it_began or searched >= SEARCH_COUNTS:
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
-                        self.backend.move_relative(SEARCH_STEP, 0)
-                        searched += SEARCH_STEP
+                        look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
+                        self.backend.move_relative(look, 0)
+                        searched += look
                         if now - last_report >= REPORT_EVERY:
                             last_report = now
                             self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
