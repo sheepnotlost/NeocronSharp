@@ -13,28 +13,26 @@ import pathvision
 from macro_core import Interrupted
 from vision_runner import VisualRunner
 
-GAIN = .16               # mouse counts per pixel of steering error at 2560 wide
+GAIN = .16               # mouse counts per pixel of steering error at 2560 wide (only until the turn is calibrated)
 MAX_STEP = 45            # largest single mouse move (before the turn is calibrated)
 CAL_COUNTS = 150         # mouse counts used to measure how far the view slides per count
 SCENE_BOX = (.22, .10, .82, .52)   # the part of the screen that is only scene: no HUD, not the character
-CAL_DAMP = .6            # share of the measured correction applied per look (the rest avoids overshoot)
-CAL_MAX_PX = 260         # largest turn per look, in screen pixels
+CAL_DAMP = .85           # share of a measured correction applied in one turn
+CAL_MAX_PX = 260         # largest single mouse move, in screen pixels
 LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
-DEADZONE = .02           # steering error (fraction of width) treated as straight ahead
-SMOOTH = .5              # share of each new reading blended into the smoothed error
-LEAD = .12               # seconds of error trend added, so the turn eases off before the aim is reached
-SEARCH_STEP = 60         # mouse counts per look while turning to find the path
+DASHES_PER_LEG = 4       # dashes read in front of the character, then walked, before reading the next four
+LINED_UP = .03           # steering error (fraction of width) below which the character walks
+VEER = .22               # while walking, an error this big stops the leg and re-reads the path (a corner)
+LEG_SECONDS = 7.0        # longest a leg may last
+MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
+SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
 SCAN_PX = 220            # how far the view sweeps per look while scanning all round for the path
 SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
-LATERAL_W = 0.0          # share of the steering that looks at the line's position instead of the next dash (0 = next dash only)
-JUMP = .25               # a reading this far from the smoothed one is held back for a moment (stray dashes)
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 3.0
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
-ALIGNED = .12           # steering error below which the character moves forward again
-TURN_IN_PLACE = .20      # above this the character stops and turns first (running into walls while turning)
 REPORT_EVERY = 2.0       # progress line in the log
 HEALTH_BOX = (.85, .84, .95, .875)      # "HLT 972 / 972" (fractions of the frame)
 PAGES = 30
@@ -43,33 +41,7 @@ LIST_PAGES = 250
 
 def steer_step(error):
     """Mouse counts to turn for a steering error (fraction of the view width)."""
-    if abs(error) < DEADZONE:
-        return 0
     return max(-MAX_STEP, min(MAX_STEP, round(error*2560*GAIN)))
-
-
-class Steering:
-    """Smoothed, damped steering: blends readings and adds the error's trend so the camera does not overshoot."""
-
-    def __init__(self):
-        self.smooth = self.last = self.time = None
-        self.held = 0
-
-    def step(self, error, now):
-        """The (smoothed, damped) steering error to act on."""
-        if self.smooth is not None and abs(error - self.smooth) > JUMP and self.held < 2:
-            self.held += 1                    # probably a stray detection: ignore it for up to two readings
-            error = self.smooth
-        else:
-            self.held = 0
-        self.smooth = error if self.smooth is None else self.smooth + SMOOTH*(error - self.smooth)
-        rate = 0.0 if self.last is None or now <= self.time else (self.smooth - self.last)/(now - self.time)
-        self.last, self.time = self.smooth, now
-        return self.smooth + LEAD*rate
-
-    def reset(self):
-        self.smooth = self.last = self.time = None
-        self.held = 0
 
 
 def _bgr(frame):
@@ -315,85 +287,123 @@ class NavRayRunner(VisualRunner):
         return dx*(scene_width/480)/CAL_COUNTS
 
     def counts(self, error, width):
-        """Mouse counts to correct a steering error (fraction of the width)."""
-        if abs(error) < DEADZONE:
-            return 0
+        """Mouse counts that turn the view by a steering error (fraction of the width)."""
         if self.px_per_count:
-            limit = CAL_MAX_PX/abs(self.px_per_count)
-            return round(max(-limit, min(limit, -(error*width)*CAL_DAMP/self.px_per_count)))
-        return steer_step(error)
+            return round(-(error*width)*CAL_DAMP/self.px_per_count)
+        return steer_step(error)*3                                # uncalibrated: a bolder version of the old gain
+
+    def turn(self, error, width):
+        """Turn the camera by `error` of the screen width in one go, in moves the game can follow, then let it settle."""
+        remaining = self.counts(error, width)
+        limit = max(10, round(CAL_MAX_PX/abs(self.px_per_count))) if self.px_per_count else MAX_STEP*3
+        total = remaining
+        while remaining:
+            chunk = max(-limit, min(limit, remaining))
+            self.backend.move_relative(chunk, 0)
+            remaining -= chunk
+            self.wait(.04)
+        self.wait(.25)
+        return total
+
+    def evaluate(self, track, lost):
+        """Stand still and read the dashes: a few looks, the last good one wins (a still picture is a clean one)."""
+        best = None
+        for _ in range(3):
+            frame = self.frame()
+            view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
+                                        tube=min(.18 + .03*lost, .4))
+            if view is not None:
+                best = (view, frame)
+            self.wait(.06)
+        return best
+
+    @staticmethod
+    def next_dashes(view, height, count=DASHES_PER_LEG):
+        """The next `count` dashes ahead of the character, nearest first."""
+        return [p for p in view.points if p[1] <= pathvision.REACH_Y*height][:count]
+
+    def aim_error(self, view, frame):
+        """Where the next dashes lie sideways of straight ahead, as a fraction of the width: the first two
+        dashes together, so that one odd mark cannot decide the heading."""
+        height, width = frame.shape[:2]
+        ahead = self.next_dashes(view, height)[:2] or [view.aim]
+        return (sum(p[0] for p in ahead)/len(ahead) - width/2)/width
+
+    def vitals(self, reader, frame, state):
+        if frame.mean() < 6:
+            raise Interrupted("Loading screen or black frame. Stopped; walking across zones is not supported yet.")
+        now = self.clock()
+        if now - state["health_checked"] >= HEALTH_EVERY:
+            state["health_checked"] = now
+            reading = self.health(reader, frame)
+            if reading:
+                if state["health"] is None:
+                    state["health"] = reading[0]
+                elif reading[0] < state["health"] - max(1, reading[1]*.02):
+                    raise Interrupted(f"Health dropped ({state['health']} to {reading[0]}). Stopped.")
+
+    def walk_leg(self, view, track, reader, state):
+        """Walk towards the next dashes with W held; stop after DASHES_PER_LEG of them have been passed, or when
+        the path bends away, is lost, or the character is stuck. Returns the last path seen."""
+        started = self.clock()
+        self.backend.key("w", True)
+        passed, last_y, lost, still_since, previous_thumb = 0, None, 0, None, None
+        try:
+            while self.clock() - started < LEG_SECONDS:
+                self.checkpoint()
+                frame = self.frame()
+                self.vitals(reader, frame, state)
+                now = self.clock()
+                seen = pathvision.find_path(_bgr(frame), prior=track, tube=.25)
+                if seen is None:
+                    lost += 1
+                    if lost >= 3:
+                        break
+                else:
+                    lost, track = 0, seen
+                    state["last_path"] = now
+                    if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
+                        passed += 1                          # the dash we were heading for was reached: on to the next
+                    last_y = seen.aim[1]
+                    if passed >= DASHES_PER_LEG or abs(self.aim_error(seen, frame)) > VEER:
+                        break
+                thumb = self.thumbnail(frame)
+                if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
+                    still_since = still_since if still_since is not None else now
+                    if now - still_since >= STUCK_SECONDS:
+                        raise Interrupted("Not moving (the view has not changed). Something may be blocking the way. Stopped.")
+                else:
+                    still_since = None
+                previous_thumb = thumb
+                self.sleep(.005)
+        finally:
+            self.backend.key("w", False)
+        self.wait(.2)
+        return track, passed
 
     def walk(self):
         reader = self.detector.text_reader()
-        steering = Steering()                            # walking pace: no running while the dash-to-dash logic is tested
-        forward = False                                  # stand still until a path is in view and lined up
-
-        def go(on):
-            nonlocal forward
-            if on != forward:
-                self.backend.key("w", on)
-                forward = on
+        self.px_per_count = self.calibrate_turn()
+        if self.px_per_count:
+            self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
+        else:
+            self.emit("status", "Nav-Ray: turning could not be calibrated; using the default gain.")
+        started = self.clock()
+        state = {"health": None, "health_checked": started, "last_path": started}
+        track, lost, legs, turned, turns_in_row = None, 0, 0, 0, 0
+        seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
+        last_report = started
         try:
-            self.px_per_count = self.calibrate_turn()
-            if self.px_per_count:
-                self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
-            else:
-                self.emit("status", "Nav-Ray: turning could not be calibrated; using the default gain.")
-            track, lost = None, 0
-            started = self.clock()
-            seen_path, last_path = False, started
-            last_health_check, baseline = started, None
-            previous_thumb, still_since = None, None
-            last_report, turned, searched, last_side = started, 0, 0, 1
-            scan_first, scan_looks = None, 0
             while True:
                 self.checkpoint()
                 now = self.clock()
                 if now - started > MAX_SECONDS:
                     raise Interrupted("Nav-Ray: the walk took longer than 10 minutes. Stopped.")
-                frame = self.frame()
-                if frame.mean() < 6:
-                    raise Interrupted("Loading screen or black frame. Stopped; walking across zones is not supported yet.")
-                if now - last_health_check >= HEALTH_EVERY:
-                    last_health_check = now
-                    reading = self.health(reader, frame)
-                    if reading:
-                        if baseline is None:
-                            baseline = reading[0]
-                        elif reading[0] < baseline - max(1, reading[1]*.02):
-                            raise Interrupted(f"Health dropped ({baseline} to {reading[0]}). Stopped.")
-                bgr = _bgr(frame)
-                view = pathvision.find_path(bgr, prior=track if lost < LOST_FRAMES else None,
-                                            tube=min(.18 + .03*lost, .4))
-                if view is not None:
-                    track, lost = view, 0
-                    seen_path, last_path = True, now
-                    # Aim along the line ahead and also pull back onto the line itself, so the character
-                    # follows the dashes instead of running parallel to them.
-                    wanted = steering.step((1 - LATERAL_W)*view.error + LATERAL_W*view.lateral, now)
-                    last_side = 1 if steering.smooth >= 0 else -1
-                    go(abs(steering.smooth) < (TURN_IN_PLACE if forward else ALIGNED))
-                    step = self.counts(wanted, frame.shape[1])
-                    if step:
-                        self.backend.move_relative(step, 0)
-                        turned += step
-                    if now - last_report >= REPORT_EVERY:
-                        last_report = now
-                        self.emit("status", f"Nav-Ray: walking {now - started:.0f}s, aim {view.error:+.2f}, "
-                                  f"{len(view.points)} dashes, turned {turned:+d}.")
-                    thumb = self.thumbnail(frame)
-                    if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
-                        still_since = still_since if still_since is not None else now
-                        if now - still_since >= STUCK_SECONDS:
-                            raise Interrupted("Not moving (the view has not changed). Something may be blocking the way. Stopped.")
-                    else:
-                        still_since = None
-                    previous_thumb = thumb
-                else:
-                    still_since, previous_thumb = None, None
-                    steering.reset()
-                    lost += 1                            # keep to the followed path for a moment before searching wide
-                    go(False)                            # path out of view: stand and look for it
+                got = self.evaluate(track, lost)
+                frame = got[1] if got else self.frame()
+                self.vitals(reader, frame, state)
+                if got is None:
+                    lost += 1
                     if not seen_path:
                         # Just after Start the route begins at the character, but it may lead out of view:
                         # sweep all the way round looking for the dashes ahead.
@@ -407,15 +417,32 @@ class NavRayRunner(VisualRunner):
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
                         self.backend.move_relative(look, 0)
                         searched += look
-                        if now - last_report >= REPORT_EVERY:
-                            last_report = now
+                        if self.clock() - last_report >= REPORT_EVERY:
+                            last_report = self.clock()
                             self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
                     else:
-                        if now - last_path > END_SECONDS:
+                        if self.clock() - state["last_path"] > END_SECONDS:
                             self.emit("done", "Nav-Ray: the path ended. Arrived, or the route was lost.")
                             return
-                        self.backend.move_relative(last_side*SEARCH_STEP//2, 0)   # lost it: look back towards where it was
-                self.sleep(.005)
+                        self.backend.move_relative(last_side*max(10, SEARCH_STEP//2), 0)   # lost it: look back towards where it was
+                    continue
+                view, frame = got
+                track, lost = view, 0
+                seen_path = True
+                state["last_path"] = self.clock()
+                error = self.aim_error(view, frame)
+                last_side = 1 if error >= 0 else -1
+                if abs(error) > LINED_UP:
+                    turns_in_row += 1
+                    if turns_in_row > MAX_TURNS:
+                        raise Interrupted("Nav-Ray: turning does not line the dashes up. Check the mouse look and try again.")
+                    turned += self.turn(error, frame.shape[1])
+                    continue
+                turns_in_row = 0
+                legs += 1
+                ahead = len(self.next_dashes(view, frame.shape[0]))
+                self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
+                track, passed = self.walk_leg(view, track, reader, state)
         finally:
             self.backend.key("w", False)
 

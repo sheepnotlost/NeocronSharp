@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 import navray_runner
+import pathvision
 from macro_core import Control, Interrupted
 from navray_runner import NavRayRunner
 
@@ -18,6 +19,10 @@ def rgb(name):
 
 HALL, STAIRS = rgb("navray_path_hall_2000.png"), rgb("navray_path_stairs_2000.png")
 DARK = np.full((1125, 2000, 3), 40, np.uint8)
+
+
+def pathvision_find(frame):
+    return pathvision.find_path(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
 
 class FakeBackend:
@@ -67,106 +72,88 @@ def make_runner(frames, health=(972,)):
     return runner, events
 
 
-class WalkTests(unittest.TestCase):
-    def test_walks_steers_towards_the_path_and_reports_arrival_when_it_ends(self):
-        runner, events = make_runner(lambda i: STAIRS if i <= 12 else DARK)
-        runner.walk()
-        recorded = runner.backend.events
-        self.assertFalse([e for e in recorded if e[:2] == ("key", "shift")])               # walking, never running
-        self.assertEqual(recorded[-1], ("key", "w", False))
-        turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0][2:]       # after the two calibration nudges
-        self.assertTrue(turns and all(t < 0 for t in turns[:5]), turns[:5])      # path is to the left
-        self.assertTrue(all(abs(t) <= navray_runner.MAX_STEP for t in turns))
-        done = [p for k, p in events if k == "done"]
-        self.assertEqual(len(done), 1)
-        self.assertIn("arrived", done[0].lower())
-
-    def test_no_path_at_all_stops_with_a_clear_reason(self):
-        runner, _ = make_runner(lambda i: DARK)
-        with self.assertRaisesRegex(Interrupted, "No Nav-Ray path"):
-            runner.walk()
-        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
-
-    def test_a_black_frame_is_a_loading_screen(self):
-        runner, _ = make_runner(lambda i: STAIRS if i < 4 else np.zeros((1125, 2000, 3), np.uint8))
-        with self.assertRaisesRegex(Interrupted, "Loading screen"):
-            runner.walk()
-
-    def test_an_unchanging_view_with_a_path_is_stuck(self):
-        runner, _ = make_runner(lambda i: STAIRS)
-        with self.assertRaisesRegex(Interrupted, "Not moving"):
-            runner.walk()
-
-    def test_a_health_drop_stops_the_walk(self):
-        runner, _ = make_runner(lambda i: STAIRS if i % 2 else HALL, health=(972, 972, 800))
-        with self.assertRaisesRegex(Interrupted, "Health dropped"):
-            runner.walk()
-        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
-
-    def test_with_no_path_in_view_it_turns_all_the_way_round_before_giving_up(self):
-        runner, events = make_runner(lambda i: DARK)
-        with self.assertRaisesRegex(Interrupted, "turning all the way round"):
-            runner.walk()
-        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]         # after the calibration nudges
-        self.assertTrue(turns and all(t > 0 for t in turns))                       # sweeping round in one direction
-        self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
-
-    def test_it_walks_only_once_the_path_is_lined_up(self):
-        runner, _ = make_runner(lambda i: HALL if i <= 12 else DARK)     # hall frame: line almost dead ahead
-        runner.walk()
-        self.assertIn(("key", "w", True), runner.backend.events)
-
-    def test_a_stray_reading_is_held_back_but_a_real_turn_gets_through(self):
-        steering = navray_runner.Steering()
-        steering.step(.02, 0.0)
-        for t in (.1, .2):
-            steering.step(.45, t)                                        # two stray jumps are ignored
-        self.assertLess(abs(steering.smooth), .1)
-        for t in (.3, .4, .5, .6):
-            steering.step(.45, t)                                        # but a lasting one is followed
-        self.assertGreater(steering.smooth, .2)
-
-    def test_damping_eases_off_when_the_error_is_closing(self):
-        steady, closing = navray_runner.Steering(), navray_runner.Steering()
-        steady.step(-.04, 0.0)
-        closing.step(-.10, 0.0)
-        # same current error, but the second one is shrinking fast: it must turn less
-        self.assertLess(abs(closing.step(-.04, .1)), abs(steady.step(-.04, .1)))
-
-    def test_steering_step_is_proportional_and_clamped(self):
-        self.assertEqual(navray_runner.steer_step(0.0), 0)
-        self.assertEqual(navray_runner.steer_step(.01), 0)                       # inside the dead zone
-        self.assertLess(navray_runner.steer_step(-.05), 0)
-        self.assertEqual(navray_runner.steer_step(-.5), -navray_runner.MAX_STEP)
-        self.assertEqual(navray_runner.steer_step(.5), navray_runner.MAX_STEP)
+AHEAD = rgb("navray_straight_ahead_2000.png")      # dashes dead ahead: lined up without turning
 
 
-def turning_runner(sign, pixels_per_count=2.0):
+def turning_runner(sign, pixels_per_count=2.0, frame=STAIRS, stop_after=9):
     """A runner whose picture slides with the mouse: sign +1 = turning right slides the scene left (normal),
-    -1 = an inverted mouse."""
+    -1 = an inverted mouse. The HUD stays put, as in the game."""
     holder = {}
+
     def frames(i):
-        # Only the scene slides when the mouse turns; the HUD stays put, as in the game.
-        frame = STAIRS.copy()
-        height, width = frame.shape[:2]
+        picture = frame.copy()
+        height, width = picture.shape[:2]
         left, top, right, bottom = navray_runner.SCENE_BOX
-        part = frame[int(top*height):int(bottom*height), int(left*width):int(right*width)]
-        frame[int(top*height):int(bottom*height), int(left*width):int(right*width)] = np.roll(part, -sign*round(holder["b"].yaw*pixels_per_count), axis=1)
-        return frame
+        part = picture[int(top*height):int(bottom*height), int(left*width):int(right*width)]
+        picture[int(top*height):int(bottom*height), int(left*width):int(right*width)] = \
+            np.roll(part, -sign*round(holder["b"].yaw*pixels_per_count), axis=1)
+        return picture
     runner, events = make_runner(frames)
     backend = holder["b"] = runner.backend
     backend.yaw = 0
-    original = backend.move_relative
     backend.calls = 0
+    original = backend.move_relative
 
     def move_relative(dx, dy):
         backend.yaw += dx
         backend.calls += 1
         original(dx, dy)
-        if backend.calls > 9:                              # the two calibration nudges and a few steering moves are enough
+        if backend.calls > stop_after:                    # the calibration nudges and a few turns are enough
             raise Interrupted("enough")
     backend.move_relative = move_relative
     return runner
+
+
+class WalkTests(unittest.TestCase):
+    def test_it_walks_when_the_dashes_ahead_are_lined_up_and_reports_arrival_when_they_end(self):
+        runner, events = make_runner(lambda i: AHEAD if i <= 24 else DARK)
+        runner.walk()
+        recorded = runner.backend.events
+        self.assertIn(("key", "w", True), recorded)
+        self.assertEqual(recorded[-1], ("key", "w", False))
+        self.assertFalse([e for e in recorded if e[:2] == ("key", "shift")])               # walking, never running
+        done = [p for k, p in events if k == "done"]
+        self.assertEqual(len(done), 1)
+        self.assertIn("arrived", done[0].lower())
+
+    def test_it_turns_to_line_the_dashes_up_before_it_walks(self):
+        runner, _ = make_runner(lambda i: STAIRS)                        # the dashes lie far to the left
+        with self.assertRaisesRegex(Interrupted, "does not line the dashes up"):   # the fake mouse turns nothing
+            runner.walk()
+        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]         # after the calibration nudges
+        self.assertTrue(turns and all(t < 0 for t in turns), turns)                # left, and in one bold move each
+        self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked unaligned
+
+    def test_it_reads_the_next_four_dashes(self):
+        view = pathvision_find(AHEAD)
+        ahead = NavRayRunner.next_dashes(view, AHEAD.shape[0])
+        self.assertEqual(len(ahead), navray_runner.DASHES_PER_LEG)
+        self.assertEqual(ahead, sorted(ahead, key=lambda p: -p[1]))                # nearest first
+
+    def test_no_path_at_all_scans_all_the_way_round_before_giving_up(self):
+        runner, events = make_runner(lambda i: DARK)
+        with self.assertRaisesRegex(Interrupted, "turning all the way round"):
+            runner.walk()
+        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]
+        self.assertTrue(turns and all(t > 0 for t in turns))                       # sweeping round in one direction
+        self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
+
+    def test_a_black_frame_is_a_loading_screen(self):
+        runner, _ = make_runner(lambda i: AHEAD if i < 4 else np.zeros((1125, 2000, 3), np.uint8))
+        with self.assertRaisesRegex(Interrupted, "Loading screen"):
+            runner.walk()
+
+    def test_an_unchanging_view_while_walking_is_stuck(self):
+        runner, _ = make_runner(lambda i: AHEAD)
+        with self.assertRaisesRegex(Interrupted, "Not moving"):
+            runner.walk()
+        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+
+    def test_a_health_drop_stops_the_walk(self):
+        runner, _ = make_runner(lambda i: AHEAD if i % 2 else HALL, health=(972, 972, 800))
+        with self.assertRaisesRegex(Interrupted, "Health dropped"):
+            runner.walk()
+        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
 
 
 class FocusTests(unittest.TestCase):
@@ -176,7 +163,7 @@ class FocusTests(unittest.TestCase):
         static, _ = make_runner(lambda i: STAIRS)
         self.assertIsNone(static.calibrate_turn())                               # nothing moved: no reading
 
-    def test_the_turn_follows_the_path_even_with_an_inverted_mouse(self):
+    def test_the_turn_follows_the_dashes_even_with_an_inverted_mouse(self):
         for sign in (+1, -1):
             with self.subTest(sign=sign):
                 runner = turning_runner(sign)
@@ -185,15 +172,19 @@ class FocusTests(unittest.TestCase):
                 except Interrupted:
                     pass
                 moves = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]    # after the calibration nudges
-                steering = [m for m in moves if m != 0][:3]
-                # the path in the frame lies to the left: a normal mouse turns left (negative counts), an inverted one right
+                steering = [m for m in moves if m != 0][:2]
+                # the dashes in the frame lie to the left: a normal mouse turns left (negative counts), an inverted one right
                 self.assertTrue(steering and all(m*sign < 0 for m in steering), steering)
 
-    def test_a_turn_is_limited_per_look_and_ignores_tiny_errors(self):
+    def test_one_turn_covers_the_whole_error_in_moves_the_game_can_follow(self):
         runner, _ = make_runner(lambda i: STAIRS)
         runner.px_per_count = -2.0
-        self.assertLessEqual(abs(runner.counts(-.5, 2000)), navray_runner.CAL_MAX_PX/2.0 + 1)
-        self.assertEqual(runner.counts(.005, 2000), 0)
+        runner.wait = lambda seconds, safe_pause=False: None
+        total = runner.turn(-.2, 2000)                                           # 400 px to the left
+        moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
+        self.assertEqual(sum(moves), total)
+        self.assertLess(total, 0)
+        self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/2.0 + 1 for m in moves), moves)
 
 
 class SelectionTests(unittest.TestCase):
