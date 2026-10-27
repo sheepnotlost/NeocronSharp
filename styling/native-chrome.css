@@ -1,0 +1,58 @@
+/* Exported from the native app's code-drawn skins. Basic and Dead Sector are untouched. */
+.skin-rpos .module{border:9px solid transparent;border-image:url("native-chrome/rpos-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-rpos .control{border:7px solid transparent;border-image:url("native-chrome/rpos-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-rpos .field{border:6px solid transparent;border-image:url("native-chrome/rpos-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-rpos .tab{border:6px solid transparent;border-image:url("native-chrome/rpos-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-rpos .tab.active{border-image-source:url("native-chrome/rpos-tab_selected.png")}
+.skin-rpos .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/rpos-badge.png") center/contain no-repeat}
+.skin-rpos .bar strong{flex:1;margin-left:5px}
+.skin-cronamp .module{border:9px solid transparent;border-image:url("native-chrome/cronamp-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-cronamp .control{border:7px solid transparent;border-image:url("native-chrome/cronamp-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-cronamp .field{border:6px solid transparent;border-image:url("native-chrome/cronamp-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-cronamp .tab{border:6px solid transparent;border-image:url("native-chrome/cronamp-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-cronamp .tab.active{border-image-source:url("native-chrome/cronamp-tab_selected.png")}
+.skin-cronamp .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/cronamp-badge.png") center/contain no-repeat}
+.skin-cronamp .bar strong{flex:1;margin-left:5px}
+.skin-clinic .module{border:9px solid transparent;border-image:url("native-chrome/clinic-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-clinic .control{border:7px solid transparent;border-image:url("native-chrome/clinic-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-clinic .field{border:6px solid transparent;border-image:url("native-chrome/clinic-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-clinic .tab{border:6px solid transparent;border-image:url("native-chrome/clinic-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-clinic .tab.active{border-image-source:url("native-chrome/clinic-tab_selected.png")}
+.skin-clinic .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/clinic-badge.png") center/contain no-repeat}
+.skin-clinic .bar strong{flex:1;margin-left:5px}
+.skin-iron .module{border:9px solid transparent;border-image:url("native-chrome/iron-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-iron .control{border:7px solid transparent;border-image:url("native-chrome/iron-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-iron .field{border:6px solid transparent;border-image:url("native-chrome/iron-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-iron .tab{border:6px solid transparent;border-image:url("native-chrome/iron-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-iron .tab.active{border-image-source:url("native-chrome/iron-tab_selected.png")}
+.skin-iron .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/iron-badge.png") center/contain no-repeat}
+.skin-iron .bar strong{flex:1;margin-left:5px}
+.skin-forge .module{border:9px solid transparent;border-image:url("native-chrome/forge-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-forge .control{border:7px solid transparent;border-image:url("native-chrome/forge-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-forge .field{border:6px solid transparent;border-image:url("native-chrome/forge-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-forge .tab{border:6px solid transparent;border-image:url("native-chrome/forge-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-forge .tab.active{border-image-source:url("native-chrome/forge-tab_selected.png")}
+.skin-forge .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/forge-badge.png") center/contain no-repeat}
+.skin-forge .bar strong{flex:1;margin-left:5px}
+.skin-rain .module{border:9px solid transparent;border-image:url("native-chrome/rain-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-rain .control{border:7px solid transparent;border-image:url("native-chrome/rain-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-rain .field{border:6px solid transparent;border-image:url("native-chrome/rain-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-rain .tab{border:6px solid transparent;border-image:url("native-chrome/rain-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-rain .tab.active{border-image-source:url("native-chrome/rain-tab_selected.png")}
+.skin-rain .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/rain-badge.png") center/contain no-repeat}
+.skin-rain .bar strong{flex:1;margin-left:5px}
+.skin-psi .module{border:9px solid transparent;border-image:url("native-chrome/psi-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-psi .control{border:7px solid transparent;border-image:url("native-chrome/psi-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-psi .field{border:6px solid transparent;border-image:url("native-chrome/psi-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-psi .tab{border:6px solid transparent;border-image:url("native-chrome/psi-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-psi .tab.active{border-image-source:url("native-chrome/psi-tab_selected.png")}
+.skin-psi .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/psi-badge.png") center/contain no-repeat}
+.skin-psi .bar strong{flex:1;margin-left:5px}
+.skin-dome .module{border:9px solid transparent;border-image:url("native-chrome/dome-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-dome .control{border:7px solid transparent;border-image:url("native-chrome/dome-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-dome .field{border:6px solid transparent;border-image:url("native-chrome/dome-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-dome .tab{border:6px solid transparent;border-image:url("native-chrome/dome-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-dome .tab.active{border-image-source:url("native-chrome/dome-tab_selected.png")}
+.skin-dome .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/dome-badge.png") center/contain no-repeat}
+.skin-dome .bar strong{flex:1;margin-left:5px}
+.mini .module{border-width:4px!important;padding:3px!important}.mini .control,.mini .field{border-width:3px!important;padding:2px!important}.mini .bar::before{display:none!important}.mini .bar strong{margin-left:0}

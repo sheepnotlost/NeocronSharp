@@ -1,0 +1,15 @@
+__pycache__/
+profile.json
+profile.tmp
+macro.log
+analysis/
+.deps/
+diagnostics/
+runtime/
+Neocron Macro Suite Portable.zip
+*.lnk
+*.log
+*.mp4
+.env
+.env.*
+!.env.example

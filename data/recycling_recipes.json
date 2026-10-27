@@ -1,0 +1,4593 @@
+{
+  "retrieved": "2026-10-26",
+  "source": "Tech Haven Network Items DB",
+  "source_url": "https://db.techhaven.org/en/item-lists/recyclable",
+  "recipes": [
+    {
+      "name": "Lazar Rifle",
+      "tech_level": 2,
+      "category": "Lowtech Rifle",
+      "requirements": "DEX 2; R-C 5",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        }
+      ],
+      "id": "recycle_9c507884ae97",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Mendicant Rifle",
+      "tech_level": 6,
+      "category": "Lowtech Rifle",
+      "requirements": "DEX 6; R-C 15",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        }
+      ],
+      "id": "recycle_68b9cd8f9460",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Pumpgun",
+      "tech_level": 18,
+      "category": "Lowtech Rifle",
+      "requirements": "DEX 18; R-C 45",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Pumpgun"
+        }
+      ],
+      "id": "recycle_2c5632f06b99",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Archer 'Companion' Rifle",
+      "tech_level": 26,
+      "category": "Lowtech Rifle",
+      "requirements": "DEX 26; R-C 57",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Archer Companion Rifle"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_07450f77c08b",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Enhanced Assault Rifle",
+      "tech_level": 52,
+      "category": "Lowtech Rifle",
+      "requirements": "DEX 52; R-C 85",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Enhanced Assault Rifle"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_70017170359f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Unlabeled 'Slowfire' Rifle",
+      "tech_level": 32,
+      "category": "Hightech Rifle",
+      "requirements": "DEX 32; R-C 65; T-C 40",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Unlabeled 'Slowfire' Rifle"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_2c401265c2e6",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Beggar Nailgun",
+      "tech_level": 1,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 1; P-C 2",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Small Hydraulic Parts"
+        }
+      ],
+      "id": "recycle_9bfca47ecc77",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Lazar Gun",
+      "tech_level": 2,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 2; P-C 5",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        }
+      ],
+      "id": "recycle_c112d528ca18",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Mendicant SMG",
+      "tech_level": 7,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 7; P-C 17",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        }
+      ],
+      "id": "recycle_e79cc16fb86f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Unlabeled 'Pinfire' Nailgun",
+      "tech_level": 12,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 12; P-C 30",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Unlabeled Pinfire Nailgun"
+        }
+      ],
+      "id": "recycle_b6e6efc2ab8f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled A&W Colt 'Budget'",
+      "tech_level": 18,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 18; P-C 45",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "A&W Colt Budget"
+        }
+      ],
+      "id": "recycle_4aecea1ad155",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Automatic Pistol",
+      "tech_level": 52,
+      "category": "Lowtech Pistol",
+      "requirements": "DEX 52; P-C 85",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Automatic Pistol"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_56d51fd3b13f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Hew 'Lightwand' L77X3",
+      "tech_level": 30,
+      "category": "Hightech Pistol",
+      "requirements": "DEX 30; P-C 62; T-C 37",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "HEW Lightwand L77x3"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_a88eeae356e6",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Street Model Grenade Launcher",
+      "tech_level": 6,
+      "category": "Lowtech Heavy Weapon",
+      "requirements": "STR 6; H-C 15",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Street Model Grenade Launcher"
+        }
+      ],
+      "id": "recycle_69bc88387d99",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Unlabeled Laser Cannon",
+      "tech_level": 34,
+      "category": "Hightech Heavy Weapon",
+      "requirements": "STR 34; H-C 67; T-C 42",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Unlabeled Lasercannon"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_46f7dc30863e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Special Alloy Knife",
+      "tech_level": 13,
+      "category": "Lowtech Melee Weapon",
+      "requirements": "STR 13; M-C 32",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Special Alloy Knife"
+        }
+      ],
+      "id": "recycle_965ca1c3b61c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Junk Knife",
+      "tech_level": 21,
+      "category": "Lowtech Melee Weapon",
+      "requirements": "STR 21; M-C 51",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        }
+      ],
+      "id": "recycle_258fe80da6ef",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Crummy Baseball Bat",
+      "tech_level": 24,
+      "category": "Lowtech Melee Weapon",
+      "requirements": "STR 24; M-C 55",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Crummy Baseball Bat"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_084924e526ea",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Beggar Electroshocker",
+      "tech_level": 5,
+      "category": "Hightech Melee Weapon",
+      "requirements": "STR 5; M-C 12; T-C 6",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Processor"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        }
+      ],
+      "id": "recycle_e68142d7c1df",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Beggar Electro Shocker",
+      "tech_level": 15,
+      "category": "Hightech Melee Weapon",
+      "requirements": "STR 15; M-C 37; T-C 18",
+      "ingredients": [
+        {
+          "quantity": 5,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Beggar Electroshocker"
+        }
+      ],
+      "id": "recycle_de65443c07a9",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Laserblade",
+      "tech_level": 45,
+      "category": "Hightech Melee Weapon",
+      "requirements": "STR 45; M-C 79; T-C 53",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Laserblade"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Metallplate"
+        }
+      ],
+      "id": "recycle_c03eeff5d165",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Helmet",
+      "tech_level": 90,
+      "category": "Helmets",
+      "requirements": "STR 68",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Helmet"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        }
+      ],
+      "id": "recycle_d085ee965a5e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Collar",
+      "tech_level": 90,
+      "category": "Neck armour",
+      "requirements": "STR 68",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Choker"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        }
+      ],
+      "id": "recycle_264982aef84a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Shabby Metalplated Vest",
+      "tech_level": 4,
+      "category": "Vests",
+      "requirements": "STR 4",
+      "ingredients": [
+        {
+          "quantity": 4,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        }
+      ],
+      "id": "recycle_c3ec7edb6416",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Metalplated Vest",
+      "tech_level": 12,
+      "category": "Vests",
+      "requirements": "STR 12",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 4,
+          "name": "Metal Plate"
+        }
+      ],
+      "id": "recycle_72c8648b455d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Good Metalplated Vest",
+      "tech_level": 24,
+      "category": "Vests",
+      "requirements": "STR 24",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 6,
+          "name": "Metal Plate"
+        }
+      ],
+      "id": "recycle_cce1705d5936",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Belt",
+      "tech_level": 90,
+      "category": "Belts",
+      "requirements": "STR 68",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Belt"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        }
+      ],
+      "id": "recycle_59e5dd0f3b23",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Pants",
+      "tech_level": 90,
+      "category": "Pants",
+      "requirements": "STR 68",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Trousers"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        }
+      ],
+      "id": "recycle_106faec037e4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Boots",
+      "tech_level": 90,
+      "category": "Boots",
+      "requirements": "STR 68",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Boots"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        }
+      ],
+      "id": "recycle_b93e5a50de65",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Light Wiremesh Suit",
+      "tech_level": 3,
+      "category": "Body underwear",
+      "requirements": "STR 3",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Small Limbs"
+        },
+        {
+          "quantity": 2,
+          "name": "Wire Junk"
+        }
+      ],
+      "id": "recycle_4e7ee30daca3",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Light Leather Skin",
+      "tech_level": 3,
+      "category": "Body underwear",
+      "requirements": "STR 3",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Bloody Skin"
+        },
+        {
+          "quantity": 1,
+          "name": "Tufts of Hair"
+        }
+      ],
+      "id": "recycle_ec07590c0605",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Medium Wiremesh Suit",
+      "tech_level": 10,
+      "category": "Body underwear",
+      "requirements": "STR 12",
+      "ingredients": [
+        {
+          "quantity": 4,
+          "name": "Cable"
+        },
+        {
+          "quantity": 3,
+          "name": "Small Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Wire Junk"
+        }
+      ],
+      "id": "recycle_c0090976c3b2",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Medium Leather Skin",
+      "tech_level": 10,
+      "category": "Body underwear",
+      "requirements": "STR 10",
+      "ingredients": [
+        {
+          "quantity": 4,
+          "name": "Bloody Skin"
+        },
+        {
+          "quantity": 4,
+          "name": "Mutated Limbs"
+        }
+      ],
+      "id": "recycle_6d4863bc7193",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Heavy Wiremesh Suit",
+      "tech_level": 20,
+      "category": "Body underwear",
+      "requirements": "STR 20",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Cable"
+        },
+        {
+          "quantity": 2,
+          "name": "Processor"
+        },
+        {
+          "quantity": 4,
+          "name": "Small Limbs"
+        }
+      ],
+      "id": "recycle_2033b119becd",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Heavy Leather Skin",
+      "tech_level": 20,
+      "category": "Body underwear",
+      "requirements": "STR 20",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Bloody Skin"
+        },
+        {
+          "quantity": 5,
+          "name": "Small Limbs"
+        }
+      ],
+      "id": "recycle_034b51bfee76",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "DoY Material Analyzer",
+      "tech_level": 60,
+      "category": "Eye implants",
+      "requirements": "DEX 60",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Bunch of Melted Wires"
+        },
+        {
+          "quantity": 2,
+          "name": "Broken Sensor Device"
+        },
+        {
+          "quantity": 2,
+          "name": "Discharged Power Supply"
+        },
+        {
+          "quantity": 2,
+          "name": "Damaged Processor Framework"
+        }
+      ],
+      "id": "recycle_e502daea2c06",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "DoY Repair Coordinator",
+      "tech_level": 60,
+      "category": "Eye implants",
+      "requirements": "DEX 60",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Arm of a Warrior"
+        },
+        {
+          "quantity": 2,
+          "name": "Hair of a Warrior"
+        },
+        {
+          "quantity": 2,
+          "name": "Melted Entrails"
+        },
+        {
+          "quantity": 2,
+          "name": "Mysterious Broken Implant"
+        }
+      ],
+      "id": "recycle_58a75606d467",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "DoY Vehicle Coordination Linkage",
+      "tech_level": 60,
+      "category": "Eye implants",
+      "requirements": "DEX 60",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Internal Motion Sensors"
+        },
+        {
+          "quantity": 2,
+          "name": "Disfunctional Power Supply"
+        },
+        {
+          "quantity": 2,
+          "name": "Melted Laser Device"
+        },
+        {
+          "quantity": 2,
+          "name": "Optical Identification Sensors"
+        }
+      ],
+      "id": "recycle_274bb8b3b1ab",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Apparition Head Bone",
+      "tech_level": 80,
+      "category": "Head Enforcement",
+      "requirements": "PSI 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Head Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Soulcluster Essence"
+        }
+      ],
+      "id": "recycle_b567de64e0f4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cryton's Restored Head Bone",
+      "tech_level": 80,
+      "category": "Head Enforcement",
+      "requirements": "INT 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Damaged Head Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Bone Recipe"
+        }
+      ],
+      "id": "recycle_cc26acf125c4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Apparition Chest Bone",
+      "tech_level": 80,
+      "category": "Chest Enforcement",
+      "requirements": "PSI 80",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Chest Bone"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Soulcluster Essence"
+        }
+      ],
+      "id": "recycle_5fa1615da438",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cryton's Restored Chest Bone",
+      "tech_level": 80,
+      "category": "Chest Enforcement",
+      "requirements": "INT 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Damaged Chest Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Bone Recipe"
+        }
+      ],
+      "id": "recycle_3c3c6047ff64",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Apparition Arm Bone",
+      "tech_level": 80,
+      "category": "Arm Enforcement",
+      "requirements": "PSI 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Arm Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Soulcluster Essence"
+        }
+      ],
+      "id": "recycle_0ee9e585492c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cryton's Restored Arm Bone",
+      "tech_level": 80,
+      "category": "Arm Enforcement",
+      "requirements": "INT 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Damaged Arm Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Bone Recipe"
+        }
+      ],
+      "id": "recycle_06a9c5854414",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Apparition Leg Bone",
+      "tech_level": 80,
+      "category": "Leg Enforcement",
+      "requirements": "PSI 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Leg Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Soulcluster Essence"
+        }
+      ],
+      "id": "recycle_a769fde6f1ca",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cryton's Restored Leg Bone",
+      "tech_level": 80,
+      "category": "Leg Enforcement",
+      "requirements": "INT 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Damaged Leg Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Bone Recipe"
+        }
+      ],
+      "id": "recycle_a2caf020c8b0",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Apparition Foot Bone",
+      "tech_level": 80,
+      "category": "Foot Enforcement",
+      "requirements": "PSI 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Foot Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Soulcluster Essence"
+        }
+      ],
+      "id": "recycle_1959da56a49d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cryton's Restored Foot Bone",
+      "tech_level": 80,
+      "category": "Foot Enforcement",
+      "requirements": "INT 80",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Damaged Foot Bone"
+        },
+        {
+          "quantity": 1,
+          "name": "Cryton's Bone Recipe"
+        }
+      ],
+      "id": "recycle_c9df9f1b471b",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Empty Datacube",
+      "tech_level": 30,
+      "category": "Datacubes",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Cable"
+        },
+        {
+          "quantity": 2,
+          "name": "Processor"
+        },
+        {
+          "quantity": 1,
+          "name": "Tronik Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Biotech Garbage"
+        },
+        {
+          "quantity": 1,
+          "name": "Broken Implant"
+        }
+      ],
+      "id": "recycle_e5f6584103a6",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Empty Book",
+      "tech_level": 30,
+      "category": "Datacubes",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Ancient Launcher Connections"
+        },
+        {
+          "quantity": 1,
+          "name": "Energy Generator"
+        },
+        {
+          "quantity": 1,
+          "name": "Hardware Scraps"
+        },
+        {
+          "quantity": 2,
+          "name": "Large Hydraulic Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Processor"
+        },
+        {
+          "quantity": 1,
+          "name": "Tronik Parts"
+        }
+      ],
+      "id": "recycle_30da339decff",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recordable Disc",
+      "tech_level": 30,
+      "category": "Datacubes",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Ancient Launcher Connections"
+        },
+        {
+          "quantity": 1,
+          "name": "Energy Generator"
+        },
+        {
+          "quantity": 1,
+          "name": "Hardware Based OS"
+        },
+        {
+          "quantity": 4,
+          "name": "Large Hydraulic Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Defunct Copbot Ethic Chip"
+        }
+      ],
+      "id": "recycle_70b4f5233da4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Solantium",
+      "tech_level": 1,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 4,
+          "name": "Chitin"
+        }
+      ],
+      "id": "recycle_9faf539662bb",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Meritium",
+      "tech_level": 1,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 2,
+          "name": "Chitin"
+        }
+      ],
+      "id": "recycle_e1229b427f86",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Metal D",
+      "tech_level": 2,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Green Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Small piece of Flesh"
+        },
+        {
+          "quantity": 2,
+          "name": "Brown Poisongland"
+        }
+      ],
+      "id": "recycle_fffb66853b10",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Arillium",
+      "tech_level": 2,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Chitin"
+        },
+        {
+          "quantity": 3,
+          "name": "Green Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        }
+      ],
+      "id": "recycle_cf5841bf109d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tiberal",
+      "tech_level": 7,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 4,
+          "name": "Medium piece of Flesh"
+        }
+      ],
+      "id": "recycle_a4a0d288b01e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tripantol",
+      "tech_level": 12,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 3,
+          "name": "Big piece of Flesh"
+        }
+      ],
+      "id": "recycle_a4009847756d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Strastin",
+      "tech_level": 18,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wire Junk"
+        }
+      ],
+      "id": "recycle_a1d44e33158d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Trisol",
+      "tech_level": 29,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Solantium"
+        }
+      ],
+      "id": "recycle_980d3764778e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Adiclovin",
+      "tech_level": 35,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 2,
+          "name": "Big piece of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Solantium"
+        },
+        {
+          "quantity": 3,
+          "name": "Metal D"
+        }
+      ],
+      "id": "recycle_c252483a6898",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Gamonin",
+      "tech_level": 40,
+      "category": "Chemicals",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Solantium"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal D"
+        },
+        {
+          "quantity": 1,
+          "name": "Trisol"
+        },
+        {
+          "quantity": 1,
+          "name": "Adiclovin"
+        }
+      ],
+      "id": "recycle_38d020b2c2f0",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 2",
+      "tech_level": 10,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 1"
+        }
+      ],
+      "id": "recycle_47b4f3957af1",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 3",
+      "tech_level": 15,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 2"
+        }
+      ],
+      "id": "recycle_beb261af06b3",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 4",
+      "tech_level": 20,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 3"
+        }
+      ],
+      "id": "recycle_f487c4a6e8fc",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 5",
+      "tech_level": 25,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 4"
+        }
+      ],
+      "id": "recycle_b32e671da90d",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 6",
+      "tech_level": 30,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 5"
+        }
+      ],
+      "id": "recycle_cb81894bb7e4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 7",
+      "tech_level": 35,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 6"
+        }
+      ],
+      "id": "recycle_dedc01eef566",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 8",
+      "tech_level": 40,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 7"
+        }
+      ],
+      "id": "recycle_8941a0e39ff6",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 9",
+      "tech_level": 45,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 8"
+        }
+      ],
+      "id": "recycle_3fd408c70171",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Weaponpart 10",
+      "tech_level": 50,
+      "category": "Weapon parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 9"
+        }
+      ],
+      "id": "recycle_dac4c1aab05f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 2",
+      "tech_level": 28,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 1"
+        }
+      ],
+      "id": "recycle_2d8a641f2b0a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 3",
+      "tech_level": 36,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 2"
+        }
+      ],
+      "id": "recycle_e53633bea00c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 4",
+      "tech_level": 44,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 3"
+        }
+      ],
+      "id": "recycle_9b244632fe0a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 5",
+      "tech_level": 52,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 4"
+        }
+      ],
+      "id": "recycle_6f771684cf19",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 6",
+      "tech_level": 60,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 5"
+        }
+      ],
+      "id": "recycle_2adb4f909887",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 7",
+      "tech_level": 68,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 6"
+        }
+      ],
+      "id": "recycle_03446d248ba6",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 8",
+      "tech_level": 76,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 7"
+        }
+      ],
+      "id": "recycle_c4ed76166dc1",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 9",
+      "tech_level": 84,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 8"
+        }
+      ],
+      "id": "recycle_83c760d9ca83",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Component 10",
+      "tech_level": 92,
+      "category": "Vehicle components",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Component 9"
+        }
+      ],
+      "id": "recycle_c72cb40845e8",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 2",
+      "tech_level": 10,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 1"
+        }
+      ],
+      "id": "recycle_2d15cba6b421",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 3",
+      "tech_level": 15,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 2"
+        }
+      ],
+      "id": "recycle_a70a5265d779",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 4",
+      "tech_level": 20,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 3"
+        }
+      ],
+      "id": "recycle_ae3fa33dd6bd",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 5",
+      "tech_level": 25,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 4"
+        }
+      ],
+      "id": "recycle_fb1d7f14c365",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 6",
+      "tech_level": 30,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 5"
+        }
+      ],
+      "id": "recycle_bdde9464faf2",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 7",
+      "tech_level": 35,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 6"
+        }
+      ],
+      "id": "recycle_16710f1f7968",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 8",
+      "tech_level": 40,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 7"
+        }
+      ],
+      "id": "recycle_c14aa2a7123a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 9",
+      "tech_level": 45,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 8"
+        }
+      ],
+      "id": "recycle_a98651488878",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "NEXT Vehicle Componentpart 10",
+      "tech_level": 50,
+      "category": "Vehicle component parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "NEXT Vehicle Componentpart 9"
+        }
+      ],
+      "id": "recycle_84cb5f257355",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 2",
+      "tech_level": 10,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 1"
+        }
+      ],
+      "id": "recycle_4d237c2b92eb",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 3",
+      "tech_level": 15,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 2"
+        }
+      ],
+      "id": "recycle_dcc1899c8481",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 4",
+      "tech_level": 20,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 3"
+        }
+      ],
+      "id": "recycle_d7456a3f92c5",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 5",
+      "tech_level": 25,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 4"
+        }
+      ],
+      "id": "recycle_e3c311c5b794",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 6",
+      "tech_level": 30,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 5"
+        }
+      ],
+      "id": "recycle_5b5abf21ddf2",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 7",
+      "tech_level": 35,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 6"
+        }
+      ],
+      "id": "recycle_c85bcd2fb07f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 8",
+      "tech_level": 40,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 7"
+        }
+      ],
+      "id": "recycle_a84e392c348e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 9",
+      "tech_level": 45,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 8"
+        }
+      ],
+      "id": "recycle_e1670315e1b3",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Tangent Armorpart 10",
+      "tech_level": 50,
+      "category": "Armour parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Armorpart 9"
+        }
+      ],
+      "id": "recycle_2c9986571556",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 431-DDHT6-B",
+      "tech_level": 10,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 132-D38H6-A"
+        }
+      ],
+      "id": "recycle_be5a11456618",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 642-D38H6-C",
+      "tech_level": 15,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 431-DDHT6-B"
+        }
+      ],
+      "id": "recycle_4bb2e0e092d4",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 947-D89H6-D",
+      "tech_level": 20,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 642-D38H6-C"
+        }
+      ],
+      "id": "recycle_a135bd56e496",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 987-D38H6-E",
+      "tech_level": 25,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 947-D89H6-D"
+        }
+      ],
+      "id": "recycle_6a2180ca8500",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 119-D3996-F",
+      "tech_level": 30,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 987-D38H6-E"
+        }
+      ],
+      "id": "recycle_4acf0ddfdc81",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 954-D38H6-G",
+      "tech_level": 35,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 119-D3996-F"
+        }
+      ],
+      "id": "recycle_c74f2a9c9707",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 222-D40D6-H",
+      "tech_level": 40,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 954-D38H6-G"
+        }
+      ],
+      "id": "recycle_50ff06a96632",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 222-D38H6-I",
+      "tech_level": 45,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 222-D40D6-H"
+        }
+      ],
+      "id": "recycle_b5e2065e0617",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Implant part reg.# 222-DKIIH6-J",
+      "tech_level": 50,
+      "category": "Implants parts",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Implant part reg.# 222-D38H6-I"
+        }
+      ],
+      "id": "recycle_8a1f6bbbaf7a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D73H6/MOD-2",
+      "tech_level": 10,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponmod Part Reg.# D38H6/MOD-1"
+        }
+      ],
+      "id": "recycle_f1c0989860a7",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D54H6/MOD-3",
+      "tech_level": 15,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D73H6/MOD-2"
+        }
+      ],
+      "id": "recycle_bbdc67db4983",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D38H6/MOD-4",
+      "tech_level": 20,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D54H6/MOD-3"
+        }
+      ],
+      "id": "recycle_d278afe16336",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D43H6/MOD-5",
+      "tech_level": 25,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D38H6/MOD-4"
+        }
+      ],
+      "id": "recycle_c18be21c2a42",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D38H6/MOD-6",
+      "tech_level": 30,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D43H6/MOD-5"
+        }
+      ],
+      "id": "recycle_0a310e7b5ccf",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D77H6/MOD-7",
+      "tech_level": 35,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D38H6/MOD-6"
+        }
+      ],
+      "id": "recycle_56158e83c8ab",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D88H6/MOD-8",
+      "tech_level": 40,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D77H6/MOD-7"
+        }
+      ],
+      "id": "recycle_6cb34c20ab9e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "weaponmod part reg.# D62H6/MOD-9",
+      "tech_level": 45,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D88H6/MOD-8"
+        }
+      ],
+      "id": "recycle_9d0a90c27d53",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Weaponmod Part reg.# D11H6/MOD-10",
+      "tech_level": 50,
+      "category": "Weapon part mods",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "weaponmod part reg.# D62H6/MOD-9"
+        }
+      ],
+      "id": "recycle_856b238a7b71",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Spine Mark-6 Codebreaker",
+      "tech_level": 35,
+      "category": "Special hacknet items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Code Fragment #Spine-001"
+        },
+        {
+          "quantity": 1,
+          "name": "Code Fragment #Spine-002"
+        },
+        {
+          "quantity": 1,
+          "name": "Code Fragment #Spine-003"
+        },
+        {
+          "quantity": 2,
+          "name": "Code Fragment #Spine-004"
+        },
+        {
+          "quantity": 1,
+          "name": "Code Fragment #Spine-005"
+        },
+        {
+          "quantity": 2,
+          "name": "Code Fragment #Spine-006"
+        }
+      ],
+      "id": "recycle_08eaba0fedfb",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Spine Mark-7 Codebreaker",
+      "tech_level": 50,
+      "category": "Special hacknet items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Code Fragment #Spine-007"
+        },
+        {
+          "quantity": 1,
+          "name": "Code Fragment #Spine-008"
+        },
+        {
+          "quantity": 3,
+          "name": "Code Fragment #Spine-009"
+        },
+        {
+          "quantity": 2,
+          "name": "Code Fragment #Spine-010"
+        }
+      ],
+      "id": "recycle_14702255c861",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Ion Shotgun Pistol Blueprint",
+      "tech_level": 92,
+      "category": "Special hacknet items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C01"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C04"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C07"
+        }
+      ],
+      "id": "recycle_68d499999d3f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Ion Shotgun Rifle Blueprint",
+      "tech_level": 92,
+      "category": "Special hacknet items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C02"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C05"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C08"
+        }
+      ],
+      "id": "recycle_231037197550",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Ion Shotgun Cannon Blueprint",
+      "tech_level": 92,
+      "category": "Special hacknet items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C03"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C06"
+        },
+        {
+          "quantity": 1,
+          "name": "Rare Code Fragment #0F0C09"
+        }
+      ],
+      "id": "recycle_22021597f748",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Artifact Next Air Guard V1.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Anti-Air Glider 'Air Guard'"
+        }
+      ],
+      "id": "recycle_607ed50bce7c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next ER Wheeler Speedbike V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NExT Speedbike 'Interceptor'"
+        }
+      ],
+      "id": "recycle_2cb7b343e48c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next ER Hovertec V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Hovertec 'Vanguard'"
+        }
+      ],
+      "id": "recycle_95cbcf3ae92f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next Terminator Assault Quad V1.5 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NExT Assault Quad 'Terminator'"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        }
+      ],
+      "id": "recycle_43d63a55fa57",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next Scorpion Trike V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Assault Trike 'Scorpion'"
+        }
+      ],
+      "id": "recycle_884988f8bc4b",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next Rhino 4x4 Chaincraft V.3 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Assault Tank 'Rhino RG'"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        }
+      ],
+      "id": "recycle_5d496179e679",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next HH 4x4 Chaincraft V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Assault 4WD Chaincraft 'Javelin'"
+        }
+      ],
+      "id": "recycle_3bf89f41de73",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next ER Chaincraft V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT 2WD Chaincraft 'Ranger'"
+        }
+      ],
+      "id": "recycle_d775a4acdd6e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next HH Wheeler V.2 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Wheeler 'Banshee'"
+        }
+      ],
+      "id": "recycle_ef04c7c1f905",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Next AT Troop Carrier V.1 Trophy",
+      "tech_level": null,
+      "category": "Vehicle Trophies",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Armoured Troop Carrier 'Armadillo'"
+        },
+        {
+          "quantity": 1,
+          "name": "N.E.X.T. Construction License"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "NEXT Vehicle Component 10"
+        }
+      ],
+      "id": "recycle_b762c3ff1624",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Wolf Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Wolf Carcass"
+        }
+      ],
+      "id": "recycle_6b3d3f3d9a70",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Swamprider Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Swamprider Carcass"
+        }
+      ],
+      "id": "recycle_e84541049156",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Spider Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Spider Carapace"
+        }
+      ],
+      "id": "recycle_42706921084e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Swamp Warrior Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Swamp Warrior Carcass"
+        }
+      ],
+      "id": "recycle_7fd8150f1a13",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Decayed Brute Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Decayed Brute Carcass"
+        }
+      ],
+      "id": "recycle_503a3554a87c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Hoverbot Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Hoverbot Remains"
+        }
+      ],
+      "id": "recycle_2679fdb542f8",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Chaos Creeper Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Creeper Carapace"
+        }
+      ],
+      "id": "recycle_6dce703dfe62",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Chaos Lieutenant Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Lieutenant Carapace"
+        }
+      ],
+      "id": "recycle_0d5a24a7e593",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Grim Chaser Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Grim Chaser Carcass"
+        }
+      ],
+      "id": "recycle_5ab79d17491e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Lizard Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Lizard Carcass"
+        }
+      ],
+      "id": "recycle_c8698d1d64d3",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Grim Persecutor Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Grim Persecutor Carcass"
+        }
+      ],
+      "id": "recycle_aab86ceca442",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Giant Sewer Rat Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Giant Sewer Rat Carcass"
+        }
+      ],
+      "id": "recycle_996f86e93ff8",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Reaperspider Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Reaperspider Carapace"
+        }
+      ],
+      "id": "recycle_65e68f6ac0f5",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Decayed Horror Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Decayed Horror Carcass"
+        }
+      ],
+      "id": "recycle_313e755ab610",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Drom Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Drom Carcass"
+        }
+      ],
+      "id": "recycle_850d136330ff",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Giant Black Scorpion Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Giant Black Scorpion Carapace"
+        }
+      ],
+      "id": "recycle_dff876f7a3a0",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Marsh Hippo Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Marsh Hippo Carcass"
+        }
+      ],
+      "id": "recycle_1e332f063ba5",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "WarBot Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Warbot Remains"
+        }
+      ],
+      "id": "recycle_96d344c0e2aa",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Cockroach Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Cockroach Carapace"
+        }
+      ],
+      "id": "recycle_c27d2107ec5e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Terror Raptor Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Terror Raptor Carcass"
+        }
+      ],
+      "id": "recycle_ebf22b13274a",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Fierce Glider Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Fierce Glider Carcass"
+        }
+      ],
+      "id": "recycle_bb250bf50e38",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Floating Jelly Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Floating Jelly Carcass"
+        }
+      ],
+      "id": "recycle_26baa876cb9f",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Mutant Bat Trophy",
+      "tech_level": null,
+      "category": "Trophy",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Metal Pipes"
+        },
+        {
+          "quantity": 2,
+          "name": "Metal Plate"
+        },
+        {
+          "quantity": 2,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "Mutant Bat Carcass"
+        }
+      ],
+      "id": "recycle_fedeec205ead",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Recycled Analyzer Eye V1.3",
+      "tech_level": 65,
+      "category": "Mission Items",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Wire Junk"
+        },
+        {
+          "quantity": 1,
+          "name": "Cyber Scan GPU V1"
+        },
+        {
+          "quantity": 1,
+          "name": "Adhaesin - Super Connection Gel"
+        },
+        {
+          "quantity": 1,
+          "name": "Valadium"
+        }
+      ],
+      "id": "recycle_867e272b76b5",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Board Reg. #1CODA",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF1201"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF1202"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF1203"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF1204"
+        }
+      ],
+      "id": "recycle_a19a389f1e9e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Board Reg. #1CODB",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF3201"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF3202"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF3203"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF3204"
+        }
+      ],
+      "id": "recycle_8e00407f2c63",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Board Reg. #1CODC",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF5201"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF5202"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF5203"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF5204"
+        }
+      ],
+      "id": "recycle_257b96b95beb",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Board Reg. #1CODD",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF7201"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF7202"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF7203"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF7204"
+        }
+      ],
+      "id": "recycle_00283cb315fb",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Board Reg. #1CODE",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF9201"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF9202"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF9203"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Component Reg. #FF9204"
+        }
+      ],
+      "id": "recycle_7df964d96909",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Computer Core Reg. #1FFC00",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1CODA"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1CODB"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1CODC"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1CODD"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1CODE"
+        }
+      ],
+      "id": "recycle_1416be448e6c",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Big Metallplate",
+      "tech_level": 1,
+      "category": "Constructed junk",
+      "requirements": "",
+      "ingredients": [
+        {
+          "quantity": 6,
+          "name": "Metal Plate"
+        }
+      ],
+      "id": "recycle_00d33d61e86e",
+      "source_url": "https://db.techhaven.org/en/item-lists/recyclable"
+    },
+    {
+      "name": "Viper King Choker",
+      "category": "Armor",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Choker"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_00f6a879afd3"
+    },
+    {
+      "name": "Viper King Trousers",
+      "category": "Armor",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Trousers"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_af236425b3de"
+    },
+    {
+      "name": "Viper King Vest",
+      "category": "Armor",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Carbon Choker"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Scraps"
+        },
+        {
+          "quantity": 1,
+          "name": "Viper King Keratin Plate"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_60edd36fa249"
+    },
+    {
+      "name": "Antidote",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 5"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_ac58f0b87040"
+    },
+    {
+      "name": "Advanced Antidote",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 5"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_857081d2d513"
+    },
+    {
+      "name": "Concentrated Antidote",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 3,
+          "name": "ProtoPharm Medical Substance 5"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_c6dc186bd529"
+    },
+    {
+      "name": "Antishock Fluid",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 3,
+          "name": "ProtoPharm Medical Substance 4"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_62f440007c86"
+    },
+    {
+      "name": "Advanced Antishock Fluid",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 4"
+        },
+        {
+          "quantity": 3,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_3229ae5fa050"
+    },
+    {
+      "name": "Concentrated Antishock Fluid",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 4"
+        },
+        {
+          "quantity": 4,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_360fac72f81b"
+    },
+    {
+      "name": "Damage Blocker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_f6188df1665f"
+    },
+    {
+      "name": "Advanced Damage Blocker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_5f3f403c4ab3"
+    },
+    {
+      "name": "Concentrated Damage Blocker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 2"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 4,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_146ccf527d22"
+    },
+    {
+      "name": "Stealthbreaker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 4"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_3b6a6ffd1a3a"
+    },
+    {
+      "name": "Advanced Stealthbreaker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 4,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 4"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_0a1b1d272a45"
+    },
+    {
+      "name": "Concentrated Stealthbreaker",
+      "category": "Drugs",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 1"
+        },
+        {
+          "quantity": 2,
+          "name": "ProtoPharm Medical Substance 3"
+        },
+        {
+          "quantity": 4,
+          "name": "ProtoPharm Medical Substance 4"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_470e7ef74fd7"
+    },
+    {
+      "name": "Tofu sausages in poisonous plant puree",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Large Tendons"
+        },
+        {
+          "quantity": 1,
+          "name": "Slimeworm Excretion"
+        },
+        {
+          "quantity": 4,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Chitin"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_7a7b488ad82f"
+    },
+    {
+      "name": "Smoked giant rat steaks with rice",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 3,
+          "name": "Malformed Brain"
+        },
+        {
+          "quantity": 1,
+          "name": "Left Flapper Eye"
+        },
+        {
+          "quantity": 3,
+          "name": "Muscle Sinews"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_4d88009d37d8"
+    },
+    {
+      "name": "Filled giant rat on vegetables",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Swarmer Skin"
+        },
+        {
+          "quantity": 1,
+          "name": "Right Flapper Eye"
+        },
+        {
+          "quantity": 5,
+          "name": "Big Entrails"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_e7348e08fc95"
+    },
+    {
+      "name": "Baked scorpion on mutant cheddar",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Scorpion Minion Essence"
+        },
+        {
+          "quantity": 1,
+          "name": "Slimeworm Excretion"
+        },
+        {
+          "quantity": 2,
+          "name": "Chitin Plate"
+        },
+        {
+          "quantity": 3,
+          "name": "Muscle Sinews"
+        },
+        {
+          "quantity": 1,
+          "name": "Big Entrails"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_3804fd813878"
+    },
+    {
+      "name": "Sausages and onion-noodle casserole",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Bat Sirloin"
+        },
+        {
+          "quantity": 1,
+          "name": "Mutated Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Slimeworm Excretion"
+        },
+        {
+          "quantity": 2,
+          "name": "Large Tendons"
+        },
+        {
+          "quantity": 2,
+          "name": "Muscle Sinews"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_96315114cf5f"
+    },
+    {
+      "name": "Roasted giant cockroach",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Small Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Minion Chitin"
+        },
+        {
+          "quantity": 1,
+          "name": "Left Flapper Eye"
+        },
+        {
+          "quantity": 3,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Large Tendons"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_bc405c73b191"
+    },
+    {
+      "name": "Grilled flounder on seaweed salad",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 2,
+          "name": "Slimeworm Bladder"
+        },
+        {
+          "quantity": 2,
+          "name": "Insect Eyes"
+        },
+        {
+          "quantity": 1,
+          "name": "Muscle Sinews"
+        },
+        {
+          "quantity": 1,
+          "name": "Brown Poisongland"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_07d00c45a563"
+    },
+    {
+      "name": "Baked wasteland potatoes with rice",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Bodily Fluids"
+        },
+        {
+          "quantity": 1,
+          "name": "Bat Sirloin"
+        },
+        {
+          "quantity": 1,
+          "name": "Insect Eyes"
+        },
+        {
+          "quantity": 1,
+          "name": "Brown Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Green Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Blue Poisongland"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_f6cac8df890d"
+    },
+    {
+      "name": "Grilled crab with smoked fish",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Medium Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Chitin"
+        },
+        {
+          "quantity": 1,
+          "name": "Swarmer Skin"
+        },
+        {
+          "quantity": 4,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Minion Chitin"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_fed65c4964b2"
+    },
+    {
+      "name": "Baked potatoes on poisonous plant puree",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Mutated Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Brown Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Sand Viper Gland"
+        },
+        {
+          "quantity": 2,
+          "name": "Malformed Brain"
+        },
+        {
+          "quantity": 1,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Chitin Scraps"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_9cc5af113521"
+    },
+    {
+      "name": "Sausage with a fried egg",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 2,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 2,
+          "name": "Small Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Bat Sirloin"
+        },
+        {
+          "quantity": 2,
+          "name": "Muscle Sinews"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_198ba5e16067"
+    },
+    {
+      "name": "Rat ragout with broccoli",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Right Flapper Eye"
+        },
+        {
+          "quantity": 3,
+          "name": "Animal Skin"
+        },
+        {
+          "quantity": 2,
+          "name": "Brown Poisongland"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_25b12c5b776a"
+    },
+    {
+      "name": "Sliced snake. fried egg and rice",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 2,
+          "name": "Sand Viper Gland"
+        },
+        {
+          "quantity": 3,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Insect Eyes"
+        },
+        {
+          "quantity": 1,
+          "name": "Green Poisongland"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_0708ebba9165"
+    },
+    {
+      "name": "Sausages. spinach and mashed roaches",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Small Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Green Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Brown Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Malformed Brain"
+        },
+        {
+          "quantity": 1,
+          "name": "Swarmer Skin"
+        },
+        {
+          "quantity": 1,
+          "name": "Left Flapper Eye"
+        },
+        {
+          "quantity": 1,
+          "name": "Animal Limb"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_396280c97cc2"
+    },
+    {
+      "name": "Rat steak with various vegetables",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Big Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Insect Eyes"
+        },
+        {
+          "quantity": 1,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 2,
+          "name": "Muscle Sinews"
+        },
+        {
+          "quantity": 1,
+          "name": "Right Flapper Eye"
+        },
+        {
+          "quantity": 1,
+          "name": "Big Entrails"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_dabe63e79382"
+    },
+    {
+      "name": "Boiled scorpion in spinach",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Small Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Big Entrails"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Minion Chitin"
+        },
+        {
+          "quantity": 1,
+          "name": "Brown Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Muscle Sinews"
+        },
+        {
+          "quantity": 1,
+          "name": "Mutated Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Large Tendons"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_11b419c1f876"
+    },
+    {
+      "name": "Delicious crab soup",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 2,
+          "name": "Small Piece Of Flesh"
+        },
+        {
+          "quantity": 2,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Limbs"
+        },
+        {
+          "quantity": 1,
+          "name": "Slimeworm Excretion"
+        },
+        {
+          "quantity": 1,
+          "name": "Bodily Fluids"
+        },
+        {
+          "quantity": 1,
+          "name": "Chitin Scraps"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_8fe01f76198d"
+    },
+    {
+      "name": "Nigiri Sushi",
+      "category": "Food",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Small Piece Of Flesh"
+        },
+        {
+          "quantity": 1,
+          "name": "Green Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Blue Poisongland"
+        },
+        {
+          "quantity": 1,
+          "name": "Chaos Minion Chitin"
+        },
+        {
+          "quantity": 2,
+          "name": "Bodily Fluids"
+        },
+        {
+          "quantity": 2,
+          "name": "Big Entrails"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_7c55c3502a1c"
+    },
+    {
+      "name": "Cavespider Trophy",
+      "category": "Trophies",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Cavespider Carapace"
+        },
+        {
+          "quantity": 3,
+          "name": "Wood"
+        },
+        {
+          "quantity": 2,
+          "name": "Metalplate"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_56b14eba0122"
+    },
+    {
+      "name": "NExT Air Guard V1.1 Trophy",
+      "category": "Trophies",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "NExT Vehicle Componentpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "Wood"
+        },
+        {
+          "quantity": 1,
+          "name": "NExT Vehicle Component 10"
+        },
+        {
+          "quantity": 1,
+          "name": "Metalplate"
+        },
+        {
+          "quantity": 1,
+          "name": "Glass"
+        },
+        {
+          "quantity": 1,
+          "name": "Mechanical Joint Parts"
+        },
+        {
+          "quantity": 1,
+          "name": "Key for NExT Anti-Air Glider 'Air Guard'"
+        },
+        {
+          "quantity": 1,
+          "name": "NExT Construction License"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_06b46ade3d64"
+    },
+    {
+      "name": "BioTech Personal Injector v3",
+      "category": "Misc",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "BioTech Personal Injector v2"
+        },
+        {
+          "quantity": 1,
+          "name": "Immunosuppressive Toxins"
+        },
+        {
+          "quantity": 1,
+          "name": "Neural Interface Module"
+        },
+        {
+          "quantity": 1,
+          "name": "Quantum Energy Converter"
+        },
+        {
+          "quantity": 2,
+          "name": "Tangent Weaponpart 10"
+        },
+        {
+          "quantity": 1,
+          "name": "ProtoPharm Medical Substance 10"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_5a35888c11f6"
+    },
+    {
+      "name": "Cypherhelmet",
+      "category": "Misc",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Heavy Battle Helmet"
+        },
+        {
+          "quantity": 2,
+          "name": "Subliminal Targeting System v 0.2.5"
+        },
+        {
+          "quantity": 2,
+          "name": "Ancient Launcher Connectors"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_b9f921840ed8"
+    },
+    {
+      "name": "Cypherhelmet",
+      "category": "Misc",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1C0DA"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1C0DB"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1C0DC"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1C0DD"
+        },
+        {
+          "quantity": 1,
+          "name": "Computer Board Reg. #1C0DE"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_b9c7ab85899c"
+    },
+    {
+      "name": "Safety Cartridge",
+      "category": "Misc",
+      "ingredients": [
+        {
+          "quantity": 3,
+          "name": "Metalplate"
+        },
+        {
+          "quantity": 1,
+          "name": "Processor v. 1337"
+        },
+        {
+          "quantity": 1,
+          "name": "Circuit Board"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_46290290653d"
+    },
+    {
+      "name": "CopBot Communications System Mk V.IV.Iir",
+      "category": "Misc",
+      "ingredients": [
+        {
+          "quantity": 1,
+          "name": "CopBot Communications SysRecPlan"
+        },
+        {
+          "quantity": 1,
+          "name": "Tangent Weaponpart 6"
+        },
+        {
+          "quantity": 1,
+          "name": "Tangent Weaponpart 7"
+        },
+        {
+          "quantity": 1,
+          "name": "Utility Coordinator GPU v3"
+        },
+        {
+          "quantity": 1,
+          "name": "Tangent Armorpart 5"
+        },
+        {
+          "quantity": 1,
+          "name": "Tangent Armorpart 6"
+        }
+      ],
+      "tech_level": null,
+      "requirements": "",
+      "source_url": "https://neocron.fandom.com/wiki/Recycling_Recipes",
+      "verification": "Legacy community recipe; verify against the current game.",
+      "id": "legacy_75a293a38dd4"
+    }
+  ],
+  "additional_sources": [
+    "https://neocron.fandom.com/wiki/Recycling_Recipes",
+    "https://neocron-game.com/patch-notes"
+  ],
+  "notes": [
+    "Recipe facts only; Tech Haven Items DB is preferred when older community names overlap.",
+    "No claim of live verification or exhaustive coverage of event-only recipes."
+  ],
+  "known_incomplete": [
+    {
+      "name": "Swamp Shaman Trophy",
+      "category": "Trophy",
+      "source_url": "https://neocron-game.com/patch-notes",
+      "notes": "Official update notes say a mission reward can be recycled into this trophy; exact ingredient name and quantity were not published in the source."
+    }
+  ]
+}
