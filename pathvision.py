@@ -36,6 +36,7 @@ def dash_candidates(frame, ignore=()):
     height, width = frame.shape[:2]
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     mask = ((hue >= 55) & (hue <= 85) & (sat >= 55) & (val >= 95)).astype(np.uint8)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
@@ -50,11 +51,34 @@ def dash_candidates(frame, ignore=()):
             continue                                   # the reticle
         if any(x0 <= cx <= x1 and y0 <= cy <= y1 for x0, y0, x1, y1 in ignore):
             continue
+        direction = _orientation(labels, i, x, y, w, h, unit)
+        # A clear dash shape passes whatever the floor looks like (green-lit floors give little contrast);
+        # anything else must stand out, which a flat green glow on a wall does not.
+        if direction != direction and _contrast(gray, labels, i, x, y, w, h, unit) < MIN_CONTRAST:
+            continue
         long_side, short_side = max(w, h), max(1, min(w, h))
         if long_side > 10*unit and long_side/short_side < 1.5 and area/(w*h) > .5:
             continue                                   # a filled blob, not a dash
-        found.append((float(cx), float(cy), int(area), _orientation(labels, i, x, y, w, h, unit)))
+        found.append((float(cx), float(cy), int(area), direction))
     return found
+
+
+MIN_CONTRAST = 14    # a dash is this much brighter (grey levels) than the floor around it
+
+
+def _contrast(gray, labels, index, x, y, w, h, unit):
+    """How much brighter a mark is than the ring of picture just outside it. Dashes are bright overlays
+    on a dark floor; the teal wall surfaces of the scene are almost as bright as their surroundings."""
+    pad = max(4, round(6*unit))
+    top, left = max(0, y - pad), max(0, x - pad)
+    bottom, right = min(gray.shape[0], y + h + pad), min(gray.shape[1], x + w + pad)
+    inside = labels[top:bottom, left:right] == index
+    grown = cv2.dilate(inside.astype(np.uint8), np.ones((2*pad + 1, 2*pad + 1), np.uint8)) > 0
+    ring = grown & ~cv2.dilate(inside.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
+    crop = gray[top:bottom, left:right]
+    if not ring.any():
+        return 255.0
+    return float(crop[inside].mean() - crop[ring].mean())
 
 
 def _orientation(labels, index, x, y, w, h, unit):
@@ -81,6 +105,10 @@ def _plausible(points, areas, angles, height):
     if ys.max() - ys.min() < .08*height:
         return False
     measured = ~np.isnan(angles)
+    # Dashes are spaced out. Text (lettering on a sign) puts many marks a few pixels apart.
+    spacing = np.hypot(*np.diff(points[np.argsort(-ys)], axis=0).T)
+    if len(spacing) >= 3 and float((spacing < 12*height/1440).mean()) > .30:
+        return False
     if len(points) == 3:
         # The thin evidence of a three-mark chain must be clean: marks well apart, and the nearer
         # (lower) big dash larger than the farther one.

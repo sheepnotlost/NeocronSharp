@@ -27,7 +27,7 @@ class PathVisionTests(unittest.TestCase):
     def test_hall_frame_with_green_signs_still_aims_at_the_dashes(self):
         view = pathvision.find_path(load("navray_path_hall_2000.png"))
         self.assertIsNotNone(view)
-        self.assertTrue(880 <= view.aim[0] <= 960, view.aim)   # dashes run down x ~ 900-940
+        self.assertTrue(820 <= view.aim[0] <= 960, view.aim)   # nearest mark ahead; the dashes run down x ~ 850-940
         self.assertLess(abs(view.error), .1)
 
     def test_a_frame_without_a_path_returns_none(self):
@@ -82,6 +82,10 @@ class PathVisionTests(unittest.TestCase):
         view = pathvision.find_path(load("navray_straight_ahead_2000.png"))
         ahead = [p for p in view.points if p[1] <= pathvision.REACH_Y*1125]
         self.assertEqual(view.aim, ahead[0])                           # nearest first, then the next one as it is reached
+
+    def test_teal_lit_walls_and_a_text_panel_are_not_a_path(self):
+        # Live frame where a walk reported 20-30 "dashes" with none on screen: green-lit walls and a lettered panel.
+        self.assertIsNone(pathvision.find_path(load("navray_teal_walls_no_path_2560.png")))
 
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")

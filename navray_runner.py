@@ -15,7 +15,8 @@ from vision_runner import VisualRunner
 
 GAIN = .16               # mouse counts per pixel of steering error at 2560 wide
 MAX_STEP = 45            # largest single mouse move (before the turn is calibrated)
-CAL_COUNTS = 120         # mouse counts used to measure how far the view slides per count
+CAL_COUNTS = 150         # mouse counts used to measure how far the view slides per count
+SCENE_BOX = (.22, .10, .82, .52)   # the part of the screen that is only scene: no HUD, not the character
 CAL_DAMP = .6            # share of the measured correction applied per look (the rest avoids overshoot)
 CAL_MAX_PX = 260         # largest turn per look, in screen pixels
 LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
@@ -295,18 +296,23 @@ class NavRayRunner(VisualRunner):
         This makes the steering independent of mouse sensitivity and of an inverted mouse. None if the
         picture does not give a clear reading, in which case the default gain is used."""
         def grab():
+            # Only the scene counts: the HUD never moves and would hold the measurement at zero.
             frame = self.frame()
-            return cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (640, 360), interpolation=cv2.INTER_AREA), frame.shape[1]
-        first, width = grab()
+            height, width = frame.shape[:2]
+            left, top, right, bottom = SCENE_BOX
+            scene = cv2.cvtColor(frame[int(top*height):int(bottom*height), int(left*width):int(right*width)], cv2.COLOR_RGB2GRAY)
+            return cv2.resize(scene, (480, 240), interpolation=cv2.INTER_AREA), scene.shape[1]
+        first, scene_width = grab()
         self.backend.move_relative(CAL_COUNTS, 0)
         self.wait(.3)
         second, _ = grab()
         self.backend.move_relative(-CAL_COUNTS, 0)             # put the view back
         self.wait(.25)
         dx, response = slide_pixels(first, second)
-        if response < .1 or abs(dx) < 1.5:
+        if response < .1 or abs(dx) < 1.0:
+            self.emit("status", f"Nav-Ray: calibration reading was weak (shift {dx:+.1f}, certainty {response:.2f}).")
             return None
-        return dx*(width/640)/CAL_COUNTS
+        return dx*(scene_width/480)/CAL_COUNTS
 
     def counts(self, error, width):
         """Mouse counts to correct a steering error (fraction of the width)."""

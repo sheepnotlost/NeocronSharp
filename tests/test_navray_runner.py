@@ -145,7 +145,15 @@ def turning_runner(sign, pixels_per_count=2.0):
     """A runner whose picture slides with the mouse: sign +1 = turning right slides the scene left (normal),
     -1 = an inverted mouse."""
     holder = {}
-    runner, events = make_runner(lambda i: np.roll(STAIRS, -sign*round(holder["b"].yaw*pixels_per_count), axis=1))
+    def frames(i):
+        # Only the scene slides when the mouse turns; the HUD stays put, as in the game.
+        frame = STAIRS.copy()
+        height, width = frame.shape[:2]
+        left, top, right, bottom = navray_runner.SCENE_BOX
+        part = frame[int(top*height):int(bottom*height), int(left*width):int(right*width)]
+        frame[int(top*height):int(bottom*height), int(left*width):int(right*width)] = np.roll(part, -sign*round(holder["b"].yaw*pixels_per_count), axis=1)
+        return frame
+    runner, events = make_runner(frames)
     backend = holder["b"] = runner.backend
     backend.yaw = 0
     original = backend.move_relative
