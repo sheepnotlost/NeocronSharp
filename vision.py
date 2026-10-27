@@ -584,23 +584,23 @@ class Detector:
             return None
         provisional=False
         if best[0]<.74:
-            # A visible non-blueprint panel is a decisive "other". Its black box is
-            # only recognized when sized near the reference font, so test several
-            # normalizations (live: the box passes at .786 and 1.0 but not at .80).
-            def panel_visible():
-                for size in dict.fromkeys([scale,1.0,best[4],round(scale*1.14,3)]):
-                    resized=cv2.resize(raw,None,fx=1/size,fy=1/size,interpolation=cv2.INTER_AREA)
-                    if self.item_tooltip_panel(resized):return True
-                return False
-            if not panel_visible():return None
+            nominal=best[1]
+            # Weak match: scan text scales finely (live: the right scale scores only ~.60).
             fine=[f for f in (prefix_at(round(float(t),3)) for t in np.arange(.6,1.5,.02)) if f]
             if fine:
                 top=max(fine,key=lambda f:f[0])
                 if top[0]>best[0]:best=top
-            provisional=best[0]>=.52
+            if best[0]>=.52:
+                # A visible panel is only recognized when sized near the reference font, so
+                # test several normalizations before trusting a weak prefix match.
+                for size in dict.fromkeys([scale,1.0,best[4],round(scale*1.14,3)]):
+                    if self.item_tooltip_panel(cv2.resize(raw,None,fx=1/size,fy=1/size,interpolation=cv2.INTER_AREA)):
+                        provisional=True;break
+            if not provisional:
+                # No blueprint line: a clean "other" for a real item panel, otherwise nothing.
+                # (Returning "other" for UI boxes broke the "tooltip has cleared" check.)
+                return "other" if self.item_tooltip_panel(nominal) else None
         score,patch,px,py,text_scale = best
-        if score<.74 and not provisional:
-            return "other"
         self.tooltip_text_scale=text_scale
         fallback=self.known_tooltip_recipe(patch,px,py,prefix.shape[0])
         # The tooltip's continuous bottom border supplies its actual width.

@@ -102,6 +102,21 @@ class WindowedQuantityDialogTests(unittest.TestCase):
         self.assertIsNone(detector.quantity(np.zeros_like(frame)))
 
 
+class TooltipClearedTests(unittest.TestCase):
+    def test_a_frame_whose_tooltip_is_gone_reads_as_nothing_not_as_another_item(self):
+        # After matching the blueprint the macro moves away and waits for its tooltip to
+        # clear. UI boxes in the patch must not read as an "other" tooltip, or that wait
+        # never ends ("Previous blueprint tooltip did not clear"). Replay, not live.
+        from recipes import catalog
+        for name,point,scale in (("windowed_1080_tooltip_wp9.png",[337,82],.788),("windowed_1080_live_hover_wp9.png",[338,81],.788)):
+            with self.subTest(name=name):
+                frame=cv2.cvtColor(cv2.imread(str(Path(__file__).parent/"fixtures"/name)),cv2.COLOR_BGR2RGB)
+                detector=Detector();detector.recipes=catalog({});detector.heading_ratio=1.135
+                self.assertEqual(detector.tooltip_recipe(frame,point,scale),"weaponpart_9")
+                erased=frame.copy();erased[95:125]=frame[130:160]
+                self.assertIsNone(detector.tooltip_recipe(erased,point,scale))
+
+
 class FullscreenIntermediateScaleTests(unittest.TestCase):
     def test_inventory_stays_put_on_hover_checks_at_a_non_reference_scale(self):
         # Fullscreen 2560x1440 with the UI scale at ~1.02 (between reference values),
