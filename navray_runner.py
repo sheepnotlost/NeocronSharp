@@ -22,6 +22,7 @@ END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or 
 STUCK_SECONDS = 3.0
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
+REPORT_EVERY = 2.0       # progress line in the log
 HEALTH_BOX = (.85, .84, .95, .875)      # "HLT 972 / 972" (fractions of the frame)
 PAGES = 30
 LIST_PAGES = 250
@@ -219,6 +220,7 @@ class NavRayRunner(VisualRunner):
             seen_path, last_path = False, started
             last_health_check, baseline = started, None
             previous_thumb, still_since = None, None
+            last_report, turned = started, 0
             while True:
                 self.checkpoint()
                 now = self.clock()
@@ -241,6 +243,11 @@ class NavRayRunner(VisualRunner):
                     step = steer_step(view.error)
                     if step:
                         self.backend.move_relative(step, 0)
+                        turned += step
+                    if now - last_report >= REPORT_EVERY:
+                        last_report = now
+                        self.emit("status", f"Nav-Ray: walking {now - started:.0f}s, aim {view.error:+.2f}, "
+                                  f"{len(view.points)} dashes, turned {turned:+d}.")
                     thumb = self.thumbnail(frame)
                     if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
                         still_since = still_since if still_since is not None else now
