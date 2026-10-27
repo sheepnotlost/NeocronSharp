@@ -5,6 +5,7 @@ within the countdown. Sends mouse clicks and wheel events to the game; no keyboa
     runtime/python.exe tools/scan_navray.py
 """
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -22,6 +23,11 @@ def main():
     for left in range(5, 0, -1):
         print(f"Focus Neocron... {left}", flush=True)
         time.sleep(1)
+    # Bring the game forward ourselves right before binding (another window may have taken the focus).
+    subprocess.run(["powershell", "-NoProfile", "-Command",
+                    "(New-Object -ComObject WScript.Shell).AppActivate('Neocron Evolution')"],
+                   capture_output=True, timeout=20)
+    time.sleep(1.0)
     title, size = backend.bind_foreground()
     if "neocron" not in title.lower():
         raise SystemExit(f"The foreground window is '{title}', not Neocron.")
