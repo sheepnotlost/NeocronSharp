@@ -208,6 +208,10 @@ class WindowsBackend:
         if not self.user.SetCursorPos(x + point[0], y + point[1]):
             raise RuntimeError("Windows rejected mouse movement.")
 
+    def move_relative(self, dx, dy):
+        """Raw mouse motion for mouse-look (the game holds the cursor, so absolute moves do not turn the camera)."""
+        self.send(self.Input(type=0, mi=self.MouseInput(dx=int(dx), dy=int(dy), dwFlags=0x0001)))
+
     def send(self, event):
         if self.user.SendInput(1, ctypes.byref(event), ctypes.sizeof(self.Input)) != 1:
             raise RuntimeError("Windows rejected input. Match the game's privilege level and check its input settings.")
@@ -223,7 +227,7 @@ class WindowsBackend:
             self.held_buttons.discard(button)
 
     def key(self, name, down):
-        scan = {"ctrl": 0x1D, "shift": 0x2A, "a": 0x1E, "1": 0x02, "2": 0x03, "3": 0x04, "4": 0x05,
+        scan = {"ctrl": 0x1D, "shift": 0x2A, "a": 0x1E, "w": 0x11, "tab": 0x0F, "1": 0x02, "2": 0x03, "3": 0x04, "4": 0x05,
                 "5": 0x06, "6": 0x07, "7": 0x08, "8": 0x09, "9": 0x0A, "0": 0x0B,
                 "backspace": 0x0E, "delete": 0x53}[name]
         flags = 0x0008 | (0 if down else 0x0002) | (0x0001 if name == "delete" else 0)
