@@ -153,7 +153,7 @@ class AppearanceUiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder,patch("app.stop_sound"):
             root=tk.Tk();root.withdraw();app=App(root,Path(folder)/"profile.json",NoInput())
             try:
-                self.assertEqual(len(SKINS),10);self.assertIn("basic",SKINS)
+                self.assertEqual(len(SKINS),15);self.assertIn("basic",SKINS)
                 app.tabs.select(app.construction_tab)
                 before=app.collect();before.pop("preferences")
                 for key,skin in SKINS.items():

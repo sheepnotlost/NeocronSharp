@@ -12,6 +12,11 @@ TREATMENTS={
     "rain":{"caption":("Trebuchet MS",10,"bold"),"button":("Trebuchet MS",10),"padding":(10,6),"tabs":(14,5),"kind":"neon"},
     "psi":{"caption":("Georgia",10,"bold"),"button":("Segoe UI",10),"padding":(10,6),"tabs":(13,5),"kind":"geometric"},
     "dome":{"caption":("Consolas",10,"bold"),"button":("Consolas",10,"bold"),"padding":(8,5),"tabs":(10,4),"kind":"segmented"},
+    "lcd":{"caption":("Consolas",10,"bold"),"button":("Tahoma",9,"bold"),"padding":(9,5),"tabs":(11,4),"kind":"lcd"},
+    "spectrum":{"caption":("Tahoma",9,"bold"),"button":("Tahoma",9,"bold"),"padding":(9,5),"tabs":(11,4),"kind":"spectrum"},
+    "chrome":{"caption":("Tahoma",10,"bold"),"button":("Tahoma",10),"padding":(10,6),"tabs":(13,5),"kind":"bevel"},
+    "visualizer":{"caption":("Trebuchet MS",10,"bold"),"button":("Trebuchet MS",10),"padding":(10,6),"tabs":(13,5),"kind":"scope"},
+    "shade":{"caption":("Lucida Console",9,"bold"),"button":("Lucida Console",9),"padding":(8,4),"tabs":(10,3),"kind":"shade"},
 }
 
 
@@ -86,6 +91,37 @@ def surface(root,skin,kind,role,state="normal"):
         p.rect(2,2,w-3,h-3,dark);p.line(5,8,5,h-5,edge);p.line(7,8,7,h-5,edge)
         for x in (12,24,36):p.box(x,3,x+7,5,accent if x==12 else edge)
         p.line(12,h-5,w-7,h-5,edge);p.line(w-6,10,w-6,h-9,accent)
+    elif kind=="lcd":
+        # Dark inset readout with faint scanlines and a lit pixel strip.
+        p.rect(2,2,w-3,h-3,dark);p.rect(3,3,w-4,h-4,high)
+        for y in range(6,h-5,2):p.line(6,y,w-7,y,blend(face,"#000000",.18))
+        p.box(6,h-7,22,h-6,accent)
+    elif kind=="spectrum":
+        # Thin frame plus analyzer bars kept inside the bottom border strip, so
+        # nine-slice stretching never puts them behind text.
+        p.rect(2,2,w-3,h-3,dark)
+        for i,x in enumerate(range(6,w-8,4)):
+            height=(2,4,5,3,5,2,4,3)[i%8]
+            p.box(x,h-3-height,x+2,h-3,blend(accent,"#ff4a2a",(i%8)/9))
+    elif kind=="bevel":
+        # Raised chrome: bright top/left, dark bottom/right, double edge.
+        p.line(1,1,w-2,1,"#ffffff");p.line(1,1,1,h-2,"#ffffff")
+        p.line(w-2,1,w-2,h-2,dark);p.line(1,h-2,w-2,h-2,dark)
+        p.rect(3,3,w-4,h-4,blend(edge,"#ffffff",.45))
+        for y in range(5,h-5,4):p.line(5,y,w-6,y,blend(face,"#ffffff",.18))
+    elif kind=="scope":
+        # Glowing frame with an oscilloscope trace inside the top border strip.
+        p.rect(2,2,w-3,h-3,edge);p.rect(3,3,w-4,h-4,blend(bg,accent,.3))
+        previous=None
+        for x in range(6,w-6,3):
+            y=5+round(2*((x//3)%4-1.5)/1.5)
+            if previous:p.line(*previous,x,y,accent)
+            previous=(x,y)
+    elif kind=="shade":
+        # Compact title-bar look: striped strip along the top, slim body.
+        p.rect(2,2,w-3,h-3,dark)
+        for y in (4,6):p.line(6,y,w-18,y,edge)
+        p.box(w-14,3,w-7,7,accent)
     if state in ("selected","pressed"):
         p.line(12,h-3,w-13,h-3,accent)
     return p.image(root)
@@ -116,6 +152,23 @@ def badge(root,skin,kind):
     elif kind=="segmented":
         for x in (3,11,19):
             for y in (5,14):p.rect(x,y,x+5,y+5,accent if x==3 else edge)
+    elif kind=="lcd":
+        p.box(1,4,30,20,"#050805");p.rect(1,4,30,20,edge)
+        for x in (4,10,16,22):p.box(x,8,x+3,16,accent)
+    elif kind=="spectrum":
+        for i,height in enumerate((5,11,17,8,14,19)):p.box(2+i*5,22-height,4+i*5,22,blend(accent,"#ff4a2a",i/6))
+    elif kind=="bevel":
+        p.rect(2,3,28,21,edge);p.line(3,4,27,4,"#ffffff");p.line(3,4,3,20,"#ffffff")
+        for x in (8,14,20):p.line(x,7,x,18,accent);p.box(x-2,12-(x%3)*2,x+2,13-(x%3)*2,accent)
+    elif kind=="scope":
+        p.rect(1,2,30,22,edge);previous=None
+        for x in range(3,29,2):
+            y=12+round(6*((x//2)%4-1.5)/1.5)
+            if previous:p.line(*previous,x,y,accent)
+            previous=(x,y)
+    elif kind=="shade":
+        p.box(1,8,30,16,edge);p.box(24,9,29,15,accent)
+        for x in range(3,21,3):p.line(x,10,x,14,blend(edge,"#ffffff",.4))
     else:
         for a,b,c,d in ((2,8,8,2),(8,2,24,2),(24,2,29,7),(29,7,29,19),(29,19,24,23),(24,23,7,23),(7,23,2,18)):
             p.line(a,b,c,d,accent)

@@ -142,6 +142,50 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Exclude personal profiles, logs, diagnostics, recordings, runtime, portable ZIP and local shortcuts; check source files for common credential patterns.
 - [x] Document how to run a source checkout using the portable runtime. Repository publication is tracked by the main branch/remote commit, not the older portable ZIP.
 
+## Any resolution, windowed play — 27 Oct
+
+- [x] Diagnose the windowed 1920x1080 failure from diagnostics/latest.png: the UI rendered at layout ~.80 (Processor) / ~.78 (Inventory) with title fonts at ~.91, between the reference scales (.75/1.0). Every detector failed, then retried silently for ~45 s ("does nothing").
+- [x] Detect the Processor at any scale (.6x–2.2x) with a dense half-resolution title scan; resolve its layout scale separately from the Start button when title and layout differ.
+- [x] Detect the Inventory at any scale; fit its origin and scale from the 8x6 cell grid (titles/labels only propose). Hot-path re-checks of such windows use the grid.
+- [x] Scale-independent cube classification (gray used cube / red / green) when icon bitmaps do not match; tooltip text scale adapts when fonts are not proportional.
+- [x] Status line now says what is being searched for and the game-view size when the Processor is not found.
+- [x] 190 tests incl. the cropped windowed frame and intermediate scales .8–1.8 (replay, not live).
+- [x] Windowed test 27 Oct 03:47: Fast hovered the two cube cells but never read the Weaponpart 9 tooltip. Cause: tooltip text sits at layout scale (.80) where the shipped BLUEPRINT prefix correlates only .60 (< .74 gate), so it was rejected as an unrelated item. Fixed: fine text-scale scan when a tooltip panel is present, provisional accept (>= .52) only if the OCR line reads as BLUEPRINT; scale remembered. Regression test uses the user's real capture.
+- [x] Windowed retest 27 Oct 04:05: the macro hovered the right cube but read no tooltip. A hover-only live capture showed the tooltip on screen; cause: once Processor detection set the heading ratio, the text-scale search chose a finer scale whose black-box test fails, so the tooltip returned None. Panel presence is now tested at several normalizations; the real hover capture reads Weaponpart 9 and is a regression fixture.
+- [x] Windowed retest 04:17: found and dragged the stack, then stopped: the quantity dialog was on screen (already 1) but undetected. The dialog is its own window at its own scale (.77 vs Processor .80). Added a dense dialog search used when a dialog is expected; the scale is remembered. Regression test uses the real capture.
+- [ ] Not verified live at the windowed size: tooltip reading, quantity dialog and a full build. Scales below ~.7 and above ~2.1 are unreliable.
+
+## Release prep — 27 Oct
+
+- [x] Scrub personal Windows paths (user folder, recordings folder) from tracked docs; commit identity is the GitHub noreply address.
+- [x] Add five media-player inspired skins with original code-drawn art: Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode. 194 tests pass.
+- [x] Commit and push to GitHub on a branch.
+
+## More Materials in GoGo — 27 Oct
+
+- [x] Optional Construction checkbox (saved as construction.gogo_refill, default off). Built-in recipes only (material labels known: WP7 TRS/MET/ARI/SOL; WP9 GAM/MET/SOL/STS/TIB).
+- [x] Trigger: with the option on, a Start that never turns busy for 5 s while the blueprint stays loaded counts as refused (missing materials). The macro then refills and presses Start again, at most twice per build.
+- [x] GoGuardian is located from its "Take All / Sort / Stack" strip by local OCR at any scale; stacks are read by their 3-letter label. Up to 15 of each needed ingredient are dragged into Inventory (onto the same stack when present, else the first empty cell). The quantity dialog reopens at the last quantity entered (not the full stack), so 15 is always typed and read back before Ok; a smaller number shown means the game clamped it to a smaller stack.
+- [x] The GoGuardian window must be open beside Inventory and Processor. 202 tests incl. two real captures.
+- [ ] Not verified live: the GoGuardian drags, quantity entry above 1, and the refused-start trigger. Stack counts (xN) on the live capture could not be read by OCR.
+
+- [x] Fullscreen 2560x1440 at UI scale ~1.02 (27 Oct 05:49): the macro hovered the blueprint but never proceeded. The cheap Inventory re-check used template correlation that fails between reference scales, so every hover looked like a moved window and the page restarted. Grid-fitted windows now keep their grid-based re-check at any scale. Regression test uses the real capture.
+
+- [x] Removed the "Blueprints in stack" field. Build = 0 now runs until no blueprint can be found (the batch then ends as "Out of ... blueprints", not an error, once at least one build finished). Internally the stack is saved as 10000 = unknown; a lone-item stack that transfers without a dialog is accepted when the blueprint is visibly loaded.
+
+- [x] Interface trimmed (27 Oct): removed the "Prepare in Neocron" panel, the Research detection/sequence/start-and-stop explainer panels, recipe ingredient and catalog paragraphs, the recycling explainer and the source/retrieval boilerplate. Remaining static labels are one short line each; a test guards against wordy labels returning.
+
+## Recipe materials from the web — 27 Oct
+
+- [x] Per-recipe Materials row (Name=LABEL), saved in the profile, used by GoGuardian refills; Holy Heal added to the built-in table.
+- [x] `tools/fetch_recipes.py` written; item pages expose "Parts:"; tested on 12 items.
+- [x] Default labels guessed from catalog parts (`gogo.default_code`).
+- [x] Full fetch done: 478/1,263 items list Parts; WP7, WP9 and Holy Heal match the built-ins; tests updated; Catalog shows parts; Materials row prefills from them; data committed.
+- [ ] Not verified live: GoGuardian refills for any recipe beyond Weaponpart 9; Holy Heal labels W5/W4/W1 are inferred.
+
+- [x] GoGuardian labels no longer depend on the window's contents (27 Oct): when an expected label is not among the stacks read, the macro hovers the most likely stacks (labels that abbreviate the missing name), reads the tooltip name, and saves name->label in the profile and Materials row. Failure messages list the labels seen. 223 tests incl. synthetic tooltips.
+- [ ] Not verified live: the GoGuardian tooltip's real appearance (assumed a black, light-bordered panel containing the item name). If it differs, hovering finds no name and the run stops with the labels seen.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

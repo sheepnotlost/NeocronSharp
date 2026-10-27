@@ -137,7 +137,7 @@ class App:
         for text, cmd in (("Edit", self.edit_entry), ("Rename", self.rename_entry), ("Delete scan", self.delete_entry),
                           ("Add manual entry", self.add_manual)):
             ttk.Button(eb, text=text, command=cmd).pack(side="left", fill="x", expand=True, padx=2)
-        ttk.Label(bottom, text="Scans in this list (double-click to edit; drag the bar above to resize):").pack(anchor="w")
+        ttk.Label(bottom, text="Scans").pack(anchor="w")
         lst = ttk.Frame(bottom)
         lst.pack(fill="both", expand=True)
         self.entries_tree = ttk.Treeview(lst, columns=("label", "items", "slots", "time"), show="headings", height=4)

@@ -34,7 +34,17 @@ class CatalogDataTests(unittest.TestCase):
         self.assertTrue(all(r["source_url"].startswith("https://") for r in rows))
         self.assertEqual(next(r for r in rows if r["name"]=="Pain Easer")["method"],"rare_parts")
         self.assertEqual(next(r for r in rows if r["name"]=="Crahn Holy Heal")["method"],"verified_example")
-        self.assertIsNone(next(r for r in rows if r["name"]=="Crahn Blessed Heal")["ingredients"])
+        # Materials come only from the site's Parts lists (tools/fetch_recipes.py), never invented.
+        for row in rows:
+            if row.get("parts"):
+                self.assertEqual(row["ingredients"],[f"{p['quantity']} x {p['name']}" for p in row["parts"]])
+                self.assertTrue(row["item_url"].startswith("https://db.techhaven.org/"))
+            else:
+                self.assertIsNone(row["ingredients"])
+        self.assertGreater(sum(1 for r in rows if r.get("parts")),400)
+        heal=next(r for r in rows if r["name"]=="Crahn Holy Heal")
+        self.assertEqual([p["name"] for p in heal["parts"]],[f"Tangent Weaponpart {n}" for n in (1,4,5,6,7,9)])
+        self.assertFalse([r["name"] for r in rows if "!" in r["name"]])
         self.assertTrue(any(r["name"]=="Tangent Weaponpart 8" for r in filter_construction(rows,"wp8")))
 
     def test_old_profile_favorites_are_dropped_on_load(self):
@@ -82,6 +92,30 @@ class CatalogUiTests(unittest.TestCase):
             self.assertEqual(str(app.use_build_button.cget("state")),"disabled")
             with self.assertRaises(ValueError):app.store_build_recipe()
             self.assertNotIn("Pain Easer",[r["name"] for r in catalog(app.profile).values()])
+
+    def test_materials_row_saves_per_recipe_and_reloads(self):
+        with ui() as app:
+            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.construction_recipe.set("WP9");app.select_recipe()
+            self.assertIn("Gamonin=GAM",app.materials_text.get())     # built-in table shown
+            app.materials_text.set("Gamonin=GAM, Metal D=MET")
+            collected=app.collect()
+            self.assertEqual(collected["materials"]["weaponpart_9"],{"Gamonin":"GAM","Metal D":"MET"})
+            app.materials_text.set("nonsense")
+            with self.assertRaisesRegex(ValueError,"Materials"):app.collect()
+
+    def test_catalog_recipe_prefills_materials_from_its_site_parts(self):
+        with ui() as app:
+            app.construction_recipe.set("Crahn Fire Ball");app.save_custom_recipe();app.select_recipe()
+            self.assertEqual(app.materials_text.get(),
+                             "Tangent Weaponpart 1=W1, Tangent Weaponpart 4=W4, Tangent Weaponpart 6=W6")
+            app.construction_recipe.set("WP9");app.select_recipe()
+            self.assertIn("Strastin=STS",app.materials_text.get())     # built-in wins over guesses
+            # A new name typed over a recipe whose (hidden) aliases are still loaded must save.
+            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.construction_recipe.set("Crahn Frozen Ball")
+            self.assertEqual(app.collect()["operation"],"construction")
+            self.assertIsNotNone(find_recipe("Crahn Frozen Ball",catalog(app.profile)) or "saved on start")
 
     def test_no_favorites_tab_or_drag_options_and_drag_is_plain_left(self):
         with ui() as app:

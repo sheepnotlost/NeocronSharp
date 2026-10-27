@@ -1,0 +1,18 @@
+Neocron Macro Suite portable runtime
+
+Windows x64. Python 3.12.14, NumPy 2.3.5, opencv-python-headless 5.0.0.93, Tcl/Tk 8.6.
+
+Local OCR bindings: winrt-runtime 4.0.3; Windows.Media.Ocr, Graphics.Imaging,
+Storage.Streams, Globalization, Foundation and Foundation.Collections projections
+4!10.0.28000.2705. All Python packages/native bindings and their license metadata
+are included. Windows supplies its English OCR engine/language data.
+
+Python and all app libraries load from this folder. No pip or external Python is needed.
+Keep runtime next to app.py and assets; launch with Launch.cmd.
+Python license: runtime/LICENSE.txt. NumPy/OpenCV licenses: their Lib/site-packages distribution metadata.
+Tcl/Tk licenses are retained in the tcl tree.
+
+Tech Counter additions (27 October 2026): Pillow 13.0.0, pytesseract 0.3.13,
+mss 10.2.0 and packaging 26.3, with their distribution license metadata.
+Tesseract 5.4.0 executable, import DLLs and eng.traineddata are in tesseract/,
+copied from the standalone Tech Counter build. No external OCR install needed.

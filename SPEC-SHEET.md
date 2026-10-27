@@ -12,7 +12,7 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 
 - Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button.
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
-- Construction Job's Prepare in Neocron panel is terse bullets: Inventory + Processor visible; slot 1 construction tool; Inventory scrolled to top (search runs downward); stack size = actual count; ingredients stay in Inventory; empty cubes/previous result may stay; stop by switching away, no auto-resume.
+
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
 - Bind the exact foreground Neocron window/process/client size at countdown end.
 - Stop on focus loss, minimization, game closure/identity change, changed client dimensions, app closure, or an unverified action/state.
@@ -22,6 +22,13 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 - Paragraph grid spans must include an expanding column; ignore initial placeholder widths when calculating wrapping. Research sequence settings must remain readable at normal and maximized sizes.
 - A visible horizontal divider/handle drags up/down to resize the bottom Activity log. Keep Start, settings and tabs in the upper pane; the read-only log has a vertical scrollbar and a minimum usable height. Divider resizing is independent of game execution and available in all skins.
 - Counts/settings save on Start; added recipes and appearance/sound preferences can save immediately.
+
+## Scale handling
+
+- The UI scale is continuous (resolution x UI-scale setting; windowed clients any size). Windows may be laid out at different scales from each other and from their heading fonts. Processor and Inventory are found at any scale between .6x and 2.2x; the reference values (.75 to 2.0) are only tried first.
+- Processor: title text proposes a position and font scale; the Start control then fixes the layout scale. Inventory: the title/load labels propose, and the cell grid fits origin and layout scale (accepted only with strong grid contrast). Windows are located independently; one window's scale is never assumed for another.
+- Tooltip text scale is found per UI: remembered/likely scales first, then a fine scan when a tooltip panel is visible; a weak prefix match (>= .52) is accepted only if the OCR line reads as BLUEPRINT. Part numbers stay exact.
+- Tooltip text scale, the quantity title and cube classification adapt when fonts/icons do not match the shipped bitmaps; part numbers stay exact and unreadable states fail safe.
 
 ## Recognition and input invariants
 
@@ -124,6 +131,24 @@ Use blueprint recipe saves the selected name to the custom recipe book and opens
 - The shipped WP7/WP9 pixel templates may supply a name only after their final digit passes a separate digit-only match (≥ .80). If OCR clearly read a different number, neither source authorizes. A custom numbered name read exactly by OCR is not vetoed by a shipped template.
 - To enter quantity 1, click the field, send Ctrl+A, clear with six Backspace and six Delete presses, then type 1. Confirm only when the dialog reads exactly 1.
 
+### More Materials in GoGo (optional)
+
+- Off by default. When on, a Start that is not followed by visible progress within 5 s while the blueprint remains loaded is treated as refused for missing materials. The macro finds an open GoGuardian window (OCR of its Take All / Sort / Stack strip, any scale), reads each stack's three-letter label, and moves at most 15 of each ingredient the built-in recipe needs into Inventory, then presses Start again (at most twice per build). Label codes come from the recipe's **Materials** list (below).
+- Quantities: the dialog reopens at the last quantity entered, so the macro always types 15, reads the field back (a smaller shown number means the game clamped it to a smaller stack) and only then presses Ok. An unreadable field stops with the dialog left open.
+- Every ingredient must be found before anything moves: missing labels are searched cell by cell at a larger upscale (one misread character tolerated), and a refill that cannot find all of them stops with the missing names. An unreadable quantity field is accepted (the amount was typed); a readable wrong number is refused.
+- Stops with a clear message when the GoGuardian window is not found, an ingredient is missing, or Inventory has no free slot.
+
+#### Materials list (per recipe, offline)
+
+- One terse row on the Construction Job page: `Name=LABEL, Name=LABEL` (labels 2-4 letters/digits, up to 12 ingredients). Saved in the profile (`materials`, keyed by recipe id) when a batch starts; a saved list overrides the built-in table (Weaponpart 7/9; Holy Heal as Weaponparts 9,7,6,5,4,1 labelled W9...W1, only W6/W7/W9/W10 seen live).
+- With no saved list the row is prefilled from the catalog's Parts (below) with guessed labels: known ingredients first, finished Weaponparts as `W<n>`, otherwise the first three letters. Wrong guesses are corrected once in the row.
+
+#### Recipe parts from Tech Haven (data build step)
+
+- `tools/fetch_recipes.py` (bundled Python, developer tool; the app never goes online) downloads each catalog item's Tech Haven item page (server-rendered, "Parts: 1 x Name"), caches pages under `analysis/techhaven-cache`, and writes `parts` / `ingredients` / `item_url` into `data/construction_catalog.json`. It also strips the "!" status marker from item names (it broke name matching). Requests are spaced 0.6 s apart; interrupted runs resume from the cache.
+- Run of 27 Oct 2026: 478 of 1,263 items list Parts (the rest, such as ammo and armor, list none); the site's lists for Weaponpart 7, Weaponpart 9 and Holy Heal match the built-in tables exactly. Built-in tables are never overwritten by the site data.
+- The Catalog page shows an item's Parts; selecting a recipe prefills the Materials row from them.
+
 ### Transfer, Start and completion
 
 1. Reacquire source/Processor. Verify construction tool and free destination. Permit used empty cubes; reject other pending/unknown inputs.
@@ -174,7 +199,7 @@ Removed 26 Oct 2026 at the user's request (tab, buttons, favorites.py); an old p
 
 ## Appearance and sound
 
-Ten selectable native skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control.
+Fifteen selectable native skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control, plus five inspired by late-90s media-player skins (original palettes and code-drawn art, no third-party artwork): Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode. Decorations stay inside nine-slice border strips so they never sit behind text.
 
 Basic preserves the light appearance. Dead Sector Terminal remains unchanged as the user's favorite. The eight other skins now use distinct code-drawn, nine-slice native panel/button/field/tab artwork, caption typography and header badges: angular RPOS, brushed CronAMP metal, BioLab enamel, Fallen Circuit traces, riveted Tangent Forge, burgundy/magenta Pepper Park neon, geometric PSI and segmented Dome controls. They preserve job data/guards and the basic control arrangement. They are not Winamp .wsz importers or Windows title-bar replacements. Selection persists. Switching back to Basic or Dead Sector restores their original widget layouts and fonts.
 
@@ -199,6 +224,8 @@ profile.json version 1 remains backward compatible. Validate ranges/types and sa
 | construction | Recipe id, available, count, search_mode (fast/all_cells; missing=fast), count_slots, optional stop_at_slots |
 | custom_recipes | Stable ids, names, alias arrays |
 | hidden_recipes | Built-in recipe ids removed from Job; default empty; re-adding restores them |
+| materials | {recipe id: {ingredient: GoGuardian label}}; optional per-recipe override of the built-in table |
+| construction.gogo_refill | Optional More Materials in GoGo; default false |
 | favorites | Removed; an old key is dropped on load and not written back |
 | recycling.recipe | Catalog id or null until selected |
 | preferences | Skin id and stop_sound boolean |
@@ -227,7 +254,7 @@ Required automated checks:
 - Use the first matching stack; find moved corner/interior source cells; bound scrolling, bottom/no-response and hidden-scrollbar cases.
 - Count 0–5 slots, separate unread, stop at threshold before another transfer and retain output.
 - Validate all catalog rows/quantities, search/category filters, selection persistence, correct recycling tool/result, one Start and focus loss.
-- Select all ten skins without changing job data. Save/reload preferences. Test optional sound and exactly-once notifications without emitting test audio.
+- Select all fifteen skins without changing job data. Save/reload preferences. Test optional sound and exactly-once notifications without emitting test audio.
 - Exercise UI editing/collection/custom recipes and tab independence without hardware input.
 - Verify catalog statuses/source references, unsupported-method blocking, selected-name-only saving, exact/longer-name matching, no Favorites tab or drag selectors, old favorites keys dropped on load, and drags forced to plain left.
 - Verify complete row-major cell coverage before scrolling, short tooltip-delay retries, stale-name rejection, current-header relocation and persistent removal/restoration of Job recipes, including an empty book.

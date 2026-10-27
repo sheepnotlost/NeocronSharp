@@ -1,6 +1,6 @@
 # Neocron Macro Suite
 
-**Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 10 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
+**Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 15 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
 
 The complete current specification is [SPEC-SHEET.md](SPEC-SHEET.md). [TASKS.md](TASKS.md) tracks the requests from this chat. [FEATURE-IDEAS.md](FEATURE-IDEAS.md) separates delivered features from future ideas.
 
@@ -12,7 +12,7 @@ installed in your development environment. Pytest is not required by the app.
 
 ## Repository checkout
 
-The Git repository contains source, recognition artwork, recipe catalogs, styling and regression fixtures. The bundled runtime, portable ZIP, personal profile, logs, diagnostics and recordings are excluded. To run a checkout, copy the complete `runtime/` directory from the portable distribution beside `app.py`, then run **Launch.cmd**. The requirements file records the Python package versions; Windows supplies the local English OCR engine. Developer checks use `runtime/python.exe -m unittest discover -s tests -v`; `runtime/python.exe tools/build_portable.py` builds and extraction-checks a portable ZIP locally.
+The Git repository contains everything needed to run: source, the bundled `runtime/` (Python, libraries, Tesseract), recognition artwork, recipe catalogs, styling and regression fixtures. **Code > Download ZIP**, extract the whole folder, run **Launch.cmd**. The portable ZIP, personal profile, logs, diagnostics and recordings are excluded. The requirements file records the Python package versions; Windows supplies the local English OCR engine. Developer checks use `runtime/python.exe -m unittest discover -s tests -v`; `runtime/python.exe tools/build_portable.py` builds and extraction-checks a portable ZIP locally.
 
 ## Construction
 
@@ -21,8 +21,8 @@ Open **Construction → Catalog** to search **1,263 item entries** by name (incl
 The three supplied construction examples include known material names. Most catalog entries come from item listings that do not publish construction materials or prove blueprint availability; they are marked **Check blueprint**. You must own the matching in-game blueprint and supplies. Rare-part and recycling-only entries are reference-only and cannot be loaded into the blueprint workflow. This catalog is not a claim of 1,263 verified build recipes. Source snapshot: [Tech Haven Items DB](https://db.techhaven.org/en/), 26 October 2026; details are in data/README.md.
 
 1. Open **Construction** and choose a saved recipe or type the blueprint item's name. Add optional comma-separated aliases and click **Add / update recipe**. You can also type a new name and start; it saves automatically. **WP7**, **WP9**, and **HH** select built-ins; a name like **WP13** can be added without code changes. Use a full name when shorthand is ambiguous.
-2. Open Inventory and Processor in Neocron. Put the construction tool in the first Processor slot. Use one source stack of the selected blueprint and keep the required ingredients in Inventory. Leave unprocessed blueprints out of the Processor before starting; used empty datacubes from a completed build may remain. Scroll Inventory to the top: the search runs downward from the current position. The Job page's **Prepare in Neocron** panel lists these steps as short bullets.
-3. Enter the actual **Blueprints in stack** count and the number to **Build this batch**. Set Build to **0** to use all the specified available blueprints. The count is entered manually; no coordinate calibration is needed.
+2. Open Inventory and Processor in Neocron. Put the construction tool in the first Processor slot. Use one source stack of the selected blueprint and keep the required ingredients in Inventory. Leave unprocessed blueprints out of the Processor before starting; used empty datacubes from a completed build may remain. Scroll Inventory to the top: the search runs downward from the current position.
+3. Enter the number to **Build this batch**, or **0** to keep going until your blueprints run out. There is no stack size to enter.
 4. Click the shared **Start in 3 seconds** button and focus Neocron. Switching away stops the batch.
 
 **Inventory search defaults to Fast — datacube icons**, under Construction → Job → Transfer controls. A screenshot pass finds possible datacubes using color/body and edge-shape proposals. The macro hovers those candidates only, verifies their BLUEPRINT names, and scrolls onward when no match is found. It avoids hovering every ingredient and empty square. The 21:55 recording's views produce two candidates each, rather than 48 hover targets. This count is recorded-image analysis, not a measured live speedup.
@@ -85,6 +85,10 @@ uses its existing Tesseract recognition; crafting retains Windows OCR. Both run
 locally. See [integration specification](TECH-COUNTER-INTEGRATION.md) and
 [counter notices](ntc/NOTICE.md).
 
+## More Materials in GoGo
+
+Tick **More Materials in GoGo** on the Construction Job page and keep a GoGuardian window open next to Inventory and Processor. If a build is refused because materials ran out, the macro moves up to 15 of each needed ingredient from GoGuardian into Inventory, then presses Start again. It works for the built-in Weaponpart 7 and 9 recipes. GoGuardian transfers have not been tested live yet; send macro.log and diagnostics/latest.png if it stops.
+
 ## Slot counter and chosen-slot stop
 
 Enable **Count slots on constructed weapons / spells** to track 0–5 slot totals for the current batch. Unread values are separate from zero; weapon parts are N/A. The option adds a result-tooltip inspection after completion.
@@ -125,6 +129,8 @@ All third-party Python libraries, including the new WinRT bindings, are inside r
 4. Click **Start in 3 seconds**, then switch to Neocron before the countdown finishes. The game is bound automatically each time you start.
 
 The app starts idle. Tech-part mode requires a positive count for at least one stack. Settings are saved automatically on Start. The Start button is disabled during the countdown and batch. Close the app to cancel the countdown.
+
+The suite finds Processor and Inventory at any game resolution, fullscreen or windowed, at any UI scale (about .6x to 2.2x of the reference). If the Processor is not found the status line says so. If a size misbehaves, send diagnostics/latest.png and macro.log.
 
 The current target setup supplied by the user is **2560 x 1440, borderless fullscreen, UI scale 1.7**. The artwork comes from the user's green-UI recording. Detection searches the full client area at multiple rendered scales; positions are never scaled from old fixed screen coordinates.
 
@@ -184,7 +190,7 @@ For another computer, extract **Neocron Macro Suite Portable.zip**, keep its com
 
 `--check` validates the saved counts/settings without game input. `--smoke-ui` creates and closes the panel without sending input. Tests include actual recording crops, random Processor positions on 2560 x 1440 frames, rendered scale variants, a synthetic L stack, and simulated relocation between every run.
 
-The detector supports the demonstrated green game HUD. Different **in-game** HUD artwork may require updated templates. The suite's own 10 skins do not alter game detection. A resolution change during a batch stops it; start again at the new size.
+The detector supports the demonstrated green game HUD. Different **in-game** HUD artwork may require updated templates. The suite's own 15 skins do not alter game detection. A resolution change during a batch stops it; start again at the new size.
 
 The user has confirmed successful live tech-part operation. Blueprint mode was checked against all 37 one-second observations in the supplied Weaponpart 9 recording, with translated/scaled ready/busy/completed fixtures and simulated moving-window batches. It has not been tested live by the assistant. Automated tests cover visual recognition, varied research durations, interruption, and focus loss.
 

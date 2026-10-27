@@ -2,7 +2,9 @@
 
 from macro_core import Interrupted
 from recipes import RECIPES, catalog
-from vision import Ambiguous, NotFound
+import re
+import gogo
+from vision import Ambiguous, NotFound, cv2
 from vision_runner import VisualRunner
 from inventory_tracking import snapshot,checked_overlap
 
@@ -251,17 +253,17 @@ class ConstructionRunner(VisualRunner):
         dialog=None
         while elapsed<self.settings["dialog_timeout"]:
             frame=self.frame()
-            dialog=self.detector.quantity(frame,checkpoint=self.guard)
+            dialog=self.detector.quantity(frame,checkpoint=self.guard,**({"expected":True} if hasattr(self.detector,"quantity_dense") else {}))
             if dialog is not None:
                 break
-            if available==1:
+            if available in (1,None):
                 processor=self.detector.processor(frame,checkpoint=self.guard)
                 if self.detector.has_loaded_blueprint(frame,processor):
                     return
             self.wait(.1)
             elapsed+=.1
         if dialog is None:
-            if available>1:
+            if available is not None and available>1:
                 raise Interrupted("Expected blueprint quantity dialog was not detected. No construction was started.")
             return
         if not dialog.get("one"):
@@ -278,11 +280,127 @@ class ConstructionRunner(VisualRunner):
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Blueprint quantity dialog did not close. No construction was started.")
 
+    def gogo_enabled(self):
+        return bool(self.profile["construction"].get("gogo_refill"))
+
+    def inventory_destination(self, frame, inventory, code):
+        """Point to drop an ingredient: its existing stack (merges) or the first empty cell."""
+        gray=self.detector.gray(frame)
+        left,top=inventory.point(39,63);right,bottom=inventory.point(39+8*44.6,63+6*45.5)
+        words=self.detector.text_reader().read_words(gray[top:bottom,left:right])
+        occupied=set()
+        for text,x,y,w,h in words:
+            col=int(x//(44.6*inventory.scale));row=int(y//(45.5*inventory.scale))
+            if 0<=col<8 and 0<=row<6:
+                occupied.add((row,col))
+                if re.fullmatch(r"[A-Za-z]{3}",text.strip()) and text.strip().upper()==code:
+                    return inventory.point(39+col*44.6+22.3,63+row*45.5+22.75)
+        snapshot=self.detector.inventory_occupancy(frame,inventory) if hasattr(self.detector,"inventory_occupancy") else None
+        for row in range(6):
+            for col in range(8):
+                busy=(row,col) in occupied or (snapshot is not None and snapshot[(row,col)])
+                if not busy:return inventory.point(39+col*44.6+22.3,63+row*45.5+22.75)
+        return None
+
+    def enter_quantity(self, amount):
+        """Open dialog from a GoGuardian drag: type the amount, confirm by reading it, press Ok."""
+        elapsed=0.
+        dialog=None
+        while elapsed<self.settings["dialog_timeout"]:
+            dialog=self.detector.quantity(self.frame(),checkpoint=self.guard,expected=True)
+            if dialog is not None:break
+            self.wait(.1);elapsed+=.1
+        if dialog is None:
+            raise Interrupted("Expected quantity dialog was not detected after the GoGuardian drag. Nothing was confirmed.")
+        def field_number(frame,dialog):
+            scale=dialog.get("scale") or 1.
+            x,y=dialog["field"];r=max(8,round(9*scale));wide=round(22*scale)
+            crop=self.detector.gray(frame[y-r:y+r,x-wide:x+wide])
+            digits=re.sub(r"\D","",self.detector.read_text(cv2.resize(crop,None,fx=4,fy=4,interpolation=cv2.INTER_CUBIC)))
+            return int(digits) if digits else (1 if dialog.get("one") else None)
+        # The dialog opens at the last quantity entered (live: 1 left over from the blueprint
+        # drag), not at the full stack. Always type the wanted amount and read it back; a
+        # smaller shown number means the game clamped it to a smaller stack.
+        if field_number(self.frame(),dialog)!=amount:
+            for attempt in range(2):
+                self.click(dialog["field"]);self.type_number(amount)
+                self.move((24,80));self.wait(self.settings["settle_seconds"])
+                frame=self.frame()
+                dialog=self.detector.quantity(frame,checkpoint=self.guard)
+                if dialog is None:raise Interrupted("Quantity dialog disappeared before confirmation.")
+                shown=field_number(frame,dialog)
+                # Small digits sometimes cannot be read at all; the typed amount was sent, and a
+                # wrong amount here only changes how much moves into Inventory. A readable but
+                # different number is still refused.
+                if shown is not None and shown>amount:
+                    raise Interrupted(f"Could not verify quantity {amount}. The dialog was left open; nothing was confirmed.")
+                if shown is None or shown>1 or amount==1:break
+        self.click(dialog["ok"]);self.move((24,80));self.wait(self.settings["settle_seconds"])
+        if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
+            raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
+
+    def learn_gogo_labels(self,reader,window,cells,missing):
+        """{ingredient: label} found by hovering GoGuardian stacks and reading the tooltip name."""
+        learned={};todo=list(missing)
+        for _,info in gogo.hover_order(cells,todo)[:gogo.MAX_HOVERS]:
+            if not todo:break
+            # The game hides a tooltip when the cursor leaves, so a stale one is never read.
+            self.move((24,80));self.wait(.1)
+            self.move(info["point"])
+            last=None
+            for attempt in range(4):
+                self.wait(.3 if attempt==0 else .2)
+                texts=gogo.tooltip_texts(reader,self.detector.gray(self.frame()),info["point"],window.scale)
+                name=gogo.match_name(texts,todo)
+                if name:
+                    learned[name]=info["code"];todo.remove(name)
+                    self.emit("status",f"GoGuardian: {name} is labelled {info['code']}.")
+                    break
+                if texts and texts==last:break
+                last=texts
+        self.move((24,80))
+        return learned
+
+    def refill_from_gogo(self):
+        """Pull at most BATCH of each needed ingredient from an open GoGuardian into Inventory."""
+        self.emit("status",f"{self.name}: materials ran out; refilling from GoGuardian.")
+        frame=self.frame();gray=self.detector.gray(frame)
+        reader=self.detector.text_reader()
+        window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
+        if window is None:
+            raise Interrupted("GoGuardian window not found. Open it with its Take All / Sort / Stack buttons visible, or turn off More Materials in GoGo.")
+        codes=gogo.ingredients_for(self.recipe,self.profile)
+        wanted=set((codes or {}).values())
+        cells=gogo.read_cells(reader,gray,window,wanted)
+        if codes:
+            # A label may be a wrong guess. Learn it from the stacks' own tooltips instead of
+            # relying on what the window happens to hold.
+            seen={info["code"] for info in cells.values()}
+            missing=[name for name,code in codes.items() if code not in seen]
+            if missing and cells:
+                learned=self.learn_gogo_labels(reader,window,cells,missing)
+                if learned:
+                    codes={**codes,**learned}
+                    self.profile.setdefault("materials",{})[self.recipe]=dict(codes)
+                    self.emit("materials",{"recipe":self.recipe,"codes":dict(codes)})
+        try:plan=gogo.plan_refill(self.recipe,cells,codes)
+        except LookupError as exc:raise Interrupted(str(exc)) from None
+        inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        for name,code,point,amount in plan:
+            destination=self.inventory_destination(self.frame(),inventory,code)
+            if destination is None:
+                raise Interrupted("No free Inventory slot for the GoGuardian materials. Make room and restart.")
+            self.emit("status",f"GoGuardian: moving {amount} {name} to Inventory.")
+            self.drag(point,destination);self.move((24,80))
+            self.enter_quantity(amount)
+        return len(plan)
+
     def await_construction(self):
         self.output_details=None
         seen_busy=False
         idle=0
         polls=0
+        started=self.clock()
         while True:
             frame,processor=self.processor_state()
             polls+=1
@@ -294,6 +412,10 @@ class ConstructionRunner(VisualRunner):
             if polls%4==1 or (seen_busy and not state["busy"] and idle>=2):
                 if self.detector.quantity(frame,checkpoint=self.guard) is not None:
                     raise Interrupted("Unexpected quantity dialog during construction.")
+            if (self.gogo_enabled() and not seen_busy and not state["busy"]
+                    and self.clock()-started>=self.settings.get("refused_start_seconds",5.0)
+                    and self.detector.has_loaded_blueprint(frame,processor)):
+                return "refused"
             if state["busy"]:
                 seen_busy=True
                 idle=0
@@ -341,12 +463,19 @@ class ConstructionRunner(VisualRunner):
         if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
             raise Interrupted("Processor is already working. Finish the current job before starting construction.")
         self.detector.construction_input(frame,processor)
+        stack_unknown=config["available"]>=10000
         for _ in range(target):
-            source,destination=self.locate_blueprint()
+            try:source,destination=self.locate_blueprint()
+            except Interrupted as exc:
+                # With no stack size entered, running out of blueprints is how a batch ends.
+                if stack_unknown and self.completed>0 and str(exc).startswith("No verified"):
+                    self.emit("done",f"Out of {self.name} blueprints after {self.completed} builds. Final result remains in the Processor.")
+                    return
+                raise
             self.emit("status", f"{self.name}: transferring one blueprint; ingredients stay untouched.")
             self.drag(source,destination)
             self.move((24,80))
-            self.confirm_one(config["available"])
+            self.confirm_one(None if stack_unknown else config["available"])
             frame,processor=self.processor_state()
             if self.detector.quantity(frame,checkpoint=self.guard) is not None:
                 raise Interrupted("Quantity dialog is still open. No construction was started.")
@@ -355,7 +484,15 @@ class ConstructionRunner(VisualRunner):
             self.click(processor.start_point())
             self.move((24,80))
             self.emit("status", f"{self.name}: building; following Processor progress.")
-            self.await_construction()
+            refills=0
+            while self.await_construction()=="refused":
+                refills+=1
+                if refills>2:
+                    raise Interrupted("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
+                self.refill_from_gogo()
+                frame,processor=self.processor_state()
+                self.click(processor.start_point());self.move((24,80))
+                self.emit("status", f"{self.name}: building; following Processor progress.")
             self.completed+=1
             config["available"]-=1
             event={"completed":self.completed,"available":config["available"],

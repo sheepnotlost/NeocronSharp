@@ -10,7 +10,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "Neocron Macro Suite Portable.zip"
 FILES = ("app.py", "tech_counter.py", "TECH-COUNTER-INTEGRATION.md", "macro_core.py", "windows_backend.py", "vision.py", "vision_runner.py",
-         "recipes.py", "construction_catalog.py", "inventory_tracking.py", "construction_runner.py", "recycling.py", "appearance.py", "skin_chrome.py", "text_reader.py", "verify_dependencies.py", "Launch.cmd", "Launch.ps1", "Install-Dependencies.cmd",
+         "recipes.py", "gogo.py", "construction_catalog.py", "inventory_tracking.py", "construction_runner.py", "recycling.py", "appearance.py", "skin_chrome.py", "text_reader.py", "verify_dependencies.py", "Launch.cmd", "Launch.ps1", "Install-Dependencies.cmd",
          "Check-Dependencies.cmd", "requirements.txt", "README.md", "profile.json", "SPEC-SHEET.md", "SPEC.md", "TASKS.md", "FEATURE-IDEAS.md", "CLAUDE-HANDOFF.md", "CLAUDE-PROMPT.txt")
 
 

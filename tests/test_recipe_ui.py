@@ -51,13 +51,12 @@ class RecipeUiTests(unittest.TestCase):
             try:
                 app.tabs.select(app.construction_tab)
                 app.construction_recipe.set("Custom Test Blaster 13")
-                app.recipe_aliases.set("ctb13, blaster13")
-                app.save_custom_recipe()
+                app.save_custom_recipe()   # aliases are no longer entered; a new name starts with none
                 loaded=load_profile(path)
-                key=find_recipe("ctb13",catalog(loaded))
+                key=find_recipe("Custom Test Blaster 13",catalog(loaded))
                 self.assertIsNotNone(key)
                 self.assertIn("Custom Test Blaster 13",app.construction_choice.cget("values"))
-                app.construction_recipe.set("ctb13")
+                app.construction_recipe.set("custom test blaster 13")
                 app.count_slots.set(True)
                 profile=app.collect()
                 self.assertEqual(profile["construction"]["recipe"],key)

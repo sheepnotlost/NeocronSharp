@@ -62,18 +62,26 @@ Processor preflight now rejects busy jobs, pending quantity dialogs and unproces
 - Match numbers exactly (WP7 versus WP9). A visual cube proposal never authorizes a transfer; name verification and re-hover confirmation remain required.
 - Custom recipes by exact/full name, shorthand and aliases; save without code changes. Job removal deletes custom entries or hides built-ins, persists, and supports re-adding/empty books.
 - Optional 0–5 slot counter, unread distinct from zero, parts N/A; optional stop at N or more slots leaves the qualifying output in Processor before another transfer.
-- Ten native skins including Basic. **Dead Sector Terminal** (key amber) is the user's favorite; preserve it. Pepper Park was changed from blue to burgundy/magenta. Other skins have distinct native frames/fonts/artwork.
+- Fifteen native skins including Basic (five added 27 Oct, media-player inspired: Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode). **Dead Sector Terminal** (key amber) is the user's favorite; preserve it. Pepper Park was changed from blue to burgundy/magenta. Other skins have distinct native frames/fonts/artwork.
 - Optional stop sound, off by default, once per batch termination/closure rather than every item.
 
 ## Other delivered features and scope limits
 
-- Research, Construction and Recycling tabs. Construction has Job/Catalog pages; Job's Prepare in Neocron panel is minimal bullets (Inventory scrolled to top; search runs downward).
+- Research, Construction, Recycling and Tech Counter tabs; Construction has Job/Catalog pages. The UI is deliberately terse (no setup/explainer panels).
 - Broad searchable construction catalog: 1,263 **item entries**, 38 categories. Only WP7/WP9/Holy Heal have supplied material examples; most entries say Check blueprint. Rare-part/recycling-only rows are reference-only. Do not market all rows as verified construction recipes or invent materials/quantities.
 - Only saved/chosen construction names enter active matching, not all 1,263 browse entries.
 - Favorites and the Drag button / Drag modifier selectors were removed 26 Oct 2026 at the user's request. Old profile "favorites" keys are dropped on load; drags are always plain left drags. Start is disabled only on the construction Catalog page (plus countdown/execution).
 - Recycling: 201 sourced entries (161 primary + 40 supplemental legacy variants), with provenance/status. Executor performs one manually prepared run, verifying Recycling Tool/output. Automatic ingredient loading/repeating, cloning and salvage are not implemented.
 - Detection-preview image in styling/ is a labeled concept, **not a working overlay**. Skin gallery is a separate concept layout using native artwork.
 - Non-tradeskill ideas (rare tracker, cabinet index, builds, maps, missions, loadouts, trade/clan/session tools) are proposals in FEATURE-IDEAS.md, not authorized implementation work yet.
+
+## Resolution handling (27 Oct)
+
+Windowed 1920x1080 failed because UI layout scale (.80/.78) and title font scale (.91) fell between the reference scales and differ from each other. vision.py now has dense scale search, split title/layout anchors (Anchor.heading), grid-fitted Inventory, colour cube classification and adaptive tooltip text scale. Verified on a real frame crop and resized fixtures only; tooltip/dialog/build at the windowed size are not live-verified. Scales below ~.7 or above ~2.1 are unreliable.
+
+## GoGuardian refills (27 Oct)
+
+gogo.py + construction_runner.refill_from_gogo/enter_quantity/inventory_destination. Opt-in setting construction.gogo_refill. Offline-verified on real captures (window, labels); live GoGuardian drags and quantity entry above 1 are unverified.
 
 ## Code map
 
@@ -85,7 +93,7 @@ Processor preflight now rejects busy jobs, pending quantity dialogs and unproces
 - inventory_tracking.py: normalized opaque item/text features; unique downward row-shift detection and checked overlap reuse. Changed/unread/ambiguous content remains eligible. No persisted absolute source coordinate cache.
 - vision_runner.py: research workflows. recycling.py: catalog/prepared recycling. recipes.py: built-ins/custom names/removal.
 - text_reader.py: local Windows English OCR via bundled PyWinRT. Windows supplies its OCR engine/language data; screenshots are not uploaded.
-- appearance.py / skin_chrome.py: ten skins and sound. data/: offline sourced catalogs. assets/: recognition/icon/audio assets.
+- appearance.py / skin_chrome.py: fifteen skins and sound. data/: offline sourced catalogs. assets/: recognition/icon/audio assets.
 
 ## Verification and packaging
 
