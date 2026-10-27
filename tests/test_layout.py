@@ -46,6 +46,17 @@ class LayoutTests(unittest.TestCase):
             if isinstance(widget, ttk.Label) and not str(widget.cget("textvariable")):
                 self.assertLessEqual(len(widget.cget("text")), 60, widget.cget("text"))
 
+    def test_forms_fill_the_tab_width_with_no_dead_column_in_every_skin(self):
+        app = self.app
+        self.root.geometry("1040x840+0+0")
+        for skin in ("basic", "amber", "lcd"):
+            apply_skin(self.root, skin, app.heading)
+            for tab, frame in ((app.research_tab, app.stacks_frame), (app.construction_job, app.construction_choice.master)):
+                with self.subTest(skin=skin, tab=str(tab)):
+                    (app.tabs.select(tab) if tab is app.research_tab else (app.tabs.select(app.construction_tab), app.construction_pages.select(tab)))
+                    self.root.update_idletasks()
+                    self.assertGreater(frame.winfo_width(), tab.winfo_width() * .8)
+
     def test_divider_changes_log_height_while_start_and_tabs_remain_available(self):
         app = self.app
         split = app.main_split
