@@ -200,7 +200,9 @@ def plan_refill(recipe_key, cells, codes=None):
     plan = []
     absent = [name for name, code in codes.items() if code not in by_code]
     if absent:
-        raise LookupError("GoGuardian: could not find " + ", ".join(absent) + ". Nothing was moved.")
+        seen = ", ".join(sorted(by_code)) or "none"
+        raise LookupError("GoGuardian: could not find " + ", ".join(f"{name} ({codes[name]})" for name in absent)
+                          + f". Labels seen: {seen}. Nothing was moved.")
     for name, code in codes.items():
         info = by_code[code]
         # Stack counts are often too small for the OCR to read. The quantity dialog

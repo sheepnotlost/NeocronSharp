@@ -52,6 +52,10 @@ class GoGoReadingTests(unittest.TestCase):
         partial={(0,0):{"code":"GAM","count":None,"point":(1,1)},(1,0):{"code":"MET","count":None,"point":(2,1)}}
         with self.assertRaisesRegex(LookupError,"Solantium"):gogo.plan_refill("weaponpart_9", partial)
 
+    def test_missing_label_message_lists_the_labels_that_were_seen(self):
+        cells={(0,0):{"code":"GAM","count":None,"point":(1,1)},(1,0):{"code":"W4","count":None,"point":(2,1)}}
+        with self.assertRaisesRegex(LookupError,r"Metal D \(MET\).*Labels seen: GAM, W4"):gogo.plan_refill("weaponpart_9", cells)
+
     def test_a_frame_without_the_button_strip_is_not_a_gogo(self):
         self.assertIsNone(gogo.find_gogo(self.reader, np.zeros((1080, 1920), np.uint8)))
 
