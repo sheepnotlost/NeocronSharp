@@ -47,6 +47,12 @@ It drags **one blueprint** into a free input, verifies quantity **1**, re-finds 
 
 A pending/unverified dialog, unknown occupied input, missing tool/source/product, or focus loss stops the batch. An uncertain transfer is never retried automatically. Custom recipe completion is verified by the result tooltip name. Check the Processor and counts before restarting after any interruption. Available blueprints decrease only after confirmed completion.
 
+## Activity log
+
+The bottom **Activity log** is resizable: drag its divider/handle up to enlarge it
+or down to shrink it. Its scrollbar lets you review earlier messages while Start
+and the job tabs remain above the divider. The divider works with every skin.
+
 ## Tech Counter
 
 The **Tech Counter** tab integrates the standalone counter. It scans open cabinets

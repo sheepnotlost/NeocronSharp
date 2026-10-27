@@ -82,8 +82,16 @@ class App:
         self.bound = tk.StringVar(value="Automatic detection · click Start, then focus Neocron within 3 seconds.")
         ttk.Label(outer, textvariable=self.bound, wraplength=980).grid(row=2, column=0, sticky="w", pady=(0, 12))
 
-        self.tabs = ttk.Notebook(outer)
-        self.tabs.grid(row=3, column=0, sticky="nsew")
+        self.main_split = tk.PanedWindow(outer, orient="vertical", sashwidth=9,
+                                        sashrelief="raised", showhandle=True,
+                                        handlesize=12, opaqueresize=True, borderwidth=0)
+        self.main_split.grid(row=3, column=0, sticky="nsew")
+        workspace = ttk.Frame(self.main_split)
+        workspace.columnconfigure(0, weight=1)
+        workspace.rowconfigure(0, weight=1)
+        self.main_split.add(workspace, minsize=250, stretch="always")
+        self.tabs = ttk.Notebook(workspace)
+        self.tabs.grid(row=0, column=0, sticky="nsew")
         self.research_tab = ttk.Frame(self.tabs)
         self.construction_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
@@ -179,8 +187,8 @@ class App:
                   "automatically. Check the current item and counts before starting again.",
                   wraplength=340).pack(anchor="w", pady=(10, 0))
 
-        actions = ttk.Frame(outer)
-        actions.grid(row=4, column=0, sticky="ew", pady=(16, 8))
+        actions = ttk.Frame(workspace)
+        actions.grid(row=1, column=0, sticky="ew", pady=(16, 8))
         self.start_button = ttk.Button(actions, text="Start in 3 seconds", command=self.start)
         self.start_button.pack(side="left")
         self.editable.append(self.start_button)
@@ -192,10 +200,19 @@ class App:
         skin.pack(side="right",padx=6);skin.bind("<<ComboboxSelected>>",lambda e:self.save_preferences());self.editable.append(skin)
         ttk.Label(actions,text="Skin").pack(side="right")
         self.status = tk.StringVar(value="Choose a tab, then click Start in 3 seconds.")
-        ttk.Label(outer, textvariable=self.status, wraplength=980, font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", pady=6)
-        self.log = tk.Text(outer, height=5, wrap="word", state="disabled", font=("Consolas", 9),
+        ttk.Label(workspace, textvariable=self.status, wraplength=980, font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="ew", pady=6)
+        self.log_panel = ttk.Frame(self.main_split)
+        self.log_panel.columnconfigure(0, weight=1)
+        self.log_panel.rowconfigure(1, weight=1)
+        self.main_split.add(self.log_panel, minsize=70, height=120, stretch="never")
+        ttk.Label(self.log_panel, text="Activity log · drag the divider above to resize").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(2, 4))
+        self.log = tk.Text(self.log_panel, height=5, wrap="word", state="disabled", font=("Consolas", 9),
                            background="#e6eceb", relief="flat", padx=8, pady=6)
-        self.log.grid(row=6, column=0, sticky="ew")
+        self.log.grid(row=1, column=0, sticky="nsew")
+        self.log_scrollbar = ttk.Scrollbar(self.log_panel, orient="vertical", command=self.log.yview)
+        self.log_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.log.configure(yscrollcommand=self.log_scrollbar.set)
         self.build_construction_tab()
         self.build_recycling_tab()
         from tech_counter import TechCounterPanel
@@ -213,6 +230,8 @@ class App:
         self.responsive_labels=[]
         def resize(event):
             label=event.widget
+            if event.width<=8:
+                return  # Hidden/new widgets have no usable width yet.
             width=max(1,event.width-4)
             if round(float(label.cget("wraplength")))!=width:
                 label.configure(wraplength=width)
@@ -221,7 +240,15 @@ class App:
                 widget.configure(width=1,anchor="w",justify="left")
                 manager=widget.winfo_manager()
                 if manager=="grid":
-                    sticky=widget.grid_info().get("sticky","")
+                    info=widget.grid_info()
+                    first=int(info.get("column",0))
+                    span=int(info.get("columnspan",1))
+                    parent=widget.nametowidget(str(info["in"]))
+                    # Sticky alone cannot stretch text in an unweighted grid.
+                    # Give a spanned column the remaining panel width.
+                    if not any(parent.columnconfigure(col)["weight"] for col in range(first,first+span)):
+                        parent.columnconfigure(first+span-1,weight=1)
+                    sticky=info.get("sticky","")
                     widget.grid_configure(sticky="".join(c for c in "nsew" if c in sticky or c in "ew"))
                 elif manager=="pack":
                     side=widget.pack_info().get("side","top")

@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Research text wrapping and resizable activity log — 27 October 2026
+
+- [x] Fix the unweighted paragraph grid that collapsed Research sequence settings to one character per line, including after maximization/skin changes.
+- [x] Add a visible drag handle/divider to enlarge or shrink the bottom Activity log, with a vertical scrollbar; retain Start and tabs in the upper pane.
+- [x] Verify actual Tk geometry across all 10 skins at 960×800, 1040×840 and 2560×1390, divider resizing across all four tabs, read-only log scrolling and Start visibility. All 184 suite tests pass; extracted portable OCR/dependency/UI startup checks pass. No game input was sent. Final checklist-only repack preserves the verified application/runtime.
+
 ### Tech Counter integration — 27 October 2026
 
 - [x] Embed the standalone counter as a Tech Counter tab using the suite's skins.

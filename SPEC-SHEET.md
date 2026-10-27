@@ -19,6 +19,8 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 - Lock job settings/tab switching during countdown and execution. Display status, detected Processor position, completed counts and a local log.
 - Store each operation's settings independently. Skin and stop sound are global preferences.
 - Paragraphs wrap to their allocated panel width on resize/skin changes; flexible recipe/alias/search fields stay within their columns. Narrow layouts keep content available through vertical scrolling.
+- Paragraph grid spans must include an expanding column; ignore initial placeholder widths when calculating wrapping. Research sequence settings must remain readable at normal and maximized sizes.
+- A visible horizontal divider/handle drags up/down to resize the bottom Activity log. Keep Start, settings and tabs in the upper pane; the read-only log has a vertical scrollbar and a minimum usable height. Divider resizing is independent of game execution and available in all skins.
 - Counts/settings save on Start; added recipes and appearance/sound preferences can save immediately.
 
 ## Recognition and input invariants

@@ -48,7 +48,8 @@ def apply_skin(root, key, heading=None):
     from skin_chrome import apply_chrome, TREATMENTS
     apply_chrome(root,style,key,skin,heading)
     def walk(widget):
-        if isinstance(widget,tk.Canvas):widget.configure(background=bg)
+        if isinstance(widget,tk.Canvas) or (isinstance(widget,tk.PanedWindow) and not isinstance(widget,ttk.PanedWindow)):
+            widget.configure(background=bg)
         elif isinstance(widget,tk.Text):widget.configure(background=panel,foreground=fg,insertbackground=accent)
         elif isinstance(widget,ttk.Button) and widget.cget("text")=="Start in 3 seconds":
             widget.configure(style="Start.TButton" if key in TREATMENTS else "TButton")
