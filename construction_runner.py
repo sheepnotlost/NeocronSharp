@@ -329,9 +329,12 @@ class ConstructionRunner(VisualRunner):
                 dialog=self.detector.quantity(frame,checkpoint=self.guard)
                 if dialog is None:raise Interrupted("Quantity dialog disappeared before confirmation.")
                 shown=field_number(frame,dialog)
-                if shown is None or shown>amount:
+                # Small digits sometimes cannot be read at all; the typed amount was sent, and a
+                # wrong amount here only changes how much moves into Inventory. A readable but
+                # different number is still refused.
+                if shown is not None and shown>amount:
                     raise Interrupted(f"Could not verify quantity {amount}. The dialog was left open; nothing was confirmed.")
-                if shown>1 or amount==1:break
+                if shown is None or shown>1 or amount==1:break
         self.click(dialog["ok"]);self.move((24,80));self.wait(self.settings["settle_seconds"])
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
@@ -344,7 +347,8 @@ class ConstructionRunner(VisualRunner):
         window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
         if window is None:
             raise Interrupted("GoGuardian window not found. Open it with its Take All / Sort / Stack buttons visible, or turn off More Materials in GoGo.")
-        try:plan=gogo.plan_refill(self.recipe,gogo.read_cells(reader,gray,window))
+        wanted=set((gogo.ingredients_for(self.recipe) or {}).values())
+        try:plan=gogo.plan_refill(self.recipe,gogo.read_cells(reader,gray,window,wanted))
         except LookupError as exc:raise Interrupted(str(exc)) from None
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
         for name,code,point,amount in plan:

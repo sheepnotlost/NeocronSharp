@@ -32,7 +32,7 @@ class GoGoReadingTests(unittest.TestCase):
                 window = gogo.find_gogo(self.reader, frame)
                 self.assertIsNotNone(window)
                 self.assertTrue(scale_range[0] <= window.scale <= scale_range[1], window)
-                codes = {cell["code"] for cell in gogo.read_cells(self.reader, frame, window).values()}
+                codes = {cell["code"] for cell in gogo.read_cells(self.reader, frame, window, {"GAM", "SOL", "TRS", "MET", "STS", "TIB", "ARI", "ZZZ"}).values()}
                 # A live capture's blurrier labels still yield every ingredient the macro needs.
                 self.assertTrue({"GAM", "SOL", "TRS", "MET", "STS", "TIB", "ARI"} <= codes, codes)
 
@@ -47,7 +47,10 @@ class GoGoReadingTests(unittest.TestCase):
 
     def test_unknown_recipes_and_missing_materials_are_refused(self):
         with self.assertRaises(LookupError):gogo.plan_refill("holy_heal", {})
-        with self.assertRaises(LookupError):gogo.plan_refill("weaponpart_9", {(0, 0): {"code": "ZZZ", "count": 5, "point": (1, 1)}})
+        with self.assertRaisesRegex(LookupError,"could not find"):gogo.plan_refill("weaponpart_9", {(0, 0): {"code": "ZZZ", "count": 5, "point": (1, 1)}})
+        # A partial set must never start a build with some materials still missing.
+        partial={(0,0):{"code":"GAM","count":None,"point":(1,1)},(1,0):{"code":"MET","count":None,"point":(2,1)}}
+        with self.assertRaisesRegex(LookupError,"Solantium"):gogo.plan_refill("weaponpart_9", partial)
 
     def test_a_frame_without_the_button_strip_is_not_a_gogo(self):
         self.assertIsNone(gogo.find_gogo(self.reader, np.zeros((1080, 1920), np.uint8)))

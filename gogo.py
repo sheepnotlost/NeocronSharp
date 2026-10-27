@@ -80,8 +80,18 @@ def _strip_in(words):
     return None
 
 
-def read_cells(reader, gray, gogo):
-    """{(col,row): {"code","count","point"}} for stacks whose label could be read."""
+def _close(word, code):
+    """Same three letters, allowing one misread character (OCR on small game text)."""
+    word = word.upper()
+    return len(word) == 3 and sum(a != b for a, b in zip(word, code)) <= 1
+
+
+def read_cells(reader, gray, gogo, wanted=None):
+    """{(col,row): {"code","count","point"}} for stacks whose label could be read.
+
+    `wanted` (label codes the recipe needs): any still missing after the whole-grid read
+    are looked for cell by cell at a larger upscale, which reads small labels better.
+    """
     left, top, right, bottom = gogo.grid_box(gray.shape)
     words = reader.read_words(gray[top:bottom, left:right])
     cells = {}
@@ -108,6 +118,22 @@ def read_cells(reader, gray, gogo):
             count = int(match.group(1))
         if code:
             result[key] = {"code": code, "count": count, "point": cell["point"]}
+    missing = set(wanted or ()) - {info["code"] for info in result.values()}
+    if missing:
+        for col in range(COLUMNS):
+            for row in range(ROWS):
+                if (col, row) in result or not missing:
+                    continue
+                ox, oy = gogo.cell_origin(col, row)
+                crop = gray[max(0, int(oy)):int(oy + CELL_H*gogo.scale), max(0, int(ox)):int(ox + CELL_W*gogo.scale)]
+                if crop.size == 0:
+                    continue
+                for text, _, _, _, _ in reader.read_words(crop, up=4):
+                    hit = next((code for code in missing if _close(text.strip(), code)), None)
+                    if hit:
+                        result[(col, row)] = {"code": hit, "count": None, "point": gogo.cell_center(col, row)}
+                        missing.discard(hit)
+                        break
     return result
 
 
@@ -123,15 +149,14 @@ def plan_refill(recipe_key, cells):
     for info in cells.values():
         by_code.setdefault(info["code"], info)
     plan = []
+    absent = [name for name, code in codes.items() if code not in by_code]
+    if absent:
+        raise LookupError("GoGuardian: could not find " + ", ".join(absent) + ". Nothing was moved.")
     for name, code in codes.items():
-        info = by_code.get(code)
-        if info is None:
-            continue
+        info = by_code[code]
         # Stack counts are often too small for the OCR to read. The quantity dialog
         # opens at the full stack, so the runner caps the amount there; here BATCH
         # is only the upper limit.
         amount = min(BATCH, info["count"]) if info["count"] else BATCH
         plan.append((name, code, info["point"], amount))
-    if not plan:
-        raise LookupError("GoGuardian holds none of this recipe's materials.")
     return plan
