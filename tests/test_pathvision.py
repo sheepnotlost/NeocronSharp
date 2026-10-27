@@ -37,6 +37,14 @@ class PathVisionTests(unittest.TestCase):
         # Live frame where the walk ended pressed against a wall of glowing signs: no dashes are visible.
         self.assertIsNone(pathvision.find_path(load("navray_no_path_posters_2560.png")))
 
+    def test_a_big_glowing_sign_beside_the_character_is_not_the_path(self):
+        # Live frame where a walk hugged the NCPD/Viarosso sign: the real path is the floor dashes to the right.
+        view = pathvision.find_path(load("navray_sign_wall_with_path_2560.png"))
+        self.assertIsNotNone(view)
+        self.assertTrue(1650 <= view.aim[0] <= 1800, view.aim)
+        self.assertGreater(view.error, .1)                         # the path lies to the right of the character
+        self.assertTrue(all(x > 1500 for x, _ in view.points), view.points)  # nothing from the sign or the character
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

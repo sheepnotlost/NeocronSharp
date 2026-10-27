@@ -19,9 +19,10 @@ class PathView:
 
 
 def _excluded(fx, fy):
-    """HUD areas that are always on screen and green (fractions of the frame)."""
+    """HUD areas that are always on screen and green, and the character itself (fractions of the frame)."""
     return (fy < .06 or (fx < .20 and fy < .20) or (fx > .84 and fy > .78)
-            or fx > .92 or (fx < .47 and fy > .76))
+            or fx > .92 or (fx < .47 and fy > .76)
+            or (.43 < fx < .60 and fy > .50))
 
 
 def dash_candidates(frame, ignore=()):
@@ -35,7 +36,7 @@ def dash_candidates(frame, ignore=()):
     for i in range(1, count):
         x, y, w, h, area = stats[i]
         cx, cy = centres[i]
-        if not 6*unit*unit <= area <= 1500*unit*unit:
+        if not 6*unit*unit <= area <= 6000*unit*unit:
             continue
         if _excluded(cx/width, cy/height):
             continue
@@ -74,6 +75,16 @@ def _plausible(points, areas, angles, height):
     if ys.max() - ys.min() < .08*height:
         return False
     measured = ~np.isnan(angles)
+    if len(points) == 3:
+        # The thin evidence of a three-mark chain must be clean: marks well apart, and the nearer
+        # (lower) big dash larger than the farther one.
+        order = np.argsort(-ys)
+        gaps = np.hypot(*np.diff(points[order], axis=0).T)
+        if gaps.min() < 40:
+            return False
+        big = [i for i in order if measured[i]]
+        if any(areas[a] <= areas[b] for a, b in zip(big, big[1:])):
+            return False
     if measured.sum() >= 4:
         sizes = np.sqrt(areas[measured])
         if np.ptp(ys[measured]) > 0 and np.ptp(sizes) > 0:
@@ -82,7 +93,7 @@ def _plausible(points, areas, angles, height):
     return True
 
 
-def best_chain(candidates, tolerance=7.0, minimum=4, samples=3000, max_turn=np.radians(30), height=1440, tries=25):
+def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.radians(30), height=1440, tries=25):
     """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
 
     Every pair is tried for small inputs; busy scenes (hundreds of candidates) try a fixed random
@@ -95,6 +106,10 @@ def best_chain(candidates, tolerance=7.0, minimum=4, samples=3000, max_turn=np.r
     count = len(points)
     if count < minimum:
         return []
+    # Four marks make a chain. Three do only when two of them are big dashes pointing along it (the
+    # near stretch of a path whose far end is out of view); three small dots prove nothing.
+    def enough(members):
+        return len(members) >= 4 or (len(members) == 3 and int((~np.isnan(angles[list(members)])).sum()) >= 2)
     first, second = np.triu_indices(count, 1)
     if len(first) > samples:
         pick = np.random.default_rng(0).choice(len(first), samples, replace=False)
@@ -118,7 +133,7 @@ def best_chain(candidates, tolerance=7.0, minimum=4, samples=3000, max_turn=np.r
         members = tuple(np.where(inside[pair])[0])
         if len(members) < minimum:
             break
-        if members in seen:
+        if members in seen or not enough(members):
             continue
         seen.add(members)
         index = list(members)
