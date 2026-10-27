@@ -23,7 +23,8 @@ LOST_FRAMES = 10         # looks without the followed path before the macro sear
 DASHES_PER_LEG = 4       # dashes read in front of the character, then walked, before reading the next four
 LINED_UP = .03           # steering error (fraction of width) below which the character walks
 AGREE = .05              # the three looks before a move must agree on the heading to within this
-VEER = .22               # while walking, an error this big stops the leg and re-reads the path (a corner)
+VEER = .22               # while walking, an error this big (after corrections) stops the leg and re-reads the path (a corner)
+WALK_DAMP = .5           # share of the measured error corrected on each look while walking
 LEG_SECONDS = 8.0        # longest a leg may last
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
@@ -340,6 +341,27 @@ class NavRayRunner(VisualRunner):
         ahead = self.next_dashes(view, height)[:2] or [view.aim]
         return (sum(p[0] for p in ahead)/len(ahead) - width/2)/width
 
+    def steer_error(self, view, frame):
+        """The error to steer on while walking: the second and third dashes ahead, which move less from look to
+        look than the one at the character's feet."""
+        height, width = frame.shape[:2]
+        ahead = self.next_dashes(view, height, 3)
+        pick = ahead[1:3] or ahead or [view.aim]
+        return (sum(p[0] for p in pick)/len(pick) - width/2)/width
+
+    def correct_while_walking(self, view, frame):
+        """A small calibrated turn towards the dashes, made on the move, so a drift never grows into a veer."""
+        if not self.px_per_count:
+            return 0
+        error = self.steer_error(view, frame)
+        if abs(error) <= LINED_UP:
+            return 0
+        limit = max(5, round(CAL_MAX_PX/abs(self.px_per_count)))
+        counts = round(max(-limit, min(limit, -(error*frame.shape[1])*WALK_DAMP/self.px_per_count)))
+        if counts:
+            self.backend.move_relative(counts, 0)
+        return counts
+
     def vitals(self, reader, frame, state):
         if frame.mean() < 6:
             raise Interrupted("Loading screen or black frame. Stopped; walking across zones is not supported yet.")
@@ -380,9 +402,10 @@ class NavRayRunner(VisualRunner):
                     if passed >= DASHES_PER_LEG:
                         reason = f"passed {passed} dashes"
                         break
-                    if abs(self.aim_error(seen, frame)) > VEER:
+                    if abs(self.steer_error(seen, frame)) > VEER:
                         reason = "the path bends away"
                         break
+                    self.correct_while_walking(seen, frame)
                 thumb = self.thumbnail(frame)
                 if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
                     still_since = still_since if still_since is not None else now

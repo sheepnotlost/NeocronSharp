@@ -149,6 +149,17 @@ class WalkTests(unittest.TestCase):
         self.assertIsNotNone(got)
         self.assertGreaterEqual(looks["n"], 6)                   # it looked again rather than trusting round one
 
+    def test_it_steers_gently_while_walking_so_a_drift_does_not_grow_into_a_veer(self):
+        runner, _ = make_runner(lambda i: HALL)            # the dashes lie a little to the left of straight ahead
+        runner.px_per_count = -4.2
+        view = pathvision_find(HALL)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        with self.assertRaises(Interrupted):               # identical frames: it ends as "not moving", after steering
+            runner.walk_leg(view, view, runner.detector.text_reader(), state)
+        moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
+        self.assertTrue(moves and all(m < 0 for m in moves), moves)        # left, towards the dashes
+        self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/4.2 + 1 for m in moves), moves)
+
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)
         ahead = NavRayRunner.next_dashes(view, AHEAD.shape[0])
