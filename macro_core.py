@@ -27,6 +27,7 @@ def default_profile():
         "hidden_recipes": [],
         "materials": {},
         "recycling": {"recipe":None},
+        "navray": {"destination": ""},
         "preferences": {"skin":"basic","stop_sound":False},
         "stacks": {name: {"available": 0, "count": 0} for name in STACKS},
         "settings": {
@@ -43,12 +44,16 @@ def validate_profile(profile, require_ready=True):
     if not isinstance(profile, dict) or profile.get("version") != 1:
         raise ValueError("Unsupported profile format.")
     operation = profile.get("operation", "tech_parts")
-    if operation not in ("tech_parts", "blueprints", "construction", "recycling"):
+    if operation not in ("tech_parts", "blueprints", "construction", "recycling", "navray"):
         raise ValueError("Choose research or construction.")
     preferences=profile.get("preferences",{})
     from appearance import SKINS
     if not isinstance(preferences,dict) or preferences.get("skin","basic") not in SKINS or type(preferences.get("stop_sound",False)) is not bool:
         raise ValueError("Choose a valid skin and optional stop sound setting.")
+    navray_config=profile.get("navray",{"destination":""})
+    if (not isinstance(navray_config,dict) or not isinstance(navray_config.get("destination",""),str)
+            or len(navray_config.get("destination",""))>120):
+        raise ValueError("Invalid Nav-Ray destination.")
     recycling=profile.get("recycling",{"recipe":None})
     if not isinstance(recycling,dict):raise ValueError("Invalid recycling selection.")
     if recycling.get("recipe") is not None:
@@ -140,6 +145,10 @@ def validate_profile(profile, require_ready=True):
         if len(sample) != len(SAMPLE_OFFSETS) or any(type(c) is not int or not 0 <= c <= 0xFFFFFF for c in sample):
             raise ValueError(f"Invalid reference pixels for {name}.")
     if require_ready:
+        if operation == "navray":
+            from navray import parse_destination
+            parse_destination(navray_config.get("destination", ""))
+            return profile
         if operation == "recycling":
             if recycling.get("recipe") is None:raise ValueError("Choose a recycling recipe first.")
             return profile
@@ -187,6 +196,7 @@ def monitor_only_profile(profile):
         profile.setdefault("hidden_recipes", [])
         profile.setdefault("materials", {})
         profile.setdefault("recycling", {"recipe":None})
+        profile.setdefault("navray", {"destination": ""})
         profile.setdefault("preferences", {"skin":"basic","stop_sound":False})
         profile.pop("favorites", None)  # Favorites were removed; drop old shortcuts.
         stacks = profile.get("stacks")

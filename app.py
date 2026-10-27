@@ -95,10 +95,12 @@ class App:
         self.research_tab = ttk.Frame(self.tabs)
         self.construction_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
+        self.navray_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
         self.tabs.add(self.research_tab, text="Research")
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
+        self.tabs.add(self.navray_tab, text="Nav-Ray")
         self.tabs.add(self.counter_tab, text="Tech Counter")
         scroll_host = ttk.Frame(self.research_tab)
         scroll_host.pack(fill="both", expand=True)
@@ -191,6 +193,7 @@ class App:
         self.log.configure(yscrollcommand=self.log_scrollbar.set)
         self.build_construction_tab()
         self.build_recycling_tab()
+        self.build_navray_tab()
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
@@ -233,6 +236,15 @@ class App:
                 self.responsive_labels.append(widget)
             for child in widget.winfo_children():walk(child)
         walk(self.root)
+
+    def build_navray_tab(self):
+        host=ttk.Frame(self.navray_tab,padding=12);host.pack(fill="both",expand=True)
+        host.columnconfigure(1,weight=1)
+        ttk.Label(host,text="Destination").grid(row=0,column=0,sticky="w",pady=5)
+        self.navray_destination=tk.StringVar()
+        entry=ttk.Entry(host,textvariable=self.navray_destination,width=1)
+        entry.grid(row=0,column=1,sticky="ew",padx=(10,0),pady=5);self.editable.append(entry)
+        ttk.Label(host,text="Category > Destination. Open Nav-Ray first.").grid(row=1,column=1,sticky="w",padx=(10,0))
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -592,7 +604,8 @@ class App:
         self.stop_on_slots.set(construction.get("stop_at_slots") is not None)
         self.minimum_slots.set(str(construction.get("stop_at_slots") if construction.get("stop_at_slots") is not None else 4))
         self.refresh_recipe()
-        self.tabs.select(self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
+        self.navray_destination.set(self.profile.get("navray",{}).get("destination",""))
+        self.tabs.select(self.navray_tab if operation=="navray" else self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
         recycle_id=self.profile.get("recycling",{}).get("recipe")
         if recycle_id and self.recycle_tree.exists(recycle_id):
             self.recycle_tree.selection_set(recycle_id);self.recycle_tree.see(recycle_id);self.show_recycle_recipe()
@@ -618,7 +631,10 @@ class App:
         try:
             profile["research_operation"]=next(key for key,label in OPERATION_LABELS.items()
                                                 if label==self.operation_var.get())
-            if self.tabs.select()==str(self.recycling_tab):
+            if self.tabs.select()==str(self.navray_tab):
+                profile["operation"]="navray"
+                profile["navray"]={"destination":self.navray_destination.get().strip()}
+            elif self.tabs.select()==str(self.recycling_tab):
                 profile["operation"]="recycling"
                 selection=self.recycle_tree.selection()
                 profile["recycling"]={"recipe":selection[0] if selection else None}
@@ -748,8 +764,9 @@ class App:
                 self.worker.start()
                 return
             from recycling import RecyclingRunner
+            from navray_runner import NavRayRunner
             runner_class = {"blueprints":BlueprintRunner,"tech_parts":VisualRunner,"construction":ConstructionRunner,
-                            "recycling":RecyclingRunner}[self.profile["operation"]]
+                            "recycling":RecyclingRunner,"navray":NavRayRunner}[self.profile["operation"]]
             runner = runner_class(self.profile, self.backend, self.control,
                                   lambda kind, payload: self.events.put((kind, payload)))
             self.worker = threading.Thread(target=runner.run, daemon=False, name="macro-sequence")
@@ -863,6 +880,8 @@ def main():
             if profile["operation"] == "construction":
                 job=profile["construction"]
                 print(f"Configuration valid: {job['count'] or job['available']} builds of {catalog(profile)[job['recipe']]['name']}. No input sent.")
+            elif profile["operation"]=="navray":
+                print(f"Configuration valid: Nav-Ray walk to {profile['navray']['destination']}. No input sent.")
             elif profile["operation"]=="recycling":
                 print("Configuration valid: one prepared recycling run. No input sent.")
             elif profile["operation"] == "blueprints":

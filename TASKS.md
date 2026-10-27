@@ -186,6 +186,13 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] GoGuardian labels no longer depend on the window's contents (27 Oct): when an expected label is not among the stacks read, the macro hovers the most likely stacks (labels that abbreviate the missing name), reads the tooltip name, and saves name->label in the profile and Materials row. Failure messages list the labels seen. 223 tests incl. synthetic tooltips.
 - [ ] Not verified live: the GoGuardian tooltip's real appearance (assumed a black, light-bordered panel containing the item name). If it differs, hovering finds no name and the run stops with the labels seen.
 
+## Nav-Ray auto-walk — 27 Oct
+
+- [x] New Nav-Ray tab: `Category > Destination` (e.g. Faction HQs > Black Dragon). The macro finds the open Nav-Ray window (any scale), picks the category and destination (scrolling the lists), presses Start, waits for the dashed path, presses Tab for mouse-look and walks: holds W and steers with relative mouse motion toward the dashes.
+- [x] Stops with a reason: no path found, path ended (reported as arrived/lost), not moving, health dropped, loading screen, longer than 10 minutes, game focus lost. Keys are always released.
+- [x] Design spec and plan in docs/superpowers/. 244 tests pass (path detection on the user's real stairs/hall frames; Nav-Ray window and list reading on three real captures at two UI scales; walk loop with a fake backend).
+- [ ] Not verified live: list scrolling per wheel notch, Start, Tab returning to mouse-look, steering direction/gain, arrival, stuck and health detection, speed. Tuning constants are at the top of navray_runner.py. Doors, subway, loading screens and combat are out of scope (the walk stops).
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

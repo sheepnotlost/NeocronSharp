@@ -14,6 +14,10 @@ installed in your development environment. Pytest is not required by the app.
 
 The Git repository contains everything needed to run: source, the bundled `runtime/` (Python, libraries, Tesseract), recognition artwork, recipe catalogs, styling and regression fixtures. **Code > Download ZIP**, extract the whole folder, run **Launch.cmd**. The portable ZIP, personal profile, logs, diagnostics and recordings are excluded. The requirements file records the Python package versions; Windows supplies the local English OCR engine. Developer checks use `runtime/python.exe -m unittest discover -s tests -v`; `runtime/python.exe tools/build_portable.py` builds and extraction-checks a portable ZIP locally.
 
+## Nav-Ray
+
+In game press Tab and open Nav-Ray (F9). In the Nav-Ray tab type `Category > Destination` (for example `Faction HQs > Black Dragon`) and press Start in 3 seconds. The macro picks the destination, presses Start in Nav-Ray, then walks the dashed path (W plus mouse steering). Switch away from the game to stop. It stops by itself when the path ends, nothing moves, health drops or a loading screen appears. Walking inside one area only; early version, not yet verified in game.
+
 ## Construction
 
 Open **Construction → Catalog** to search **1,263 item entries** by name (including WP shorthand), filter by category, and view source links, listed level and build-method status. Select **Use blueprint recipe** to save that name and open the Job form. Only saved recipes participate in game recognition; browsing the catalog does not make the inventory search scan all 1,263 names. Start is disabled while the Catalog page is shown.

@@ -83,6 +83,10 @@ Windowed 1920x1080 failed because UI layout scale (.80/.78) and title font scale
 
 gogo.py + construction_runner.refill_from_gogo/enter_quantity/inventory_destination. Opt-in setting construction.gogo_refill. Offline-verified on real captures (window, labels); live GoGuardian drags and quantity entry above 1 are unverified.
 
+## Nav-Ray auto-walk (27 Oct)
+
+navray.py (window/list reading), pathvision.py (dashed path detection), navray_runner.py (setup + steering loop), windows_backend.move_relative, Nav-Ray tab in app.py. Offline-verified on real captures only; live behaviour (steering gain/direction, list scrolling, Tab, arrival) is untested. Spec and plan: docs/superpowers/.
+
 ## Code map
 
 - app.py: Tk UI, profile collection, tabs, settings, worker coordination, notifications.
