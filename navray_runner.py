@@ -18,8 +18,10 @@ MAX_STEP = 45            # largest single mouse move
 DEADZONE = .02           # steering error (fraction of width) treated as straight ahead
 SMOOTH = .5              # share of each new reading blended into the smoothed error
 LEAD = .12               # seconds of error trend added, so the turn eases off before the aim is reached
-SEARCH_STEP = 30         # turn while the path is momentarily out of view
-FIND_SECONDS = 8.0       # how long to look for a path before giving up
+SEARCH_STEP = 60         # mouse counts per look while turning to find the path
+SEARCH_COUNTS = 7000     # total turning allowed to find the first path (a bit more than a full circle)
+LATERAL_W = .35          # share of the steering that pulls the character back onto the line itself
+JUMP = .25               # a reading this far from the smoothed one is held back for a moment (stray dashes)
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 3.0
 MAX_SECONDS = 600.0
@@ -44,8 +46,14 @@ class Steering:
 
     def __init__(self):
         self.smooth = self.last = self.time = None
+        self.held = 0
 
     def step(self, error, now):
+        if self.smooth is not None and abs(error - self.smooth) > JUMP and self.held < 2:
+            self.held += 1                    # probably a stray detection: ignore it for up to two readings
+            error = self.smooth
+        else:
+            self.held = 0
         self.smooth = error if self.smooth is None else self.smooth + SMOOTH*(error - self.smooth)
         rate = 0.0 if self.last is None or now <= self.time else (self.smooth - self.last)/(now - self.time)
         self.last, self.time = self.smooth, now
@@ -53,6 +61,7 @@ class Steering:
 
     def reset(self):
         self.smooth = self.last = self.time = None
+        self.held = 0
 
 
 def _bgr(frame):
@@ -222,10 +231,9 @@ class NavRayRunner(VisualRunner):
 
     def walk(self):
         reader = self.detector.text_reader()
-        self.backend.key("w", True)
-        self.backend.key("shift", True)                  # run
+        self.backend.key("shift", True)                  # run (only acts while moving)
         steering = Steering()
-        forward = True
+        forward = False                                  # stand still until a path is in view and lined up
 
         def go(on):
             nonlocal forward
@@ -237,7 +245,7 @@ class NavRayRunner(VisualRunner):
             seen_path, last_path = False, started
             last_health_check, baseline = started, None
             previous_thumb, still_since = None, None
-            last_report, turned = started, 0
+            last_report, turned, searched, last_side = started, 0, 0, 1
             while True:
                 self.checkpoint()
                 now = self.clock()
@@ -257,7 +265,10 @@ class NavRayRunner(VisualRunner):
                 view = pathvision.find_path(_bgr(frame))
                 if view is not None:
                     seen_path, last_path = True, now
-                    step = steering.step(view.error, now)
+                    # Aim along the line ahead and also pull back onto the line itself, so the character
+                    # follows the dashes instead of running parallel to them.
+                    step = steering.step((1 - LATERAL_W)*view.error + LATERAL_W*view.lateral, now)
+                    last_side = 1 if steering.smooth >= 0 else -1
                     go(abs(steering.smooth) < (TURN_IN_PLACE if forward else ALIGNED))
                     if step:
                         self.backend.move_relative(step, 0)
@@ -277,15 +288,22 @@ class NavRayRunner(VisualRunner):
                 else:
                     still_since, previous_thumb = None, None
                     steering.reset()
-                    if seen_path:
-                        go(False)                        # path out of view: stand and look for it
-                    if not seen_path and now - started > FIND_SECONDS:
-                        raise Interrupted("No Nav-Ray path found. Check that a route is active and visible.")
-                    if seen_path and now - last_path > END_SECONDS:
-                        self.emit("done", "Nav-Ray: the path ended. Arrived, or the route was lost.")
-                        return
-                    if seen_path:
+                    go(False)                            # path out of view: stand and look for it
+                    if not seen_path:
+                        # Just after Start the route begins at the character, but it may lead out of view:
+                        # turn all the way round looking for it.
+                        if searched >= SEARCH_COUNTS:
+                            raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         self.backend.move_relative(SEARCH_STEP, 0)
+                        searched += SEARCH_STEP
+                        if now - last_report >= REPORT_EVERY:
+                            last_report = now
+                            self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
+                    else:
+                        if now - last_path > END_SECONDS:
+                            self.emit("done", "Nav-Ray: the path ended. Arrived, or the route was lost.")
+                            return
+                        self.backend.move_relative(last_side*SEARCH_STEP//2, 0)   # lost it: look back towards where it was
                 self.sleep(.005)
         finally:
             self.backend.key("shift", False)

@@ -14,7 +14,8 @@ import numpy as np
 class PathView:
     points: tuple      # (x, y) dash centres, nearest to the camera first
     aim: tuple         # the point to turn towards
-    error: float       # aim x relative to the view centre, as a fraction of the width (-.5 .. .5)
+    error: float       # look-ahead aim x relative to the view centre, as a fraction of the width (-.5 .. .5)
+    lateral: float = 0.0   # how far the line passes from the character, same units, measured near the character
 
 
 def _excluded(fx, fy):
@@ -144,4 +145,5 @@ def find_path(frame, ignore=()):
     slope, intercept = np.polyfit(ys, xs, 1)
     look_y = min(max(.5*height, float(ys.min())), float(ys.max()))
     look_x = min(max(float(slope*look_y + intercept), 0.0), float(width))
-    return PathView(tuple(chain), (look_x, look_y), (look_x - width/2)/width)
+    near_x = min(max(float(slope*.75*height + intercept), 0.0), float(width))
+    return PathView(tuple(chain), (look_x, look_y), (look_x - width/2)/width, (near_x - width/2)/width)

@@ -72,7 +72,7 @@ class WalkTests(unittest.TestCase):
         runner, events = make_runner(lambda i: STAIRS if i <= 12 else DARK)
         runner.walk()
         recorded = runner.backend.events
-        self.assertEqual(recorded[:2], [("key", "w", True), ("key", "shift", True)])      # walk and run
+        self.assertEqual(recorded[0], ("key", "shift", True))                              # run, but stand still until lined up
         self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])
         turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0]
         self.assertTrue(turns and all(t < 0 for t in turns[:5]), turns[:5])      # path is to the left
@@ -102,6 +102,29 @@ class WalkTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Health dropped"):
             runner.walk()
         self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+
+    def test_with_no_path_in_view_it_turns_all_the_way_round_before_giving_up(self):
+        runner, events = make_runner(lambda i: DARK)
+        with self.assertRaisesRegex(Interrupted, "turning all the way round"):
+            runner.walk()
+        turns = [e[1] for e in runner.backend.events if e[0] == "rel"]
+        self.assertGreaterEqual(sum(turns), navray_runner.SEARCH_COUNTS - navray_runner.SEARCH_STEP)
+        self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
+
+    def test_it_walks_only_once_the_path_is_lined_up(self):
+        runner, _ = make_runner(lambda i: HALL if i <= 12 else DARK)     # hall frame: line almost dead ahead
+        runner.walk()
+        self.assertIn(("key", "w", True), runner.backend.events)
+
+    def test_a_stray_reading_is_held_back_but_a_real_turn_gets_through(self):
+        steering = navray_runner.Steering()
+        steering.step(.02, 0.0)
+        for t in (.1, .2):
+            steering.step(.45, t)                                        # two stray jumps are ignored
+        self.assertLess(abs(steering.smooth), .1)
+        for t in (.3, .4, .5, .6):
+            steering.step(.45, t)                                        # but a lasting one is followed
+        self.assertGreater(steering.smooth, .2)
 
     def test_damping_eases_off_when_the_error_is_closing(self):
         steady, closing = navray_runner.Steering(), navray_runner.Steering()
