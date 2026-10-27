@@ -59,8 +59,21 @@ and list reading on the supplied captures, steering maths and stop logic with a 
 Not establishable offline: real steering, arrival, stuck/health detection. Report these as
 unverified until a live run shows them in macro.log.
 
-## Open items needing the user
+## Confirmed from the second set of screenshots
 
-- Screenshots after clicking a category and after selecting a destination (what the Destination
-  pane shows, whether lists nest further, how Start behaves).
-- Whether Stop (Nav-Ray) should be pressed by the macro on arrival.
+- Two levels: clicking a category in **Select** fills **Destination** with its entries (e.g.
+  FACTION HQS -> PROTOPHARM, TSUNAMI SYNDICATE, BLACK DRAGON, ...; scrollable). Click an entry
+  (it highlights), then **Start**. The Communicator prints "Searching route..." and the dashed
+  path appears. The Nav-Ray window stays open (free-cursor mode) while the path shows.
+- So the destination is a two-step name: "Category > Destination" (e.g. "Faction HQs > Black Dragon").
+- Speed: the user wants the walk to be real time and as fast as possible. The control loop uses
+  small regional captures of the 3D view (not full-frame OCR) and relative mouse motion each
+  iteration; keys stay held between iterations. Running/sprint is used if the game has a
+  held key for it (to be confirmed; walk speed otherwise).
+
+## Open items
+
+- Whether the macro presses Nav-Ray's Stop on arrival (default: leave it as is).
+- Run/sprint key, if any.
+- Where the path dashes are hidden behind the Nav-Ray window itself: close the window (Tab)
+  before walking so it cannot cover the path.
