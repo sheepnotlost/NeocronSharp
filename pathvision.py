@@ -104,6 +104,10 @@ def _plausible(points, areas, angles, height):
     ys = points[:, 1]
     if ys.max() - ys.min() < .08*height:
         return False
+    # A path runs away from the camera, so it climbs the screen at a good rate. A near-flat row of marks
+    # (the lettering of a shop sign, a row of lights) climbs hardly at all.
+    if ys.max() - ys.min() < .25*(points[:, 0].max() - points[:, 0].min()):
+        return False
     measured = ~np.isnan(angles)
     # Dashes are spaced out. Text (lettering on a sign) puts many marks a few pixels apart.
     spacing = np.hypot(*np.diff(points[np.argsort(-ys)], axis=0).T)

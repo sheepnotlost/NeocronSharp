@@ -33,7 +33,8 @@ SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety
 SCAN_PX = 220            # how far the view sweeps per look while scanning all round for the path
 SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
-STUCK_SECONDS = 3.0
+STUCK_SECONDS = 1.2       # the view not changing this long while walking means a wall: back off and look for the way round
+MAX_STUCK = 6            # wall recoveries in one walk before giving up
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
 REPORT_EVERY = 2.0       # progress line in the log
@@ -309,10 +310,15 @@ class NavRayRunner(VisualRunner):
         self.wait(.12)
         return total
 
-    def evaluate(self, track, lost):
+    def evaluate(self, track, lost, quick=False):
         """Stand still and take three quick looks at the dashes. The heading is only trusted when they agree
         (a stray mark or a moving picture makes them differ), otherwise look again. Returns the middle
-        reading as (view, frame), or None if no dashes were seen."""
+        reading as (view, frame), or None if no dashes were seen. `quick` is a single look, for sweeping."""
+        if quick:
+            frame = self.frame()
+            view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
+                                        tube=min(.18 + .03*lost, .4))
+            return (view, frame) if view is not None else None
         readings, errors = [], []
         for _ in range(3):
             readings = []
@@ -391,7 +397,7 @@ class NavRayRunner(VisualRunner):
                 seen = pathvision.find_path(_bgr(frame), prior=track, tube=.25)
                 if seen is None:
                     lost += 1
-                    if lost >= 3:
+                    if lost >= 2:
                         reason = "lost the dashes"
                         break
                 else:
@@ -411,7 +417,8 @@ class NavRayRunner(VisualRunner):
                 if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
                     still_since = still_since if still_since is not None else now
                     if now - still_since >= STUCK_SECONDS:
-                        raise Interrupted("Not moving (the view has not changed). Something may be blocking the way. Stopped.")
+                        reason = "stuck against something"
+                        break
                 else:
                     still_since = None
                 previous_thumb = thumb
@@ -431,7 +438,7 @@ class NavRayRunner(VisualRunner):
         self.backend.key("shift", True)                  # run: Shift only acts while the character moves
         started = self.clock()
         state = {"health": None, "health_checked": started, "last_path": started}
-        track, lost, legs, turned, turns_in_row = None, 0, 0, 0, 0
+        track, lost, legs, turned, turns_in_row, stuck = None, 0, 0, 0, 0, 0
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
         scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
@@ -441,16 +448,18 @@ class NavRayRunner(VisualRunner):
                 now = self.clock()
                 if now - started > MAX_SECONDS:
                     raise Interrupted("Nav-Ray: the walk took longer than 10 minutes. Stopped.")
-                got = self.evaluate(track, lost)
+                got = self.evaluate(track, lost, quick=scanning)
+                if got is not None and scanning:
+                    got = self.evaluate(track, lost)               # something showed while sweeping: confirm it standing still
                 frame = got[1] if got else self.frame()
                 self.vitals(reader, frame, state)
                 if got is None:
                     lost += 1
-                    if seen_path and not scanning and lost >= 3:
+                    if not scanning:
                         # The dashes went out of view (a corner, a pillar): look all the way round before
                         # deciding the route is over.
                         scanning, scan_first, scan_looks, searched = True, None, 0, 0
-                        self.emit("status", f"Nav-Ray: dashes out of view, looking all the way round ({'right' if last_side > 0 else 'left'} first).")
+                        self.emit("status", f"Nav-Ray: no dashes in view, sweeping all the way round ({'right' if last_side > 0 else 'left'} first).")
                     if scanning:
                         small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
                         scan_looks += 1
@@ -493,6 +502,17 @@ class NavRayRunner(VisualRunner):
                 leg_started = self.clock()
                 track, passed, reason = self.walk_leg(view, track, reader, state)
                 self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
+                if reason == "stuck against something":
+                    stuck += 1
+                    if stuck > MAX_STUCK:
+                        raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
+                    # Back off and look for the dashes elsewhere: sweep the other way from where we were heading.
+                    self.backend.key("s", True)
+                    self.wait(.35)
+                    self.backend.key("s", False)
+                    last_side = -last_side
+                    track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
+                    self.emit("status", f"Nav-Ray: stuck ({stuck}); backed off, sweeping for the way round.")
         finally:
             self.backend.key("shift", False)
             self.backend.key("w", False)

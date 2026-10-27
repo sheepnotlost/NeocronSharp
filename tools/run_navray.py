@@ -1,13 +1,17 @@
-"""Run one Nav-Ray walk from the command line (same code path as the Nav-Ray tab).
+"""Run one Nav-Ray walk from the command line (same code path as the Nav-Ray tab) and record it.
 
-    runtime/python.exe tools/run_navray.py "FACTION HQS > BLACK DRAGON"
+    runtime/python.exe tools/run_navray.py "TRADER DIRECTORY > WEAPONS" [recording-folder]
 
-Focus Neocron (Nav-Ray open, Tab pressed so the cursor is free) within the countdown.
+Focus Neocron (Nav-Ray open, Tab pressed so the cursor is free) within the countdown. Every status
+message of the run is printed with its time and the game frame at that moment is saved as a
+full-size JPEG in the recording folder, so a run can be reviewed afterwards.
 """
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import cv2
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -19,6 +23,10 @@ from windows_backend import WindowsBackend  # noqa: E402
 
 def main():
     destination = sys.argv[1] if len(sys.argv) > 1 else "FACTION HQS > BLACK DRAGON"
+    folder = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "diagnostics" / "recording"
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob("*.jpg"):
+        old.unlink()
     backend = WindowsBackend()
     for left in range(5, 0, -1):
         print(f"Focus Neocron... {left}", flush=True)
@@ -36,11 +44,18 @@ def main():
     profile["navray"] = {"destination": destination}
     profile["client_size"] = size
     started = time.monotonic()
+    holder = {}
+    count = {"n": 0}
 
     def emit(kind, payload=None):
-        print(f"[{time.monotonic() - started:6.1f}s] {kind}: {payload}", flush=True)
+        count["n"] += 1
+        print(f"[{time.monotonic() - started:6.1f}s] {count['n']:03d} {kind}: {payload}", flush=True)
+        frame = getattr(holder.get("runner"), "last_frame", None)
+        if frame is not None:
+            cv2.imwrite(str(folder / f"{count['n']:03d}.jpg"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 93])
 
-    NavRayRunner(profile, backend, Control(), emit).run()
+    runner = holder["runner"] = NavRayRunner(profile, backend, Control(), emit)
+    runner.run()
 
 
 if __name__ == "__main__":

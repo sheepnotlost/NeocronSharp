@@ -124,7 +124,7 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(len(done), 1)
         self.assertIn("arrived", done[0].lower())
         statuses = [p for k, p in events if k == "status"]
-        self.assertTrue(any("looking all the way round" in p for p in statuses))       # it looked before giving up
+        self.assertTrue(any("sweeping all the way round" in p for p in statuses))       # it looked before giving up
         turns = after_calibration(runner)
         self.assertTrue(turns and all(t > 0 for t in turns))                             # a sweep, not a stop
 
@@ -154,8 +154,8 @@ class WalkTests(unittest.TestCase):
         runner.px_per_count = -4.2
         view = pathvision_find(HALL)
         state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
-        with self.assertRaises(Interrupted):               # identical frames: it ends as "not moving", after steering
-            runner.walk_leg(view, view, runner.detector.text_reader(), state)
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state)
+        self.assertEqual(reason, "stuck against something")    # identical frames: a wall, after steering
         moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
         self.assertTrue(moves and all(m < 0 for m in moves), moves)        # left, towards the dashes
         self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/4.2 + 1 for m in moves), moves)
@@ -179,11 +179,14 @@ class WalkTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Loading screen"):
             runner.walk()
 
-    def test_an_unchanging_view_while_walking_is_stuck(self):
-        runner, _ = make_runner(lambda i: AHEAD)
+    def test_an_unchanging_view_while_walking_backs_off_and_looks_elsewhere_before_giving_up(self):
+        runner, events = make_runner(lambda i: AHEAD)
         with self.assertRaisesRegex(Interrupted, "Not moving"):
             runner.walk()
-        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+        recorded = runner.backend.events
+        self.assertIn(("key", "s", True), recorded)                                # it backed off from the wall
+        self.assertTrue(any("stuck" in p for k, p in events if k == "status"))      # and said so
+        self.assertEqual(recorded[-1], ("key", "w", False))
 
     def test_a_health_drop_stops_the_walk(self):
         runner, _ = make_runner(lambda i: AHEAD if i % 2 else HALL, health=(972, 972, 800))
