@@ -1,4 +1,4 @@
-"""Ten native Tk skins, including the original Basic appearance."""
+"""Fifteen native Tk skins, including the original Basic appearance."""
 
 from tkinter import ttk
 
@@ -13,6 +13,13 @@ SKINS={
     "rain":{"name":"Pepper Park Signal","bg":"#29181f","fg":"#f7dce6","panel":"#4d2738","input":"#150b12","accent":"#ff83b3","muted":"#ce9dae","edge":"#a34b71","font":"Trebuchet MS","heading":18},
     "psi":{"name":"PSI Resonance","bg":"#302339","fg":"#ecdeed","panel":"#51415e","input":"#190d22","accent":"#d8b9f2","muted":"#c3a8d0","edge":"#91789f","font":"Segoe UI","heading":19},
     "dome":{"name":"Dome Control","bg":"#243541","fg":"#dae8df","panel":"#435864","input":"#0d211f","accent":"#a0dab5","muted":"#adc5c2","edge":"#7c999b","font":"Consolas","heading":17},
+    # Five late-90s media-player inspired skins: LCD readouts, spectrum bars,
+    # bevelled chrome, oscilloscope traces and a compact "shade" title bar.
+    "lcd":{"name":"Graphite LCD","bg":"#2b2c33","fg":"#d9dccf","panel":"#3e404a","input":"#050805","accent":"#3cf06b","muted":"#9aa093","edge":"#6d717e","font":"Consolas","heading":17},
+    "spectrum":{"name":"Spectrum Bars","bg":"#0d0f14","fg":"#e2e6ee","panel":"#1d2230","input":"#000000","accent":"#ffd23a","muted":"#8e97aa","edge":"#3d4a66","font":"Tahoma","heading":17},
+    "chrome":{"name":"Chrome Equalizer","bg":"#9aa3ad","fg":"#11161d","panel":"#c3cad2","input":"#e9eef3","accent":"#1f5fd1","muted":"#3d4651","edge":"#6c7682","font":"Tahoma","heading":18},
+    "visualizer":{"name":"Neon Visualizer","bg":"#140c24","fg":"#e6e0ff","panel":"#271a45","input":"#08040f","accent":"#2ee6e6","muted":"#9d90c4","edge":"#7b3fe4","font":"Trebuchet MS","heading":18},
+    "shade":{"name":"Shade Mode","bg":"#1a2236","fg":"#d6dcf0","panel":"#2a3552","input":"#0b1020","accent":"#f29a2e","muted":"#8d97b5","edge":"#4f5f88","font":"Lucida Console","heading":16},
 }
 
 

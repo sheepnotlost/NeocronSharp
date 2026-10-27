@@ -251,7 +251,7 @@ class ConstructionRunner(VisualRunner):
         dialog=None
         while elapsed<self.settings["dialog_timeout"]:
             frame=self.frame()
-            dialog=self.detector.quantity(frame,checkpoint=self.guard)
+            dialog=self.detector.quantity(frame,checkpoint=self.guard,**({"expected":True} if hasattr(self.detector,"quantity_dense") else {}))
             if dialog is not None:
                 break
             if available==1:

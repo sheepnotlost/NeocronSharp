@@ -23,6 +23,13 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 - A visible horizontal divider/handle drags up/down to resize the bottom Activity log. Keep Start, settings and tabs in the upper pane; the read-only log has a vertical scrollbar and a minimum usable height. Divider resizing is independent of game execution and available in all skins.
 - Counts/settings save on Start; added recipes and appearance/sound preferences can save immediately.
 
+## Scale handling
+
+- The UI scale is continuous (resolution x UI-scale setting; windowed clients any size). Windows may be laid out at different scales from each other and from their heading fonts. Processor and Inventory are found at any scale between .6x and 2.2x; the reference values (.75 to 2.0) are only tried first.
+- Processor: title text proposes a position and font scale; the Start control then fixes the layout scale. Inventory: the title/load labels propose, and the cell grid fits origin and layout scale (accepted only with strong grid contrast). Windows are located independently; one window's scale is never assumed for another.
+- Tooltip text scale is found per UI: remembered/likely scales first, then a fine scan when a tooltip panel is visible; a weak prefix match (>= .52) is accepted only if the OCR line reads as BLUEPRINT. Part numbers stay exact.
+- Tooltip text scale, the quantity title and cube classification adapt when fonts/icons do not match the shipped bitmaps; part numbers stay exact and unreadable states fail safe.
+
 ## Recognition and input invariants
 
 1. Capture only the bound focused game client. Guard focus, identity and size before/after captures and before input.
@@ -174,7 +181,7 @@ Removed 26 Oct 2026 at the user's request (tab, buttons, favorites.py); an old p
 
 ## Appearance and sound
 
-Ten selectable native skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control.
+Fifteen selectable native skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control, plus five inspired by late-90s media-player skins (original palettes and code-drawn art, no third-party artwork): Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode. Decorations stay inside nine-slice border strips so they never sit behind text.
 
 Basic preserves the light appearance. Dead Sector Terminal remains unchanged as the user's favorite. The eight other skins now use distinct code-drawn, nine-slice native panel/button/field/tab artwork, caption typography and header badges: angular RPOS, brushed CronAMP metal, BioLab enamel, Fallen Circuit traces, riveted Tangent Forge, burgundy/magenta Pepper Park neon, geometric PSI and segmented Dome controls. They preserve job data/guards and the basic control arrangement. They are not Winamp .wsz importers or Windows title-bar replacements. Selection persists. Switching back to Basic or Dead Sector restores their original widget layouts and fonts.
 
@@ -227,7 +234,7 @@ Required automated checks:
 - Use the first matching stack; find moved corner/interior source cells; bound scrolling, bottom/no-response and hidden-scrollbar cases.
 - Count 0–5 slots, separate unread, stop at threshold before another transfer and retain output.
 - Validate all catalog rows/quantities, search/category filters, selection persistence, correct recycling tool/result, one Start and focus loss.
-- Select all ten skins without changing job data. Save/reload preferences. Test optional sound and exactly-once notifications without emitting test audio.
+- Select all fifteen skins without changing job data. Save/reload preferences. Test optional sound and exactly-once notifications without emitting test audio.
 - Exercise UI editing/collection/custom recipes and tab independence without hardware input.
 - Verify catalog statuses/source references, unsupported-method blocking, selected-name-only saving, exact/longer-name matching, no Favorites tab or drag selectors, old favorites keys dropped on load, and drags forced to plain left.
 - Verify complete row-major cell coverage before scrolling, short tooltip-delay retries, stale-name rejection, current-header relocation and persistent removal/restoration of Job recipes, including an empty book.

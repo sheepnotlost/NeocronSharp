@@ -1,6 +1,6 @@
 # Neocron Macro Suite
 
-**Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 10 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
+**Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 15 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
 
 The complete current specification is [SPEC-SHEET.md](SPEC-SHEET.md). [TASKS.md](TASKS.md) tracks the requests from this chat. [FEATURE-IDEAS.md](FEATURE-IDEAS.md) separates delivered features from future ideas.
 
@@ -126,6 +126,8 @@ All third-party Python libraries, including the new WinRT bindings, are inside r
 
 The app starts idle. Tech-part mode requires a positive count for at least one stack. Settings are saved automatically on Start. The Start button is disabled during the countdown and batch. Close the app to cancel the countdown.
 
+The suite finds Processor and Inventory at any game resolution, fullscreen or windowed, at any UI scale (about .6x to 2.2x of the reference). If the Processor is not found the status line says so. If a size misbehaves, send diagnostics/latest.png and macro.log.
+
 The current target setup supplied by the user is **2560 x 1440, borderless fullscreen, UI scale 1.7**. The artwork comes from the user's green-UI recording. Detection searches the full client area at multiple rendered scales; positions are never scaled from old fixed screen coordinates.
 
 ## Item → blueprint
@@ -184,7 +186,7 @@ For another computer, extract **Neocron Macro Suite Portable.zip**, keep its com
 
 `--check` validates the saved counts/settings without game input. `--smoke-ui` creates and closes the panel without sending input. Tests include actual recording crops, random Processor positions on 2560 x 1440 frames, rendered scale variants, a synthetic L stack, and simulated relocation between every run.
 
-The detector supports the demonstrated green game HUD. Different **in-game** HUD artwork may require updated templates. The suite's own 10 skins do not alter game detection. A resolution change during a batch stops it; start again at the new size.
+The detector supports the demonstrated green game HUD. Different **in-game** HUD artwork may require updated templates. The suite's own 15 skins do not alter game detection. A resolution change during a batch stops it; start again at the new size.
 
 The user has confirmed successful live tech-part operation. Blueprint mode was checked against all 37 one-second observations in the supplied Weaponpart 9 recording, with translated/scaled ready/busy/completed fixtures and simulated moving-window batches. It has not been tested live by the assistant. Automated tests cover visual recognition, varied research durations, interruption, and focus loss.
 

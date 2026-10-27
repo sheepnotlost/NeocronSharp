@@ -142,6 +142,25 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Exclude personal profiles, logs, diagnostics, recordings, runtime, portable ZIP and local shortcuts; check source files for common credential patterns.
 - [x] Document how to run a source checkout using the portable runtime. Repository publication is tracked by the main branch/remote commit, not the older portable ZIP.
 
+## Any resolution, windowed play — 27 Oct
+
+- [x] Diagnose the windowed 1920x1080 failure from diagnostics/latest.png: the UI rendered at layout ~.80 (Processor) / ~.78 (Inventory) with title fonts at ~.91, between the reference scales (.75/1.0). Every detector failed, then retried silently for ~45 s ("does nothing").
+- [x] Detect the Processor at any scale (.6x–2.2x) with a dense half-resolution title scan; resolve its layout scale separately from the Start button when title and layout differ.
+- [x] Detect the Inventory at any scale; fit its origin and scale from the 8x6 cell grid (titles/labels only propose). Hot-path re-checks of such windows use the grid.
+- [x] Scale-independent cube classification (gray used cube / red / green) when icon bitmaps do not match; tooltip text scale adapts when fonts are not proportional.
+- [x] Status line now says what is being searched for and the game-view size when the Processor is not found.
+- [x] 190 tests incl. the cropped windowed frame and intermediate scales .8–1.8 (replay, not live).
+- [x] Windowed test 27 Oct 03:47: Fast hovered the two cube cells but never read the Weaponpart 9 tooltip. Cause: tooltip text sits at layout scale (.80) where the shipped BLUEPRINT prefix correlates only .60 (< .74 gate), so it was rejected as an unrelated item. Fixed: fine text-scale scan when a tooltip panel is present, provisional accept (>= .52) only if the OCR line reads as BLUEPRINT; scale remembered. Regression test uses the user's real capture.
+- [x] Windowed retest 27 Oct 04:05: the macro hovered the right cube but read no tooltip. A hover-only live capture showed the tooltip on screen; cause: once Processor detection set the heading ratio, the text-scale search chose a finer scale whose black-box test fails, so the tooltip returned None. Panel presence is now tested at several normalizations; the real hover capture reads Weaponpart 9 and is a regression fixture.
+- [x] Windowed retest 04:17: found and dragged the stack, then stopped: the quantity dialog was on screen (already 1) but undetected. The dialog is its own window at its own scale (.77 vs Processor .80). Added a dense dialog search used when a dialog is expected; the scale is remembered. Regression test uses the real capture.
+- [ ] Not verified live at the windowed size: tooltip reading, quantity dialog and a full build. Scales below ~.7 and above ~2.1 are unreliable.
+
+## Release prep — 27 Oct
+
+- [x] Scrub personal Windows paths (user folder, recordings folder) from tracked docs; commit identity is the GitHub noreply address.
+- [x] Add five media-player inspired skins with original code-drawn art: Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode. 194 tests pass.
+- [x] Commit and push to GitHub on a branch.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

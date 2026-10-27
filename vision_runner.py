@@ -52,6 +52,11 @@ class VisualRunner(ResearchRunner):
                 return frame, self.detector.processor(frame, checkpoint=self.guard)
             except NotFound as exc:
                 last_error = exc
+                if attempt == 0:
+                    shape = getattr(frame, "shape", None)
+                    size = f" in the {shape[1]}x{shape[0]} game view" if shape else ""
+                    self.emit("status", f"Looking for the Processor{size}. "
+                              "Open it fully, uncovered and inside the game window.")
                 self.wait(0.25, safe_pause=True)
         raise Interrupted(f"{last_error} No stale coordinates were used.")
 
