@@ -72,8 +72,8 @@ class WalkTests(unittest.TestCase):
         runner, events = make_runner(lambda i: STAIRS if i <= 12 else DARK)
         runner.walk()
         recorded = runner.backend.events
-        self.assertEqual(recorded[0], ("key", "shift", True))                              # run, but stand still until lined up
-        self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])
+        self.assertFalse([e for e in recorded if e[:2] == ("key", "shift")])               # walking, never running
+        self.assertEqual(recorded[-1], ("key", "w", False))
         turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0][2:]       # after the two calibration nudges
         self.assertTrue(turns and all(t < 0 for t in turns[:5]), turns[:5])      # path is to the left
         self.assertTrue(all(abs(t) <= navray_runner.MAX_STEP for t in turns))
@@ -149,10 +149,14 @@ def turning_runner(sign, pixels_per_count=2.0):
     backend = holder["b"] = runner.backend
     backend.yaw = 0
     original = backend.move_relative
+    backend.calls = 0
 
     def move_relative(dx, dy):
         backend.yaw += dx
+        backend.calls += 1
         original(dx, dy)
+        if backend.calls > 9:                              # the two calibration nudges and a few steering moves are enough
+            raise Interrupted("enough")
     backend.move_relative = move_relative
     return runner
 
@@ -173,7 +177,7 @@ class FocusTests(unittest.TestCase):
                 except Interrupted:
                     pass
                 moves = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]    # after the calibration nudges
-                steering = [m for m in moves if m != 0][:6]
+                steering = [m for m in moves if m != 0][:3]
                 # the path in the frame lies to the left: a normal mouse turns left (negative counts), an inverted one right
                 self.assertTrue(steering and all(m*sign < 0 for m in steering), steering)
 

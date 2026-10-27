@@ -10,6 +10,9 @@ import cv2
 import numpy as np
 
 
+REACH_Y = .80    # a dash lower than this (fraction of the height) is at the character's feet: already reached
+
+
 @dataclass(frozen=True)
 class PathView:
     points: tuple      # (x, y) dash centres, nearest to the camera first
@@ -96,12 +99,14 @@ def _plausible(points, areas, angles, height):
     return True
 
 
-def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.radians(30), height=1440, tries=25):
+def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.radians(30), height=1440, tries=25,
+               anchor=None):
     """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
 
     Every pair is tried for small inputs; busy scenes (hundreds of candidates) try a fixed random
     sample of pairs so the cost stays bounded. Chains are examined best first and the first one
-    that looks like a floor path wins.
+    that looks like a floor path wins. "Best" is the most marks, with a bonus for a chain that begins at
+    `anchor` (the character): the route starts under the character, so that is the one to follow.
     """
     points = np.array([(c[0], c[1]) for c in candidates], dtype=float)
     areas = np.array([c[2] for c in candidates], dtype=float)
@@ -131,7 +136,7 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
     line = np.arctan2(delta[:, 1], delta[:, 0])
     turn = np.abs((angles[None, :] - line[:, None] + np.pi/2) % np.pi - np.pi/2)
     inside &= np.isnan(angles)[None, :] | (turn <= max_turn)
-    seen = set()
+    ranked, seen = [], set()
     for pair in np.argsort(-inside.sum(axis=1), kind="stable")[:tries*4]:
         members = tuple(np.where(inside[pair])[0])
         if len(members) < minimum:
@@ -139,12 +144,18 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
         if members in seen or not enough(members):
             continue
         seen.add(members)
+        bonus = 0.0
+        if anchor is not None:
+            nearest = float(np.min(np.hypot(points[list(members)][:, 0] - anchor[0], points[list(members)][:, 1] - anchor[1])))
+            bonus = 12*max(0.0, 1 - nearest/(.5*height*16/9))
+        ranked.append((len(members) + bonus, members))
+        if len(seen) >= tries*2:
+            break
+    for _, members in sorted(ranked, key=lambda item: -item[0])[:tries]:
         index = list(members)
         if _plausible(points[index], areas[index], angles[index], height):
             chosen = points[index]
             return [tuple(p) for p in chosen[np.argsort(-chosen[:, 1])]]
-        if len(seen) >= tries:
-            break
     return []
 
 
@@ -156,24 +167,24 @@ def find_path(frame, ignore=(), prior=None, tube=.18):
     (a fraction of the width) of its line are considered, so the macro stays on the path it is
     following and ignores everything else.
 
-    The steering point comes from a straight-line fit through the whole chain, evaluated at a
-    look-ahead height, so one stray or flickering dash cannot jerk the aim around.
+    The character goes from one dash to the next: the target is the nearest dash ahead (above the
+    character's feet), and as it is reached the next one becomes the target.
     """
     candidates = dash_candidates(frame, ignore)
     height, width = frame.shape[:2]
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
-    chain = best_chain(candidates, height=height)
+    chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height))
     if not chain:
         return None
     ys = np.array([p[1] for p in chain])
     xs = np.array([p[0] for p in chain])
     if ys.min() > .80*height:
         return None                                        # all of it is at or behind the character's feet
-    slope, intercept = np.polyfit(ys, xs, 1)
+    slope, intercept = np.polyfit(ys, xs, 1)               # kept for tracking: where the line runs
     centre = width/2
-    look_y = min(max(.5*height, float(ys.min())), float(ys.max()))
-    look_x = min(max(float(slope*look_y + intercept), 0.0), float(width))
+    ahead = [p for p in chain if p[1] <= REACH_Y*height]    # chain is nearest first
+    target = ahead[0] if ahead else chain[-1]
     near_x = min(max(float(slope*.75*height + intercept), 0.0), float(width))
-    return PathView(tuple(chain), (look_x, look_y), (look_x - centre)/width, (near_x - centre)/width,
-                    float(slope), float(intercept), chain[-1])
+    return PathView(tuple(chain), (float(target[0]), float(target[1])), (target[0] - centre)/width,
+                    (near_x - centre)/width, float(slope), float(intercept), chain[-1])

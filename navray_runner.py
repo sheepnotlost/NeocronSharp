@@ -26,7 +26,7 @@ SEARCH_STEP = 60         # mouse counts per look while turning to find the path
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
 SCAN_PX = 220            # how far the view sweeps per look while scanning all round for the path
 SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
-LATERAL_W = .35          # share of the steering that pulls the character back onto the line itself
+LATERAL_W = 0.0          # share of the steering that looks at the line's position instead of the next dash (0 = next dash only)
 JUMP = .25               # a reading this far from the smoothed one is held back for a moment (stray dashes)
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 3.0
@@ -319,8 +319,7 @@ class NavRayRunner(VisualRunner):
 
     def walk(self):
         reader = self.detector.text_reader()
-        self.backend.key("shift", True)                  # run (only acts while moving)
-        steering = Steering()
+        steering = Steering()                            # walking pace: no running while the dash-to-dash logic is tested
         forward = False                                  # stand still until a path is in view and lined up
 
         def go(on):
@@ -412,7 +411,6 @@ class NavRayRunner(VisualRunner):
                         self.backend.move_relative(last_side*SEARCH_STEP//2, 0)   # lost it: look back towards where it was
                 self.sleep(.005)
         finally:
-            self.backend.key("shift", False)
             self.backend.key("w", False)
 
     # ---- sequence ----

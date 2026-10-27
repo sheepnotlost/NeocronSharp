@@ -71,6 +71,18 @@ class PathVisionTests(unittest.TestCase):
             cv2.fillConvexPoly(frame, np.round(corners).astype(np.int32), colour)
         self.assertIsNone(pathvision.find_path(frame))
 
+    def test_dashes_running_straight_ahead_beat_a_bigger_chain_on_a_far_sign(self):
+        # Live frame: the real path leads straight up from the character; a glowing sign top right has more marks.
+        view = pathvision.find_path(load("navray_straight_ahead_2000.png"))
+        self.assertIsNotNone(view)
+        self.assertLess(abs(view.error), .05)                          # the next dash is dead ahead
+        self.assertTrue(all(900 < x < 1100 for x, _ in view.points), view.points)
+
+    def test_the_next_dash_is_the_nearest_one_ahead_of_the_character(self):
+        view = pathvision.find_path(load("navray_straight_ahead_2000.png"))
+        ahead = [p for p in view.points if p[1] <= pathvision.REACH_Y*1125]
+        self.assertEqual(view.aim, ahead[0])                           # nearest first, then the next one as it is reached
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])
