@@ -519,10 +519,18 @@ class App:
         browser=self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
         self.start_button.configure(state="disabled" if browser else "normal")
 
+    def materials_for(self,key):
+        """Saved or built-in labels, else the catalog's parts with guessed labels to correct."""
+        known=gogo.ingredients_for(key,self.profile)
+        if known:return gogo.format_materials(known)
+        name=self.recipes.get(key,{}).get("name")
+        row=next((r for r in self.build_catalog_data["recipes"] if r["name"]==name and r.get("parts")),None)
+        return gogo.format_materials(gogo.materials_from_parts(row["parts"])) if row else ""
+
     def select_recipe(self):
         key=find_recipe(self.construction_recipe.get(),self.recipes)
         self.recipe_aliases.set(", ".join(self.recipes[key].get("aliases",())) if key else "")
-        self.materials_text.set(gogo.format_materials(gogo.ingredients_for(key,self.profile)) if key else "")
+        self.materials_text.set(self.materials_for(key) if key else "")
         self.refresh_recipe()
 
     def save_custom_recipe(self):
@@ -568,7 +576,7 @@ class App:
         selected=self.recipes.get(construction["recipe"],{})
         self.construction_recipe.set(selected.get("name",""))
         self.recipe_aliases.set(", ".join(selected.get("aliases",())))
-        self.materials_text.set(gogo.format_materials(gogo.ingredients_for(construction["recipe"],self.profile)) if construction["recipe"] else "")
+        self.materials_text.set(self.materials_for(construction["recipe"]) if construction["recipe"] else "")
         self.construction_available.set(str(construction["available"]))
         self.construction_count.set(str(construction["count"]))
         self.search_mode.set(SEARCH_LABELS[construction.get("search_mode","fast")])

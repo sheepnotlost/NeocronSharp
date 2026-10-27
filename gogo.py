@@ -21,7 +21,30 @@ BATCH = 15
 INGREDIENT_CODES = {
     "weaponpart_7": {"Trisol": "TRS", "Metal D": "MET", "Arillium": "ARI", "Solantium": "SOL"},
     "weaponpart_9": {"Gamonin": "GAM", "Metal D": "MET", "Solantium": "SOL", "Strastin": "STS", "Tiberal": "TIB"},
+    # Finished parts are labelled W<number> (W6, W7, W9, W10 seen on real stacks).
+    "holy_heal": {f"Tangent Weaponpart {n}": f"W{n}" for n in (9, 7, 6, 5, 4, 1)},
 }
+
+
+def default_code(name):
+    """Best guess at the label the game prints on an ingredient's stack.
+
+    Known ingredients first; finished Weaponparts show as W<number>; otherwise the first
+    three letters (right for most). Wrong guesses are fixed in the Materials row.
+    """
+    for codes in INGREDIENT_CODES.values():
+        if name in codes:
+            return codes[name]
+    match = re.fullmatch(r"Tangent Weaponpart (\d+)", name.strip())
+    if match:
+        return "W" + match.group(1)
+    letters = re.sub(r"[^A-Za-z]", "", name).upper()
+    return letters[:3] if len(letters) >= 2 else "XXX"
+
+
+def materials_from_parts(parts):
+    """[{quantity, name}] from the catalog -> {name: default label}."""
+    return {part["name"]: default_code(part["name"]) for part in parts or []}
 
 
 @dataclass(frozen=True)

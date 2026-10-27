@@ -158,6 +158,14 @@ class MaterialsListTests(unittest.TestCase):
         profile["materials"] = {"custom_x": {"Zinc": "Z"}}
         with self.assertRaises(ValueError):validate_profile(profile, require_ready=False)
 
+    def test_catalog_parts_become_a_materials_row_with_guessed_labels(self):
+        parts = [{"quantity": 1, "name": "Tangent Weaponpart 3"}, {"quantity": 2, "name": "Tangent Weaponpart 10"},
+                 {"quantity": 1, "name": "Gamonin"}, {"quantity": 1, "name": "Trisol"}, {"quantity": 1, "name": "Zinc Oxide"}]
+        self.assertEqual(gogo.materials_from_parts(parts),
+                         {"Tangent Weaponpart 3": "W3", "Tangent Weaponpart 10": "W10", "Gamonin": "GAM", "Trisol": "TRS", "Zinc Oxide": "ZIN"})
+        self.assertEqual(gogo.materials_from_parts(None), {})
+        self.assertEqual(gogo.ingredients_for("holy_heal")["Tangent Weaponpart 9"], "W9")
+
     def test_a_refill_for_a_recipe_without_any_list_explains_what_to_do(self):
         with self.assertRaisesRegex(LookupError, "labels are not known"):gogo.plan_refill("custom_zzz", {})
 

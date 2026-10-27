@@ -175,6 +175,14 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] Interface trimmed (27 Oct): removed the "Prepare in Neocron" panel, the Research detection/sequence/start-and-stop explainer panels, recipe ingredient and catalog paragraphs, the recycling explainer and the source/retrieval boilerplate. Remaining static labels are one short line each; a test guards against wordy labels returning.
 
+## Recipe materials from the web — 27 Oct
+
+- [x] Per-recipe Materials row (Name=LABEL), saved in the profile, used by GoGuardian refills; Holy Heal added to the built-in table.
+- [x] `tools/fetch_recipes.py` written; item pages expose "Parts:"; tested on 12 items.
+- [x] Default labels guessed from catalog parts (`gogo.default_code`).
+- [ ] Run the full fetch (resumable), review the data, update tests that assumed empty ingredients (e.g. Crahn Blessed Heal), show parts in the Catalog, commit data/construction_catalog.json.
+- [ ] Not verified live: GoGuardian refills for any recipe beyond Weaponpart 9; Holy Heal labels W5/W4/W1 are inferred.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

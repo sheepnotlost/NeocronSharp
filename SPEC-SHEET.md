@@ -133,9 +133,21 @@ Use blueprint recipe saves the selected name to the custom recipe book and opens
 
 ### More Materials in GoGo (optional)
 
-- Off by default. When on, a Start that is not followed by visible progress within 5 s while the blueprint remains loaded is treated as refused for missing materials. The macro finds an open GoGuardian window (OCR of its Take All / Sort / Stack strip, any scale), reads each stack's three-letter label, and moves at most 15 of each ingredient the built-in recipe needs into Inventory, then presses Start again (at most twice per build). Ingredient labels are known only for Weaponpart 7/9; other recipes report that refills are unavailable.
+- Off by default. When on, a Start that is not followed by visible progress within 5 s while the blueprint remains loaded is treated as refused for missing materials. The macro finds an open GoGuardian window (OCR of its Take All / Sort / Stack strip, any scale), reads each stack's three-letter label, and moves at most 15 of each ingredient the built-in recipe needs into Inventory, then presses Start again (at most twice per build). Label codes come from the recipe's **Materials** list (below).
 - Quantities: the dialog reopens at the last quantity entered, so the macro always types 15, reads the field back (a smaller shown number means the game clamped it to a smaller stack) and only then presses Ok. An unreadable field stops with the dialog left open.
-- Stops with a clear message when the GoGuardian window is not found, holds none of the materials, or Inventory has no free slot.
+- Every ingredient must be found before anything moves: missing labels are searched cell by cell at a larger upscale (one misread character tolerated), and a refill that cannot find all of them stops with the missing names. An unreadable quantity field is accepted (the amount was typed); a readable wrong number is refused.
+- Stops with a clear message when the GoGuardian window is not found, an ingredient is missing, or Inventory has no free slot.
+
+#### Materials list (per recipe, offline)
+
+- One terse row on the Construction Job page: `Name=LABEL, Name=LABEL` (labels 2-4 letters/digits, up to 12 ingredients). Saved in the profile (`materials`, keyed by recipe id) when a batch starts; a saved list overrides the built-in table (Weaponpart 7/9; Holy Heal as Weaponparts 9,7,6,5,4,1 labelled W9...W1, only W6/W7/W9/W10 seen live).
+- With no saved list the row is prefilled from the catalog's Parts (below) with guessed labels: known ingredients first, finished Weaponparts as `W<n>`, otherwise the first three letters. Wrong guesses are corrected once in the row.
+
+#### Recipe parts from Tech Haven (data build step)
+
+- `tools/fetch_recipes.py` (bundled Python, developer tool; the app never goes online) downloads each catalog item's Tech Haven item page (server-rendered, "Parts: 1 x Name"), caches pages under `analysis/techhaven-cache`, and writes `parts` / `ingredients` / `item_url` into `data/construction_catalog.json`. It also strips the "!" status marker from item names (it broke name matching). Requests are spaced 0.6 s apart; interrupted runs resume from the cache.
+- Parts are what the site lists for each item and may differ from the supplied built-in lists (the site lists fewer parts for Weaponpart 9); built-ins are never overwritten by it.
+- Status: tool written and tested on 12 items; the full run and the Catalog display of ingredients are the next step (see CLAUDE-PROMPT.txt).
 
 ### Transfer, Start and completion
 
@@ -212,6 +224,8 @@ profile.json version 1 remains backward compatible. Validate ranges/types and sa
 | construction | Recipe id, available, count, search_mode (fast/all_cells; missing=fast), count_slots, optional stop_at_slots |
 | custom_recipes | Stable ids, names, alias arrays |
 | hidden_recipes | Built-in recipe ids removed from Job; default empty; re-adding restores them |
+| materials | {recipe id: {ingredient: GoGuardian label}}; optional per-recipe override of the built-in table |
+| construction.gogo_refill | Optional More Materials in GoGo; default false |
 | favorites | Removed; an old key is dropped on load and not written back |
 | recycling.recipe | Catalog id or null until selected |
 | preferences | Skin id and stop_sound boolean |
