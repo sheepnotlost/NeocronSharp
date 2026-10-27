@@ -79,6 +79,10 @@ Processor preflight now rejects busy jobs, pending quantity dialogs and unproces
 
 Windowed 1920x1080 failed because UI layout scale (.80/.78) and title font scale (.91) fell between the reference scales and differ from each other. vision.py now has dense scale search, split title/layout anchors (Anchor.heading), grid-fitted Inventory, colour cube classification and adaptive tooltip text scale. Verified on a real frame crop and resized fixtures only; tooltip/dialog/build at the windowed size are not live-verified. Scales below ~.7 or above ~2.1 are unreliable.
 
+## GoGuardian refills (27 Oct)
+
+gogo.py + construction_runner.refill_from_gogo/enter_quantity/inventory_destination. Opt-in setting construction.gogo_refill. Offline-verified on real captures (window, labels); live GoGuardian drags and quantity entry above 1 are unverified.
+
 ## Code map
 
 - app.py: Tk UI, profile collection, tabs, settings, worker coordination, notifications.

@@ -131,6 +131,12 @@ Use blueprint recipe saves the selected name to the custom recipe book and opens
 - The shipped WP7/WP9 pixel templates may supply a name only after their final digit passes a separate digit-only match (≥ .80). If OCR clearly read a different number, neither source authorizes. A custom numbered name read exactly by OCR is not vetoed by a shipped template.
 - To enter quantity 1, click the field, send Ctrl+A, clear with six Backspace and six Delete presses, then type 1. Confirm only when the dialog reads exactly 1.
 
+### More Materials in GoGo (optional)
+
+- Off by default. When on, a Start that is not followed by visible progress within 5 s while the blueprint remains loaded is treated as refused for missing materials. The macro finds an open GoGuardian window (OCR of its Take All / Sort / Stack strip, any scale), reads each stack's three-letter label, and moves at most 15 of each ingredient the built-in recipe needs into Inventory, then presses Start again (at most twice per build). Ingredient labels are known only for Weaponpart 7/9; other recipes report that refills are unavailable.
+- Quantities: the dialog opens at the full stack; the macro enters min(15, stack), reads the field back, and only then presses Ok. An unreadable field stops with the dialog left open.
+- Stops with a clear message when the GoGuardian window is not found, holds none of the materials, or Inventory has no free slot.
+
 ### Transfer, Start and completion
 
 1. Reacquire source/Processor. Verify construction tool and free destination. Permit used empty cubes; reject other pending/unknown inputs.

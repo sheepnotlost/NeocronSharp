@@ -13,6 +13,34 @@ class TextReader:
             raise RuntimeError("Windows English text recognition is unavailable. Enable English OCR in Windows language features.")
         self.owner=threading.get_ident()
 
+    def read_words(self, gray, up=3):
+        """[(text, x, y, w, h)] in the input's own pixel coordinates (light-on-dark text)."""
+        from winrt.windows.graphics.imaging import SoftwareBitmap,BitmapPixelFormat,BitmapAlphaMode
+        from winrt.windows.storage.streams import DataWriter
+        from vision import cv2
+        if threading.get_ident()!=self.owner:
+            raise RuntimeError("Text reader must stay on its construction worker thread.")
+        pad=10
+        image=cv2.copyMakeBorder(cv2.resize(255-gray,None,fx=up,fy=up,interpolation=cv2.INTER_CUBIC),pad,pad,pad,pad,
+                                cv2.BORDER_CONSTANT,value=255)
+        writer=DataWriter()
+        writer.write_bytes(cv2.cvtColor(image,cv2.COLOR_GRAY2BGRA).tobytes())
+        bitmap=SoftwareBitmap.create_copy_from_buffer(writer.detach_buffer(),BitmapPixelFormat.BGRA8,
+                                                       image.shape[1],image.shape[0],BitmapAlphaMode.IGNORE)
+        async def recognize():
+            return await self.engine.recognize_async(bitmap)
+        try:
+            result=asyncio.run(recognize())
+            words=[]
+            for line in result.lines:
+                for word in line.words:
+                    box=word.bounding_rect
+                    words.append((word.text,round((box.x-pad)/up),round((box.y-pad)/up),round(box.width/up),round(box.height/up)))
+            return words
+        finally:
+            bitmap.close()
+            writer.close()
+
     def read(self, gray):
         from winrt.windows.graphics.imaging import SoftwareBitmap,BitmapPixelFormat,BitmapAlphaMode
         from winrt.windows.storage.streams import DataWriter

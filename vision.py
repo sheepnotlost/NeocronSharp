@@ -711,6 +711,12 @@ class Detector:
                 return "unknown"
         return recipe
 
+    def text_reader(self):
+        if self.reader is None:
+            from text_reader import TextReader
+            self.reader = TextReader()
+        return self.reader
+
     def read_text(self, gray):
         key=(gray.shape,gray.tobytes())
         if key not in self.ocr_cache:
@@ -1155,7 +1161,7 @@ class Detector:
                 union = np.logical_or(glyph, self.quantity_one).sum()
                 confirmations+=np.logical_and(glyph, self.quantity_one).sum()/max(1,union)>=.65
         is_one=not multiple and confirmations>=2
-        return {"field": anchor.point(177, 25), "ok": anchor.point(286, 25), "one": bool(is_one)}
+        return {"field": anchor.point(177, 25), "ok": anchor.point(286, 25), "one": bool(is_one), "scale": anchor.scale}
 
     def quantity_dense(self, frame, checkpoint):
         """Find the Number of Units dialog at any UI scale: title proposes, Half confirms."""

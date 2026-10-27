@@ -161,6 +161,14 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Add five media-player inspired skins with original code-drawn art: Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer, Shade Mode. 194 tests pass.
 - [x] Commit and push to GitHub on a branch.
 
+## More Materials in GoGo — 27 Oct
+
+- [x] Optional Construction checkbox (saved as construction.gogo_refill, default off). Built-in recipes only (material labels known: WP7 TRS/MET/ARI/SOL; WP9 GAM/MET/SOL/STS/TIB).
+- [x] Trigger: with the option on, a Start that never turns busy for 5 s while the blueprint stays loaded counts as refused (missing materials). The macro then refills and presses Start again, at most twice per build.
+- [x] GoGuardian is located from its "Take All / Sort / Stack" strip by local OCR at any scale; stacks are read by their 3-letter label. Up to 15 of each needed ingredient are dragged into Inventory (onto the same stack when present, else the first empty cell). The quantity dialog opens at the full stack, so the amount is capped to what it holds and read back before Ok.
+- [x] The GoGuardian window must be open beside Inventory and Processor. 202 tests incl. two real captures.
+- [ ] Not verified live: the GoGuardian drags, quantity entry above 1, and the refused-start trigger. Stack counts (xN) on the live capture could not be read by OCR, so the dialog's default is used instead.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

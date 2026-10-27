@@ -425,6 +425,12 @@ class App:
         stop_value.pack(side="left",padx=6)
         ttk.Label(stop_row,text="or more slots; leave the result in the Processor",wraplength=320).pack(side="left")
         self.editable.extend((stop_check,stop_value))
+        self.gogo_refill=tk.BooleanVar(value=False)
+        gogo_check=ttk.Checkbutton(form,text="More Materials in GoGo",variable=self.gogo_refill)
+        gogo_check.grid(row=11,column=0,columnspan=2,sticky="w",pady=(12,0));self.editable.append(gogo_check)
+        ttk.Label(form,text="Keep a GoGuardian window open. When a build is refused for missing materials, up to 15 of each "
+                  "needed ingredient are moved into Inventory, then Start is pressed again. Built-in recipes only.",
+                  wraplength=485).grid(row=12,column=0,columnspan=2,sticky="w",pady=(4,0))
         settings=ttk.LabelFrame(body,text="Transfer controls",padding=12)
         settings.grid(row=1,column=0,sticky="new",padx=(0,14),pady=(12,0))
         settings.columnconfigure(1,weight=1)
@@ -620,6 +626,7 @@ class App:
         self.construction_count.set(str(construction["count"]))
         self.search_mode.set(SEARCH_LABELS[construction.get("search_mode","fast")])
         self.count_slots.set(construction.get("count_slots",False))
+        self.gogo_refill.set(construction.get("gogo_refill",False))
         self.stop_on_slots.set(construction.get("stop_at_slots") is not None)
         self.minimum_slots.set(str(construction.get("stop_at_slots") if construction.get("stop_at_slots") is not None else 4))
         self.refresh_recipe()
@@ -678,6 +685,7 @@ class App:
                                          "available":int(self.construction_available.get()),
                                          "count":int(self.construction_count.get()),
                                          "search_mode":next(k for k,v in SEARCH_LABELS.items() if v==self.search_mode.get()),
+                                         "gogo_refill":self.gogo_refill.get(),
                                          "count_slots":self.count_slots.get() or self.stop_on_slots.get(),
                                          "stop_at_slots":int(self.minimum_slots.get()) if self.stop_on_slots.get() else None}
             else:

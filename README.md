@@ -85,6 +85,10 @@ uses its existing Tesseract recognition; crafting retains Windows OCR. Both run
 locally. See [integration specification](TECH-COUNTER-INTEGRATION.md) and
 [counter notices](ntc/NOTICE.md).
 
+## More Materials in GoGo
+
+Tick **More Materials in GoGo** on the Construction Job page and keep a GoGuardian window open next to Inventory and Processor. If a build is refused because materials ran out, the macro moves up to 15 of each needed ingredient from GoGuardian into Inventory, then presses Start again. It works for the built-in Weaponpart 7 and 9 recipes. GoGuardian transfers have not been tested live yet; send macro.log and diagnostics/latest.png if it stops.
+
 ## Slot counter and chosen-slot stop
 
 Enable **Count slots on constructed weapons / spells** to track 0–5 slot totals for the current batch. Unread values are separate from zero; weapon parts are N/A. The option adds a result-tooltip inspection after completion.

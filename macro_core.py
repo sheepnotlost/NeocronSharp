@@ -62,6 +62,8 @@ def validate_profile(profile, require_ready=True):
         raise ValueError("Choose a supported construction recipe.")
     if type(construction.get("count_slots",False)) is not bool:
         raise ValueError("Slot counter must be enabled or disabled.")
+    if type(construction.get("gogo_refill",False)) is not bool:
+        raise ValueError("GoGuardian refills must be enabled or disabled.")
     if construction.get("search_mode","fast") not in ("fast","all_cells"):
         raise ValueError("Choose Fast datacubes or Thorough every-cell inventory search.")
     minimum=construction.get("stop_at_slots")
@@ -325,6 +327,32 @@ class ResearchRunner:
             self.checkpoint()
             self.backend.key("1", True)
             self.wait(0.05)
+        finally:
+            self.backend.release_all()
+
+    def type_number(self, number):
+        """Replace a quantity field's content with a positive integer (same clearing as type_one)."""
+        digits = str(int(number))
+        try:
+            self.checkpoint()
+            self.backend.key("ctrl", True)
+            self.checkpoint()
+            self.backend.key("a", True)
+            self.wait(0.05)
+            self.backend.key("a", False)
+            self.backend.key("ctrl", False)
+            for name in ("backspace", "delete"):
+                for _ in range(6):
+                    self.checkpoint()
+                    self.backend.key(name, True)
+                    self.wait(0.02)
+                    self.backend.key(name, False)
+            for digit in digits:
+                self.checkpoint()
+                self.backend.key(digit, True)
+                self.wait(0.05)
+                self.backend.key(digit, False)
+                self.wait(0.03)
         finally:
             self.backend.release_all()
 
