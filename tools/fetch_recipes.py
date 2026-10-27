@@ -37,7 +37,7 @@ def fetch(url, name):
 
 def clean(name):
     """Row names can carry the status marker ("Crahn Fire Halo !"); drop it."""
-    return re.sub(r"\s*!\s*$", "", html.unescape(name).strip())
+    return re.sub(r"\s*!.*$", "", html.unescape(name).strip())
 
 
 def listing_slugs(page):

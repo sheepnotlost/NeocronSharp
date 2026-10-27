@@ -527,6 +527,13 @@ class App:
         row=next((r for r in self.build_catalog_data["recipes"] if r["name"]==name and r.get("parts")),None)
         return gogo.format_materials(gogo.materials_from_parts(row["parts"])) if row else ""
 
+    def typed_aliases(self):
+        """Aliases belong to a saved recipe; a newly typed name starts with none (the hidden
+        field still holds the previous recipe's, which would clash with it)."""
+        try:known=find_recipe(self.construction_recipe.get(),self.recipes)
+        except ValueError:known=None
+        return self.recipe_aliases.get().split(",") if known else []
+
     def select_recipe(self):
         key=find_recipe(self.construction_recipe.get(),self.recipes)
         self.recipe_aliases.set(", ".join(self.recipes[key].get("aliases",())) if key else "")
@@ -537,7 +544,7 @@ class App:
         if self.locked():return
         try:
             profile=deepcopy(self.profile)
-            key=add_recipe(profile,self.construction_recipe.get(),self.recipe_aliases.get().split(","))
+            key=add_recipe(profile,self.construction_recipe.get(),self.typed_aliases())
             profile["construction"]["recipe"]=key
             save_profile(self.profile_path,profile)
             self.profile=profile
@@ -619,7 +626,7 @@ class App:
                 profile["operation"]="construction"
                 key=find_recipe(self.construction_recipe.get(),catalog(profile))
                 if key is None:
-                    key=add_recipe(profile,self.construction_recipe.get(),self.recipe_aliases.get().split(","))
+                    key=add_recipe(profile,self.construction_recipe.get(),self.typed_aliases())
                 typed=gogo.parse_materials(self.materials_text.get())
                 if typed and typed!=(gogo.INGREDIENT_CODES.get(key) or {}):
                     profile.setdefault("materials",{})[key]=typed

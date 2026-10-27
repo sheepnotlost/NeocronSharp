@@ -180,7 +180,7 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Per-recipe Materials row (Name=LABEL), saved in the profile, used by GoGuardian refills; Holy Heal added to the built-in table.
 - [x] `tools/fetch_recipes.py` written; item pages expose "Parts:"; tested on 12 items.
 - [x] Default labels guessed from catalog parts (`gogo.default_code`).
-- [ ] Run the full fetch (resumable), review the data, update tests that assumed empty ingredients (e.g. Crahn Blessed Heal), show parts in the Catalog, commit data/construction_catalog.json.
+- [x] Full fetch done: 478/1,263 items list Parts; WP7, WP9 and Holy Heal match the built-ins; tests updated; Catalog shows parts; Materials row prefills from them; data committed.
 - [ ] Not verified live: GoGuardian refills for any recipe beyond Weaponpart 9; Holy Heal labels W5/W4/W1 are inferred.
 
 ## Validation truth

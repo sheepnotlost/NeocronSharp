@@ -146,8 +146,8 @@ Use blueprint recipe saves the selected name to the custom recipe book and opens
 #### Recipe parts from Tech Haven (data build step)
 
 - `tools/fetch_recipes.py` (bundled Python, developer tool; the app never goes online) downloads each catalog item's Tech Haven item page (server-rendered, "Parts: 1 x Name"), caches pages under `analysis/techhaven-cache`, and writes `parts` / `ingredients` / `item_url` into `data/construction_catalog.json`. It also strips the "!" status marker from item names (it broke name matching). Requests are spaced 0.6 s apart; interrupted runs resume from the cache.
-- Parts are what the site lists for each item and may differ from the supplied built-in lists (the site lists fewer parts for Weaponpart 9); built-ins are never overwritten by it.
-- Status: tool written and tested on 12 items; the full run and the Catalog display of ingredients are the next step (see CLAUDE-PROMPT.txt).
+- Run of 27 Oct 2026: 478 of 1,263 items list Parts (the rest, such as ammo and armor, list none); the site's lists for Weaponpart 7, Weaponpart 9 and Holy Heal match the built-in tables exactly. Built-in tables are never overwritten by the site data.
+- The Catalog page shows an item's Parts; selecting a recipe prefills the Materials row from them.
 
 ### Transfer, Start and completion
 
