@@ -1,0 +1,1630 @@
+{
+  "source": "https://rares.techhaven.org/en/list-rares",
+  "fetched": "2026-10-06",
+  "note": "Parts needed to build each rare, from the source page. An in-game tech is named '<Part> Part Of <item>' (Technology, Hull, Frame, Core, Component, Additional Technology). Match an item with 'key' (lowercase, dots and apostrophes removed, other punctuation as a space).",
+  "slots": [
+    "Technology",
+    "Hull",
+    "Frame",
+    "Core",
+    "Component",
+    "Additional Technology"
+  ],
+  "items": [
+    {
+      "id": 145,
+      "name": "Terminator",
+      "group": "Rifles (Low-Tech)",
+      "requirements": "DEX:87 R-C:108",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "87",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/terminator",
+      "key": "terminator"
+    },
+    {
+      "id": 146,
+      "name": "Pain Easer",
+      "group": "Rifles (Low-Tech)",
+      "requirements": "DEX:93 R-C:111",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "93",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/pain-easer",
+      "key": "pain easer"
+    },
+    {
+      "id": 203,
+      "name": "Desperado",
+      "group": "Rifles (Low-Tech)",
+      "requirements": "DEX:103 R-C:116",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "103",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/desperado",
+      "key": "desperado"
+    },
+    {
+      "id": 202,
+      "name": "Libra",
+      "group": "Rifles (Low-Tech)",
+      "requirements": "DEX:104 R-C:117",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "104",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/libra",
+      "key": "libra"
+    },
+    {
+      "id": 147,
+      "name": "Ray of God",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "R-C:114 DEX:98 T-C:82",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "98",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/ray-of-god",
+      "key": "ray of god"
+    },
+    {
+      "id": 148,
+      "name": "Thunderstorm",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:101 T-C:83 R-C:115",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "101",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/thunderstorm",
+      "key": "thunderstorm"
+    },
+    {
+      "id": 149,
+      "name": "Redeemer",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:105 T-C:85 R-C:117",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "105",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/redeemer",
+      "key": "redeemer"
+    },
+    {
+      "id": 229,
+      "name": "Second Love",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:106 R-C:118 T-C:85",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "106",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/second-love",
+      "key": "second love"
+    },
+    {
+      "id": 150,
+      "name": "Healing Light",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:110 T-C:87 R-C:120",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/healing-light",
+      "key": "healing light"
+    },
+    {
+      "id": 151,
+      "name": "Silent Hunter",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:111 T-C:87 R-C:120",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "111",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/silent-hunter",
+      "key": "silent hunter"
+    },
+    {
+      "id": 152,
+      "name": "First Love",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:114 T-C:89 R-C:122",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "114",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/first-love",
+      "key": "first love"
+    },
+    {
+      "id": 153,
+      "name": "Disruptor",
+      "group": "Rifles (Hi-Tech)",
+      "requirements": "DEX:115 T-C:89 R-C:122",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/disruptor",
+      "key": "disruptor"
+    },
+    {
+      "id": 154,
+      "name": "Wyatt Earp",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:88 P-C:109",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "88",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/wyatt-earp",
+      "key": "wyatt earp"
+    },
+    {
+      "id": 155,
+      "name": "Liberator",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:91 P-C:110",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "91",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/liberator",
+      "key": "liberator"
+    },
+    {
+      "id": 231,
+      "name": "The Anarchist",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:101 P-C:115",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "101",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/the-anarchist",
+      "key": "the anarchist"
+    },
+    {
+      "id": 230,
+      "name": "Sucker Punch",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:105 P-C:117",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "105",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/sucker-punch",
+      "key": "sucker punch"
+    },
+    {
+      "id": 199,
+      "name": "Craftsmans Dream 6100",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:107 P-C:118",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "107",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/craftsmans-dream-6100",
+      "key": "craftsmans dream 6100"
+    },
+    {
+      "id": 200,
+      "name": "Dreadfire Prototype 03",
+      "group": "Pistols (Low-Tech)",
+      "requirements": "DEX:110 P-C:120",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/dreadfire-prototype-03",
+      "key": "dreadfire prototype 03"
+    },
+    {
+      "id": 156,
+      "name": "Judge",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:100 P-C:115 T-C:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/judge",
+      "key": "judge"
+    },
+    {
+      "id": 201,
+      "name": "Steiner F.P 1.0",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:102 P-C:116 T-C:84",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "102",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/steiner-f-p-1-0",
+      "key": "steiner fp 10"
+    },
+    {
+      "id": 160,
+      "name": "Slasher",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:103 P-C:116 T-C:84",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "103",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/slasher",
+      "key": "slasher"
+    },
+    {
+      "id": 157,
+      "name": "Beam of Hell",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:105 P-C:117 T-C:85",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "105",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/beam-of-hell",
+      "key": "beam of hell"
+    },
+    {
+      "id": 158,
+      "name": "Ray of Last Hope",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:108 P-C:119 T-C:86",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/ray-of-last-hope",
+      "key": "ray of last hope"
+    },
+    {
+      "id": 159,
+      "name": "Executioner",
+      "group": "Pistols (Hi-Tech)",
+      "requirements": "DEX:112 P-C:121 T-C:88",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "112",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/executioner",
+      "key": "executioner"
+    },
+    {
+      "id": 206,
+      "name": "Winding Argument",
+      "group": "Heavy Weapons (Low-Tech)",
+      "requirements": "STR:92 H-C:111",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "92",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/winding-argument",
+      "key": "winding argument"
+    },
+    {
+      "id": 204,
+      "name": "Equilibrium of Forces",
+      "group": "Heavy Weapons (Low-Tech)",
+      "requirements": "STR:102 H-C:118",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "102",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/equilibrium-of-forces",
+      "key": "equilibrium of forces"
+    },
+    {
+      "id": 193,
+      "name": "Devourer",
+      "group": "Heavy Weapons (Low-Tech)",
+      "requirements": "STR:108 H-C:119",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/devourer",
+      "key": "devourer"
+    },
+    {
+      "id": 161,
+      "name": "Moon striker",
+      "group": "Heavy Weapons (Low-Tech)",
+      "requirements": "STR:110 H-C:120",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/moon-striker",
+      "key": "moon striker"
+    },
+    {
+      "id": 205,
+      "name": "Summer Leech",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:97 H-C:113 T-C:82",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "97",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/summer-leech",
+      "key": "summer leech"
+    },
+    {
+      "id": 162,
+      "name": "Ravager",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:100 H-C:115 T-C:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/ravager",
+      "key": "ravager"
+    },
+    {
+      "id": 163,
+      "name": "Cursed Soul",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:105 H-C:117 T-C:85",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "105",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/cursed-soul",
+      "key": "cursed soul"
+    },
+    {
+      "id": 164,
+      "name": "Malediction",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:107 H-C:118 T-C:86",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "107",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/malediction",
+      "key": "malediction"
+    },
+    {
+      "id": 165,
+      "name": "Doom Beamer",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:112 H-C:121 T-C:88",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "112",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/doom-beamer",
+      "key": "doom beamer"
+    },
+    {
+      "id": 207,
+      "name": "Creed",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:114 H-C:122 T-C:89",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "114",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/creed",
+      "key": "creed"
+    },
+    {
+      "id": 237,
+      "name": "Eradicator",
+      "group": "Heavy Weapons (Hi-Tech)",
+      "requirements": "STR:115 H-C:122 T-C:89",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/eradicator",
+      "key": "eradicator"
+    },
+    {
+      "id": 166,
+      "name": "Paw of Tiger",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:80 M-C:105",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "80",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/paw-of-tiger",
+      "key": "paw of tiger"
+    },
+    {
+      "id": 172,
+      "name": "Perforator",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:82 M-C:105",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "82",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/perforator",
+      "key": "perforator"
+    },
+    {
+      "id": 167,
+      "name": "Peacemaker",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:94 M-C:112",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "94",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/peacemaker",
+      "key": "peacemaker"
+    },
+    {
+      "id": 168,
+      "name": "Vein Ripper",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:97 M-C:113",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "97",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/vein-ripper",
+      "key": "vein ripper"
+    },
+    {
+      "id": 169,
+      "name": "Blade of Ceres",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:100 M-C:115",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/blade-of-ceres",
+      "key": "blade of ceres"
+    },
+    {
+      "id": 227,
+      "name": "Solingen's Finest",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:102 M-C:116",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "102",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/solingens-finest",
+      "key": "solingens finest"
+    },
+    {
+      "id": 170,
+      "name": "The Dentist",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:104 M-C:117",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "104",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/the-dentist",
+      "key": "the dentist"
+    },
+    {
+      "id": 226,
+      "name": "Blackmist's Remorse",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:106 M-C:118",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "106",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/blackmists-remorse",
+      "key": "blackmists remorse"
+    },
+    {
+      "id": 221,
+      "name": "Zsusun",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "M-C:119 STR:108",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/zsusun",
+      "key": "zsusun"
+    },
+    {
+      "id": 171,
+      "name": "Paw of Bear",
+      "group": "Melee Weapons (Low-Tech)",
+      "requirements": "STR:112 M-C:121",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "112",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/paw-of-bear",
+      "key": "paw of bear"
+    },
+    {
+      "id": 173,
+      "name": "Thunderbolt",
+      "group": "Melee Weapons (Hi-Tech)",
+      "requirements": "STR:110 M-C:120 T-C:87",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/thunderbolt",
+      "key": "thunderbolt"
+    },
+    {
+      "id": 174,
+      "name": "Devil's Grace",
+      "group": "Melee Weapons (Hi-Tech)",
+      "requirements": "STR:115 M-C:122 T-C:89",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/devils-grace",
+      "key": "devils grace"
+    },
+    {
+      "id": 228,
+      "name": "Holy Caustic Rain",
+      "group": "APU Modules",
+      "requirements": "PSI:100 APU:140 FCS:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-caustic-rain",
+      "key": "holy caustic rain"
+    },
+    {
+      "id": 232,
+      "name": "Holy Evisceration",
+      "group": "APU Modules",
+      "requirements": "PSI:100 APU:140 FCS:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-evisceration",
+      "key": "holy evisceration"
+    },
+    {
+      "id": 175,
+      "name": "Holy Lightning",
+      "group": "APU Modules",
+      "requirements": "FCS:83 PSI:101 APU:140",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "101",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-lightning",
+      "key": "holy lightning"
+    },
+    {
+      "id": 180,
+      "name": "Holy Frostration",
+      "group": "APU Modules",
+      "requirements": "PSI:102 FCS:84 APU:141",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "102",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-frostration",
+      "key": "holy frostration"
+    },
+    {
+      "id": 177,
+      "name": "Holy Fire Apocalypse",
+      "group": "APU Modules",
+      "requirements": "FCS:84 PSI:103 APU:142",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "103",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-fire-apocalypse",
+      "key": "holy fire apocalypse"
+    },
+    {
+      "id": 222,
+      "name": "Holy Unprotector",
+      "group": "APU Modules",
+      "requirements": "PSI:104 APU:143 FCS:85",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "104",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-unprotector",
+      "key": "holy unprotector"
+    },
+    {
+      "id": 178,
+      "name": "Holy Thunderstorm",
+      "group": "APU Modules",
+      "requirements": "FCS:86 PSI:107 APU:145",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "107",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-thunderstorm",
+      "key": "holy thunderstorm"
+    },
+    {
+      "id": 217,
+      "name": "Crahn Holy Antiprotector",
+      "group": "APU Modules",
+      "requirements": "PSI:108 APU:146 FCS:86",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/crahn-holy-antiprotector-1",
+      "key": "crahn holy antiprotector"
+    },
+    {
+      "id": 179,
+      "name": "Holy Firestorm",
+      "group": "APU Modules",
+      "requirements": "FCS:86 PSI:108 APU:146",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-firestorm",
+      "key": "holy firestorm"
+    },
+    {
+      "id": 220,
+      "name": "Holy Pestilence",
+      "group": "APU Modules",
+      "requirements": "FCS:87 PSI:110 APU:147",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-pestilence",
+      "key": "holy pestilence"
+    },
+    {
+      "id": 233,
+      "name": "Holy Voltage",
+      "group": "APU Modules",
+      "requirements": "PSI:110 APU:147 FCS:87",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-voltage",
+      "key": "holy voltage"
+    },
+    {
+      "id": 234,
+      "name": "Holy Frostbite",
+      "group": "APU Modules",
+      "requirements": "PSI:111 APU:148 FCS:87",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "111",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-frostbite",
+      "key": "holy frostbite"
+    },
+    {
+      "id": 236,
+      "name": "Holy Corrosion",
+      "group": "APU Modules",
+      "requirements": "PSI:112 APU:149 FCS:88",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "112",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-corrosion",
+      "key": "holy corrosion"
+    },
+    {
+      "id": 235,
+      "name": "Holy Pyre",
+      "group": "APU Modules",
+      "requirements": "PSI:113 APU:149 FCS:88",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "113",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-pyre",
+      "key": "holy pyre"
+    },
+    {
+      "id": 219,
+      "name": "Holy Deflection",
+      "group": "PPU Modules",
+      "requirements": "PSI:100 PPU:140 FCS:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-deflection",
+      "key": "holy deflection"
+    },
+    {
+      "id": 225,
+      "name": "Holy Restoration",
+      "group": "PPU Modules",
+      "requirements": "PSI:100 PPU:140 FCS:83",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "100",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-restoration",
+      "key": "holy restoration"
+    },
+    {
+      "id": 224,
+      "name": "Holy Protection",
+      "group": "PPU Modules",
+      "requirements": "PSI:104 PPU:143 FCS:85",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "104",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-protection",
+      "key": "holy protection"
+    },
+    {
+      "id": 182,
+      "name": "Holy True Sight Sanctum",
+      "group": "PPU Modules",
+      "requirements": "PSI:106 FCS:85 PPU:144",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "106",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-true-sight-sanctum",
+      "key": "holy true sight sanctum"
+    },
+    {
+      "id": 223,
+      "name": "Holy Absorption",
+      "group": "PPU Modules",
+      "requirements": "PSI:108 PPU:146 FCS:86",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-absorption",
+      "key": "holy absorption"
+    },
+    {
+      "id": 216,
+      "name": "Holy Exorcist",
+      "group": "PPU Modules",
+      "requirements": "PSI:108 PPU:146 FCS:86",
+      "part_kind": "T-Part",
+      "parts_needed": 6,
+      "tech_level": "108",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-exorcist",
+      "key": "holy exorcist"
+    },
+    {
+      "id": 183,
+      "name": "Holy Catharsis",
+      "group": "PPU Modules",
+      "requirements": "PSI:110 FCS:87 PPU:147",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "110",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/holy-catharsis",
+      "key": "holy catharsis"
+    },
+    {
+      "id": 209,
+      "name": "Crahn Combat Core CPU",
+      "group": "Brain Implants",
+      "requirements": "PSI:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/crahn-combat-core-cpu",
+      "key": "crahn combat core cpu"
+    },
+    {
+      "id": 210,
+      "name": "Crahn Support Core CPU",
+      "group": "Brain Implants",
+      "requirements": "PSI:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/crahn-support-core-cpu",
+      "key": "crahn support core cpu"
+    },
+    {
+      "id": 213,
+      "name": "Marines CPU",
+      "group": "Brain Implants",
+      "requirements": "STR:80",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/marines-cpu",
+      "key": "marines cpu"
+    },
+    {
+      "id": 211,
+      "name": "Special Forces CPU",
+      "group": "Brain Implants",
+      "requirements": "DEX:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/special-forces-cpu",
+      "key": "special forces cpu"
+    },
+    {
+      "id": 214,
+      "name": "Special Rigger Interface",
+      "group": "Brain Implants",
+      "requirements": "DEX:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/special-rigger-interface",
+      "key": "special rigger interface"
+    },
+    {
+      "id": 215,
+      "name": "Special Science CPU",
+      "group": "Brain Implants",
+      "requirements": "INT:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/special-science-cpu",
+      "key": "special science cpu"
+    },
+    {
+      "id": 212,
+      "name": "Special SWAT Processor",
+      "group": "Brain Implants",
+      "requirements": "DEX:85",
+      "part_kind": "L-Part",
+      "parts_needed": 5,
+      "tech_level": "85",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/special-swat-processor",
+      "key": "special swat processor"
+    },
+    {
+      "id": 198,
+      "name": "Area MC5 Balistic CPU",
+      "group": "MC5 Chips",
+      "requirements": "STR:85",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-balistic-cpu",
+      "key": "area mc5 balistic cpu"
+    },
+    {
+      "id": 197,
+      "name": "Area MC5 Close Combat Projector",
+      "group": "MC5 Chips",
+      "requirements": "DEX:95",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-close-combat-projector",
+      "key": "area mc5 close combat projector"
+    },
+    {
+      "id": 187,
+      "name": "Area MC5 Dimension Splitter",
+      "group": "MC5 Chips",
+      "requirements": "PSI:95",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-dimension-splitter",
+      "key": "area mc5 dimension splitter"
+    },
+    {
+      "id": 188,
+      "name": "Area MC5 Distance Projector",
+      "group": "MC5 Chips",
+      "requirements": "DEX:95",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-distance-projector",
+      "key": "area mc5 distance projector"
+    },
+    {
+      "id": 189,
+      "name": "Area MC5 Hawking Chip",
+      "group": "MC5 Chips",
+      "requirements": "INT:95",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-hawking-chip",
+      "key": "area mc5 hawking chip"
+    },
+    {
+      "id": 190,
+      "name": "Area MC5 Hercules CPU",
+      "group": "MC5 Chips",
+      "requirements": "STR:85",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-hercules-cpu",
+      "key": "area mc5 hercules cpu"
+    },
+    {
+      "id": 191,
+      "name": "Area MC5 Riggers Dream",
+      "group": "MC5 Chips",
+      "requirements": "DEX:95",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/area-mc5-riggers-dream",
+      "key": "area mc5 riggers dream"
+    },
+    {
+      "id": 192,
+      "name": "Obliterator",
+      "group": "Tools",
+      "requirements": "INT:95 T-C:100 Class:Spy",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/obliterator",
+      "key": "obliterator"
+    },
+    {
+      "id": 184,
+      "name": "Revenge",
+      "group": "Drones",
+      "requirements": "DEX:93 RCL:111 WPW:80",
+      "part_kind": "T-Part",
+      "parts_needed": 5,
+      "tech_level": "93",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/revenge",
+      "key": "revenge"
+    },
+    {
+      "id": 185,
+      "name": "Particle Nemesis",
+      "group": "Drones",
+      "requirements": "DEX:115 RCL:122 WPW:89",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/particle-nemesis",
+      "key": "particle nemesis"
+    },
+    {
+      "id": 186,
+      "name": "Raptor",
+      "group": "Drones",
+      "requirements": "DEX:115 RCL:122 WPW:89",
+      "part_kind": "E-Part",
+      "parts_needed": 6,
+      "tech_level": "115",
+      "needs": [
+        "Technology",
+        "Hull",
+        "Frame",
+        "Core",
+        "Component",
+        "Additional Technology"
+      ],
+      "info_url": "https://db.techhaven.org/show-item/raptor",
+      "key": "raptor"
+    }
+  ]
+}

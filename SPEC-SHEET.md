@@ -1,16 +1,16 @@
 # Neocron Macro Suite — specification sheet
 
-Revision: 26 October 2026. Platform: Windows x64. This is the current consolidated specification. SPEC.md retains earlier implementation notes; TASKS.md is the delivery checklist. Proposed ideas are separated in FEATURE-IDEAS.md.
+Revision: 27 October 2026. Platform: Windows x64. This is the current consolidated specification. SPEC.md retains earlier implementation notes; TASKS.md is the delivery checklist. Proposed ideas are separated in FEATURE-IDEAS.md.
 
 ## Product
 
-A portable, foreground desktop macro for Neocron Evolution / Neocron 2 research, construction and prepared recycling. It uses screenshots, local visual/text recognition, and normal game input. Correct item, quantity and current position take precedence over speed. Processing duration varies by item; elapsed time never declares a job complete.
+A portable, foreground desktop macro for Neocron Evolution / Neocron 2 research, construction, prepared recycling and cabinet/inventory counting. It uses screenshots, local visual/text recognition, and normal game input. Correct item, quantity and current position take precedence over speed. Processing duration varies by item; elapsed time never declares a job complete.
 
 The application is named Neocron Macro Suite. The primary folder, local shortcut, portable ZIP and ZIP root use that name. The tool icon retains the screen-like green top requested earlier.
 
 ## Shared interface and controls
 
-- Research, Construction and Recycling job tabs share one Start in 3 seconds execution button.
+- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button.
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
 - Construction Job's Prepare in Neocron panel is terse bullets: Inventory + Processor visible; slot 1 construction tool; Inventory scrolled to top (search runs downward); stack size = actual count; ingredients stay in Inventory; empty cubes/previous result may stay; stop by switching away, no auto-resume.
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
@@ -31,6 +31,31 @@ The application is named Neocron Macro Suite. The primary folder, local shortcut
 6. Hidden, clipped or ambiguous controls cannot count as a valid target or completion. Localization retries are bounded.
 7. Drags are always plain left drags (no button/modifier options; collect() saves left/none). Release only inputs the macro pressed, including after interruptions.
 8. UI settling/polling waits are permitted. Fixed research/build timers and repeated Start clicks on an ignored attempt are not.
+
+## Tech Counter
+
+The fourth tab embeds the counter imported from `sheepnotlost/neocron-tech-counter`
+at revision 43c8402. Cabinet/Inventory selection and all-items/techs-only filtering
+are saved independently. The shared Start in 3 seconds button begins a scan after
+binding the foreground game. Scanning hovers, reads stack quantities and names,
+scrolls to the top then through unseen rows, and aggregates named lists. It never
+clicks/transfers items or brings the game back into focus. Mouse movement also
+aborts a scan. Only one crafting/counting worker can run at a time.
+
+Lists, scan editing/renaming/deletion, manual entries, undo, locations, exports
+(clipboard/CSV/by-cabinet CSV/TXT/JSON) and the 86-item rare-set database are retained.
+Partial and uncertain reads remain marked. Repeated scans add entries; they do
+not automatically replace a prior cabinet scan. Native suite skins apply to the
+embedded controls; standalone global hotkeys and custom topmost root are omitted.
+
+State resides in `tech-counter/`. First-use migration copies lists/known names/
+config from the original sibling folder, preserving source files and existing
+destination files. An explicit folder-import button supports other locations.
+Existing standalone exports remain in place; suite exports default under this
+state folder. No personal counter state ships in Git or the portable archive.
+Tesseract/English data and Python OCR libraries are bundled locally. Crafting
+continues to use Windows OCR. See TECH-COUNTER-INTEGRATION.md for implementation
+boundaries and checks. Automated checks do not establish live game accuracy.
 
 ## Research
 

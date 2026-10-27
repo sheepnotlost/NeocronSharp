@@ -4,6 +4,19 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Tech Counter integration — 27 October 2026
+
+- [x] Embed the standalone counter as a Tech Counter tab using the suite's skins.
+- [x] Retain cabinet/inventory selection, all-items/techs-only filters, scroll/hover counting, stack quantities and rare-set completion (86 entries).
+- [x] Retain lists, scan editing/manual entries, undo, locations and clipboard/CSV/TXT/JSON exports.
+- [x] Share Start in 3 seconds, one worker, focus/identity/size guards and optional stop tone. No additional hotkeys or Stop button.
+- [x] Copy existing lists/names/config without changing standalone files or overwriting suite state; provide folder import and exclude user data from Git/downloads.
+- [x] Include Tesseract, English model and Python OCR dependencies in the local runtime.
+- [x] Pass all 181 suite/integration tests and 51 imported pure-logic counter tests. These use fake input/data and do not establish live game behavior.
+- [x] Complete extracted portable dependency/OCR/UI checks with external Python/Tesseract paths unavailable. The 92.9 MiB portable passes a real OCR probe and UI startup; no game input was sent. Imported JSON copies match the standalone originals byte for byte. Final documentation-only repack preserves the verified code/runtime.
+
+### Previously delivered
+
 - [x] Rename the app/folder/portable bundle to Neocron Macro Suite.
 - [x] Research and Construction tabs; preserve T/E/A/L and item-to-blueprint research.
 - [x] No macro hotkeys or Stop button; Start in 3 seconds, stop on game focus loss.

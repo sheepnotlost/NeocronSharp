@@ -11,7 +11,23 @@ Updated 26 October 2026. This file summarizes the user's requests and the implem
 - Local profile/log: profile.json / macro.log. Failure frame/reason: diagnostics/latest.png and latest.json, overwritten after a later failure.
 - Do not delete the user's profile, recipes, recordings or icon assets while rebuilding.
 
-## Current priority and latest evidence
+## Tech Counter integration — 27 October 2026
+
+Tech Counter is a fourth suite tab, imported from the separate counter at commit
+43c8402. `tech_counter.py` embeds `ntc.app.App` in the existing Tk root, uses the
+shared countdown/worker/events, and adapts captures/input to the suite's bound
+game client. No hotkeys, extra Stop/Scan buttons, focus acquisition or parallel
+game workers. Keep all existing suite invariants. The standalone project is
+unchanged, including its uncommitted SPEC.md.
+
+User state copies once from the sibling Neocron Tech Counter folder into ignored
+`tech-counter/` without overwriting anything; there is also a folder-import button.
+Lists/learned names/config and exports remain separate from macro profiles.
+Never commit or bundle this personal state. Assets/86-set catalog are in ntc/;
+Tesseract/English model and supporting Python libraries are in the portable
+runtime. See TECH-COUNTER-INTEGRATION.md and README.md for usage and checks.
+
+## Previous inventory-search priority and evidence
 
 The user is frustrated by slow construction inventory searches and repeated hovering of overlapping rows. They want a rapid, calibration-free method that finds the correct blueprint wherever it is, scrolling as needed. Earlier versions passed offline tests but did not meet their in-game speed expectations. Do not equate test counts with live success.
 

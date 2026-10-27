@@ -1,5 +1,7 @@
 Continue development of my Windows Neocron Macro Suite project (this folder).
 
+The standalone Tech Counter is now integrated as a fourth tab. Read TECH-COUNTER-INTEGRATION.md. Preserve its lists, exports and rare-set tracking, shared countdown/worker and focus-loss stop. Counter user data is in ignored tech-counter/ and must never be committed or bundled. Its Tesseract dependencies are included in runtime/. The original counter project remains unchanged.
+
 Start by reading CLAUDE-HANDOFF.md, SPEC-SHEET.md, TASKS.md and README.md, then inspect the current code and recent macro.log entries. Earlier folder names in the chat are obsolete. The app uses its bundled runtime\python.exe and Launch.cmd.
 
 The immediate priority is genuinely fast construction blueprint searching. Repeated every-cell sweeps were too slow and rescanned overlapping rows. The latest change defaults to Fast — datacube icons: propose possible cubes from the screenshot, verify only their tooltips, scroll, and check the last verified stack first on subsequent builds. Thorough — every cell remains an explicit fallback. Review the latest recordings listed in the handoff, especially 2026-10-26 21-55-53.mp4. Do not assume offline test success proves live speed.

@@ -1,10 +1,14 @@
 # Neocron Macro Suite
 
-**Research**, **Construction** and **Recycling** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Optional slot counting, stop-at-slot rules, 10 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
+**Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 10 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
 
 The complete current specification is [SPEC-SHEET.md](SPEC-SHEET.md). [TASKS.md](TASKS.md) tracks the requests from this chat. [FEATURE-IDEAS.md](FEATURE-IDEAS.md) separates delivered features from future ideas.
 
 Project transfer: [Claude project brief](CLAUDE-HANDOFF.md) and [copyable handoff prompt](CLAUDE-PROMPT.txt).
+
+The imported counter's 51 pure-logic regression checks live in `tests/counter/`.
+Run `python -m pytest tests/counter -q` with the optional `requirements-dev.txt`
+installed in your development environment. Pytest is not required by the app.
 
 ## Repository checkout
 
@@ -42,6 +46,38 @@ Use **Remove recipe** on the Job page to remove the selected saved/custom recipe
 It drags **one blueprint** into a free input, verifies quantity **1**, re-finds the Processor and its current Start button, and watches progress until the expected result appears. **Ingredients are never dragged or clicked. Neocron supplies them automatically.** There is no fixed construction timer. The game returns the previous result and handles the used datacube on the next Start; the final result remains in the Processor.
 
 A pending/unverified dialog, unknown occupied input, missing tool/source/product, or focus loss stops the batch. An uncertain transfer is never retried automatically. Custom recipe completion is verified by the result tooltip name. Check the Processor and counts before restarting after any interruption. Available blueprints decrease only after confirmed completion.
+
+## Tech Counter
+
+The **Tech Counter** tab integrates the standalone counter. It scans open cabinets
+and/or Inventory, reads item names and stack quantities, scrolls through unseen
+rows, and totals the active named list. Choose **Scan: all / cabinet / inventory**
+and **Log: all items / techs only**, then use the suite's **Start in 3 seconds**
+button and focus Neocron. Switch away or move the mouse to stop; there are no
+counter hotkeys or separate Stop button. Scanning hovers and scrolls only.
+
+Use named lists, undo the last scan, rename/edit/delete scan entries, add manual
+entries, and export to clipboard, CSV (including by cabinet), TXT or JSON.
+Double-click a total to see its locations, or a scan to correct quantities/names.
+Corrections teach the counter's name dictionary. **Sets…** shows complete and
+nearly complete rare sets from the included 86-item database, with part locations,
+search, filters and exports. Uncertain reads and partial scans are marked; review
+them before relying on totals. Scanning the same cabinet twice adds it twice;
+undo/delete its previous scan when replacing it.
+
+Counter state is stored in **tech-counter/** and is independent of crafting
+settings. On first launch beside the original **Neocron Tech Counter** folder,
+existing lists, learned names and settings are copied without modifying the
+originals. **Import standalone counter folder…** supports other locations; it
+never overwrites an existing suite counter file. Existing standalone exports stay
+in their original folder. Suite exports default to **tech-counter/exports/**.
+Counter user data is excluded from Git and the portable download; keep a backup
+of your own tech-counter folder when moving installations.
+
+Tesseract and its English model are bundled in **runtime/tesseract/**. The counter
+uses its existing Tesseract recognition; crafting retains Windows OCR. Both run
+locally. See [integration specification](TECH-COUNTER-INTEGRATION.md) and
+[counter notices](ntc/NOTICE.md).
 
 ## Slot counter and chosen-slot stop
 

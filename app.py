@@ -78,7 +78,7 @@ class App:
         outer.rowconfigure(3, weight=1)
         self.heading=ttk.Label(outer, text="Neocron Macro Suite", font=("Segoe UI", 22, "bold"))
         self.heading.grid(row=0, column=0, sticky="w")
-        ttk.Label(outer, text="Research, construction and recycling  ·  automatic Processor detection",wraplength=980).grid(row=1, column=0, sticky="ew", pady=(2, 12))
+        ttk.Label(outer, text="Research, construction, recycling and tech counting",wraplength=980).grid(row=1, column=0, sticky="ew", pady=(2, 12))
         self.bound = tk.StringVar(value="Automatic detection · click Start, then focus Neocron within 3 seconds.")
         ttk.Label(outer, textvariable=self.bound, wraplength=980).grid(row=2, column=0, sticky="w", pady=(0, 12))
 
@@ -87,9 +87,11 @@ class App:
         self.research_tab = ttk.Frame(self.tabs)
         self.construction_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
+        self.counter_tab = ttk.Frame(self.tabs)
         self.tabs.add(self.research_tab, text="Research")
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
+        self.tabs.add(self.counter_tab, text="Tech Counter")
         scroll_host = ttk.Frame(self.research_tab)
         scroll_host.pack(fill="both", expand=True)
         canvas = tk.Canvas(scroll_host, background="#f3f5f5", highlightthickness=0, height=420)
@@ -189,13 +191,15 @@ class App:
         skin=ttk.Combobox(actions,textvariable=self.skin_var,values=[s["name"] for s in SKINS.values()],state="readonly",width=22)
         skin.pack(side="right",padx=6);skin.bind("<<ComboboxSelected>>",lambda e:self.save_preferences());self.editable.append(skin)
         ttk.Label(actions,text="Skin").pack(side="right")
-        self.status = tk.StringVar(value="Choose Research, Construction or Recycling, then click Start in 3 seconds.")
+        self.status = tk.StringVar(value="Choose a tab, then click Start in 3 seconds.")
         ttk.Label(outer, textvariable=self.status, wraplength=980, font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", pady=6)
         self.log = tk.Text(outer, height=5, wrap="word", state="disabled", font=("Consolas", 9),
                            background="#e6eceb", relief="flat", padx=8, pady=6)
         self.log.grid(row=6, column=0, sticky="ew")
         self.build_construction_tab()
         self.build_recycling_tab()
+        from tech_counter import TechCounterPanel
+        self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
         self.tabs.bind("<<NotebookTabChanged>>",lambda e:self.sync_start_button())
 
@@ -626,6 +630,8 @@ class App:
             var.set("Auto detect")
 
     def collect(self):
+        if self.tabs.select()==str(self.counter_tab):
+            raise ValueError("Tech Counter uses its own scan settings. Click Start in 3 seconds to scan.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
@@ -676,6 +682,7 @@ class App:
         return self.active() or self.countdown is not None
 
     def set_editing(self, enabled):
+        self.counter.set_editing(enabled)
         for widget in self.editable:
             widget.configure(state=("readonly" if isinstance(widget, ttk.Combobox) and widget is not self.construction_choice else "normal")
                              if enabled else "disabled")
@@ -712,6 +719,14 @@ class App:
         if self.locked():
             return
         try:
+            self._counter_job = self.tabs.select()==str(self.counter_tab)
+            if self._counter_job:
+                self.counter.prepare()
+                self._stop_sound_played=False
+                self.save_preferences()
+                self.set_editing(False)
+                self.begin_countdown(3)
+                return
             profile = self.collect()
             validate_profile(profile)
             # Report a broken/copied bundle before starting the focus countdown.
@@ -739,6 +754,11 @@ class App:
             from vision_runner import BlueprintRunner, VisualRunner
             from construction_runner import ConstructionRunner
             self.ensure_bound()
+            if getattr(self,"_counter_job",False):
+                self.worker = threading.Thread(target=self.counter.run_scan, args=(self.control,),
+                                               daemon=False, name="tech-counter-scan")
+                self.worker.start()
+                return
             from recycling import RecyclingRunner
             runner_class = {"blueprints":BlueprintRunner,"tech_parts":VisualRunner,"construction":ConstructionRunner,
                             "recycling":RecyclingRunner}[self.profile["operation"]]
@@ -748,6 +768,7 @@ class App:
             self.worker.start()
         except (ValueError, RuntimeError) as exc:
             self.report(str(exc))
+            if getattr(self,"_counter_job",False):self.counter.status.set(str(exc))
             self.notify_stop()
             self.set_editing(True)
 
@@ -776,7 +797,18 @@ class App:
                 kind, payload = self.events.get_nowait()
             except queue.Empty:
                 break
-            if kind == "detected":
+            if kind == "counter_progress":
+                self.counter.status.set("Scanning " + payload)
+                self.status.set("Tech Counter: " + payload)
+            elif kind == "counter_done":
+                self.counter.finish_scan(*payload)
+                self.report("Tech Counter: " + self.counter.status.get())
+                self.notify_stop()
+            elif kind == "counter_error":
+                self.counter.fail_scan(payload)
+                self.report("Tech Counter: " + payload)
+                self.notify_stop()
+            elif kind == "detected":
                 self.show_detected(payload)
             elif kind == "blueprint_cycle":
                 remaining = "repeating until stopped" if payload["continuous"] else f"{payload['count']} copies remaining"
