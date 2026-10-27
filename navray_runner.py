@@ -70,41 +70,55 @@ class NavRayRunner(VisualRunner):
             self.wait(.3)
         raise Interrupted("Nav-Ray window not found. Press Tab, open Nav-Ray (F9) with its Small / Sector / World Map buttons visible, then Start.")
 
-    rows_per_notch = None
+    # ---- scrolling: drag the list's own scroll thumb (the wheel jumps too far in this small window) ----
+    def clear_pointer(self):
+        """The game's cursor would cover list text and the scroll thumb, so park it away before reading."""
+        self.move((24, 80))
+        self.wait(.12)
 
-    def calibrate_scroll(self, window):
-        """Rows moved per wheel notch, measured on the Select list (all its entries differ)."""
-        def page():
-            self.clear_pointer()
-            return [t for _, t in navray.read_rows(self.detector.gray(self.frame()), window, "select")]
-        self.move(window.wheel_point("select"))
-        self.backend.scroll(10)
-        self.wait(.25)
-        before = page()
-        self.move(window.wheel_point("select"))
-        self.backend.scroll(-2)
-        self.wait(.25)
-        shift = navray.row_shift(before, page())
-        if not shift:
-            raise Interrupted("Nav-Ray: could not measure how far the lists scroll.")
-        self.rows_per_notch = shift/2
+    def read_page(self, which, window):
+        self.clear_pointer()
+        return navray.read_rows(self.detector.gray(self.frame()), window, which)
+
+    def drag_thumb(self, which, window, rows):
+        """Drag the scroll thumb so the list moves `rows` rows (negative = up).
+
+        Returns how many rows it actually moved, measured from where the thumb ended up (so it is
+        right even when the list hit its end and the page cannot tell), or None if there is no thumb.
+        """
+        found = navray.find_thumb(self.detector.gray(self.frame()), window, which)
+        if found is None:
+            return None
+        x, top, bottom = found
+        middle = (top + bottom)//2
+        # The thumb moves the list in proportion to its size: d pixels = d * visible rows / thumb length.
+        distance = rows*(bottom - top)/navray.LIST_ROWS[which]
+        self.drag((x, middle), (x, round(middle + distance)))
+        self.move((24, 80))
+        self.wait(.3)
+        after = navray.find_thumb(self.detector.gray(self.frame()), window, which)
+        if after is None:
+            return 0.0
+        return (after[1] - top)*navray.LIST_ROWS[which]/(bottom - top)
+
+    def to_top(self, which, window):
+        self.clear_pointer()
+        self.drag_thumb(which, window, -10000)
+        self.wait(.1)
+
+    def page_down(self, which, window):
+        return self.drag_thumb(which, window, navray.LIST_ROWS[which] - 2)
 
     def step_to_occurrence(self, which, window, label, row, occurrence):
         """Row of the n-th of several identical-looking entries that follow each other, scrolling if needed."""
         target = row + occurrence - 1
         visible = navray.LIST_ROWS[which]
         while target >= visible:
-            if self.rows_per_notch is None:
-                self.calibrate_scroll(window)
-            shift = round(self.rows_per_notch*self.notches)
-            if shift < 1:
-                raise Interrupted("Nav-Ray: could not work out how far the list scrolls.")
-            self.move(window.wheel_point(which))
-            self.backend.scroll(-self.notches)
-            self.wait(.25)
-            target -= shift
-        self.clear_pointer()
-        shown = dict(navray.read_rows(self.detector.gray(self.frame()), window, which))
+            moved = self.page_down(which, window)
+            if moved is None or round(moved) < 1:
+                raise Interrupted(f"Nav-Ray: could not scroll to '{label}' number {occurrence}. Nothing was clicked.")
+            target -= round(moved)
+        shown = dict(self.read_page(which, window))
         if target < 0 or navray.find_row([(0, shown.get(target, ""))], label) is None:
             raise Interrupted(f"Nav-Ray: could not locate '{label}' number {occurrence}. Nothing was clicked.")
         return target
@@ -112,13 +126,10 @@ class NavRayRunner(VisualRunner):
     def choose(self, which, wanted, reader):
         label, occurrence = navray.split_label(wanted)
         window = self.find_window(reader)
-        self.move(window.wheel_point(which))
-        self.backend.scroll(10)                      # to the top of the list
-        self.wait(.2)
+        self.to_top(which, window)
         previous, empty, saw = None, 0, []
         for _ in range(PAGES):
-            self.clear_pointer()
-            rows = navray.read_rows(self.detector.gray(self.frame()), window, which)
+            rows = self.read_page(which, window)
             if not rows and empty < 8:
                 empty += 1                       # the list may not have redrawn after the last click yet
                 self.wait(.3)
@@ -131,31 +142,18 @@ class NavRayRunner(VisualRunner):
                 self.click(window.row_point(which, row))
                 self.wait(.4)
                 return
-            if rows == previous:
+            if rows == previous or self.page_down(which, window) is None:
                 break
             previous = rows
-            self.move(window.wheel_point(which))
-            self.backend.scroll(-self.notches)
-            self.wait(.25)
         shown = "; ".join(saw[:8]) if saw else "nothing readable"
         raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list. Last rows read: {shown}.")
 
-    notches = 2
-
-    def clear_pointer(self):
-        """The game's cursor would cover list text, so park it away from the window before reading."""
-        self.move((24, 80))
-        self.wait(.12)
-
     def read_list(self, which, window, reader):
         """Every entry of a list, top to bottom, plus how many rows could not be read (a highlighted row reads blank)."""
-        self.move(window.wheel_point(which))
-        self.backend.scroll(10)
-        self.wait(.25)
+        self.to_top(which, window)
         names, gaps, previous = [], 0, None
         for _ in range(LIST_PAGES):
-            self.clear_pointer()
-            rows = navray.read_rows(self.detector.gray(self.frame()), window, which)
+            rows = self.read_page(which, window)
             numbers = [row for row, _ in rows]
             if numbers:
                 gaps += max(numbers) - min(numbers) + 1 - len(numbers)
@@ -163,26 +161,10 @@ class NavRayRunner(VisualRunner):
                 label = navray.clean_label(text)
                 if label and label not in names:
                     names.append(label)
-            if rows == previous:
+            if rows == previous or self.page_down(which, window) is None:
                 break
-            if previous is not None:
-                self.learn_scroll_step([t for _, t in previous], [t for _, t in rows], window, which)
             previous = rows
-            self.move(window.wheel_point(which))
-            self.backend.scroll(-self.notches)
-            self.wait(.25)
         return names, gaps
-
-    def learn_scroll_step(self, before, after, window, which):
-        """Rows moved by one page of wheel notches -> notches per page that still overlap by two rows."""
-        if self.notches != 2 or not before or not after:
-            return
-        shift = navray.row_shift(before, after)
-        if shift:
-            self.rows_per_notch = shift/self.notches
-            visible = navray.LIST_ROWS[which]
-            if 0 < shift < visible - 2:
-                self.notches = max(1, min(40, (self.notches*(visible - 2))//shift))
 
     def scan(self):
         """Read every category and its destinations from the open Nav-Ray window."""

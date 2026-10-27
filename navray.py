@@ -17,6 +17,7 @@ LIST_WIDTH = {"select": 270.0, "destination": 440.0}
 SELECT_DX, SELECT_DY = -133.0, -204.0       # first Select row's text top-left
 DEST_DX, DEST_DY = 176.0, -209.0            # first Destination row's text top-left
 START_DX, STOP_DX, BUTTON_DY = 312.0, 455.0, -54.0
+THUMB_DX = {"select": 152.0, "destination": 608.0}   # scrollbar centre, from "Small" (measured on a live frame)
 WINDOW_LEFT, WINDOW_TOP, WINDOW_RIGHT, WINDOW_BOTTOM = -215.0, -305.0, 670.0, 55.0
 
 
@@ -125,6 +126,13 @@ class NavRay:
     def wheel_point(self, which):
         return self.row_point(which, 3)
 
+    def thumb_strip(self, which):
+        """Pixel box (left, top, right, bottom) holding the list's scrollbar."""
+        dx, dy = self._origin(which)
+        left, top = self._at(THUMB_DX[which] - 5, dy - 8)
+        right, bottom = self._at(THUMB_DX[which] + 5, dy + ROW_PITCH*LIST_ROWS[which] + 8)
+        return (max(0, left), max(0, top), right, bottom)
+
     def list_box(self, which):
         dx, dy = self._origin(which)
         left, top = self._at(dx - 4, dy - 5)
@@ -204,3 +212,32 @@ def read_rows(gray, window, which):
         if text:
             rows.append((row, text))
     return rows
+
+
+def find_thumb(gray, window, which):
+    """(x, top, bottom) of the list's scroll thumb in pixels, or None when there is no scrollbar to use.
+
+    The thumb is a lighter bar in a dark track. Dragging it by d pixels moves the list by
+    d * visible_rows / thumb_length rows, whatever the window size.
+    """
+    left, top, right, bottom = window.thumb_strip(which)
+    strip = gray[top:bottom, left:right]
+    if strip.size == 0:
+        return None
+    column = strip.mean(axis=1)
+    low, high = float(column.min()), float(column.max())
+    if high - low < 35:
+        return None
+    bright = column > (low + high)/2
+    best, start = (0, 0), None
+    for index, value in enumerate(list(bright) + [False]):
+        if value and start is None:
+            start = index
+        elif not value and start is not None:
+            if index - start > best[0]:
+                best = (index - start, start)
+            start = None
+    length, first = best
+    if length < 10*window.scale or length > .92*len(bright):
+        return None                                      # no thumb, or it fills the track (nothing to scroll)
+    return ((left + right)//2, top + first, top + first + length)

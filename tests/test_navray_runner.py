@@ -131,12 +131,13 @@ class SelectionTests(unittest.TestCase):
         clicks = []
         runner.move = lambda point: None
         runner.click = clicks.append
+        runner.drag = lambda a, b: None
         runner.choose("select", "Faction HQs", reader)
         # FACTION HQS is the 8th row of the Select list (text at x 204, y 345 in the capture, +100 offset).
         self.assertEqual(len(clicks), 1)
         self.assertLessEqual(abs(clicks[0][0] - (204 + 100 + 60)), 8)
         self.assertLessEqual(abs(clicks[0][1] - (345 + 100 + 8)), 8)
-        self.assertIn(("scroll", 10), runner.backend.events)
+        self.assertEqual(runner.backend.events, [])                    # no wheel events: lists scroll by their thumb
 
     def test_a_missing_window_or_destination_stops_with_a_clear_reason(self):
         from text_reader import TextReader
@@ -149,44 +150,53 @@ class SelectionTests(unittest.TestCase):
 
 
 class OccurrenceTests(unittest.TestCase):
-    """choose() against a simulated Nav-Ray list that scrolls one row per wheel notch."""
+    """choose() against a simulated Nav-Ray whose lists scroll only by dragging their scroll thumb."""
+
+    TRACK_TOP, TRACK = 100, 150
 
     def setUp(self):
         import navray
         self.navray = navray
         self.catalog = navray.load_catalog()
         self.window = navray.NavRay(0, 0, 1.0)
-        self.original = navray.read_rows
+        self.original = (navray.read_rows, navray.find_thumb)
         self.start = {"select": 0, "destination": 0}
         self.lists = {"select": list(self.catalog), "destination": []}
+        self.last = {"which": "select"}
+        self.clicks, self.drags = [], []
         runner, _ = make_runner(lambda i: DARK)
         runner.frame = lambda: DARK
         runner.wait = lambda seconds, safe_pause=False: None
         runner.find_window = lambda reader: self.window
-        self.last = {"which": "select"}
-        self.clicks = []
-
-        def move(point):
-            for which in ("select", "destination"):
-                if tuple(point) == tuple(self.window.wheel_point(which)):
-                    self.last["which"] = which
-        runner.move = move
+        runner.move = lambda point: None
         runner.click = self.clicks.append
 
-        def scroll(notches):
+        def thumb(gray, window, which):
+            self.last["which"] = which
+            size, visible = len(self.lists[which]), navray.LIST_ROWS[which]
+            if size <= visible:
+                return None
+            length = round(self.TRACK*visible/size)
+            top = self.TRACK_TOP + round((self.TRACK - length)*self.start[which]/(size - visible))
+            return (500, top, top + length)
+
+        def drag(source, destination):
             which = self.last["which"]
             size, visible = len(self.lists[which]), navray.LIST_ROWS[which]
-            self.start[which] = max(0, min(max(0, size - visible), self.start[which] - notches))
-        runner.backend.scroll = scroll
+            length = round(self.TRACK*visible/size)
+            rows = (destination[1] - source[1])*visible/length
+            self.drags.append(rows)
+            self.start[which] = max(0, min(size - visible, round(self.start[which] + rows)))
+        runner.drag = drag
 
         def rows(gray, window, which):
             page = self.lists[which][self.start[which]:self.start[which] + navray.LIST_ROWS[which]]
             return list(enumerate(page))
-        navray.read_rows = rows
+        navray.read_rows, navray.find_thumb = rows, thumb
         self.runner = runner
 
     def tearDown(self):
-        self.navray.read_rows = self.original
+        self.navray.read_rows, self.navray.find_thumb = self.original
 
     def pick(self, category, wanted):
         self.lists["destination"] = list(self.catalog[category])
@@ -196,6 +206,17 @@ class OccurrenceTests(unittest.TestCase):
         point = self.clicks[-1]
         row = round((point[1] - (self.navray.DEST_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
         return self.start["destination"] + row         # the clicked entry's index in the whole list
+
+    def test_a_plain_name_is_found_after_scrolling_by_the_scroll_thumb(self):
+        index = self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
+        self.assertEqual(self.catalog["VIAROSSO APARTMENTS"][index], "Viarosso / Alamo Living / Enter C")
+        self.assertTrue(self.drags)
+        self.assertEqual(self.runner.backend.events, [])         # never the mouse wheel
+
+    def test_each_page_overlaps_by_two_rows_so_nothing_is_skipped(self):
+        self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
+        pages = [d for d in self.drags if d > 0]
+        self.assertTrue(all(d <= self.navray.LIST_ROWS["destination"] - 2 + .6 for d in pages), pages)
 
     def test_a_list_that_has_not_redrawn_yet_is_read_again_instead_of_giving_up(self):
         real = self.navray.read_rows
@@ -213,9 +234,12 @@ class OccurrenceTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Last rows read: ALPHA; BETA"):
             self.runner.choose("destination", "GAMMA TOWERS", None)
 
-    def test_a_plain_name_is_found_after_scrolling(self):
-        index = self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
-        self.assertEqual(self.catalog["VIAROSSO APARTMENTS"][index], "Viarosso / Alamo Living / Enter C")
+    def test_every_catalog_entry_can_be_reached(self):
+        for category in ("PEPPER PARK DUNGEONS", "OUTZONE DUNGEONS", "JONES MISSION LOCATIONS"):
+            for entry in self.catalog[category]:
+                with self.subTest(category=category, entry=entry):
+                    index = self.pick(category, entry)
+                    self.assertEqual(self.catalog[category][index].rstrip("…"), entry.rstrip("…"))
 
     def test_numbered_duplicates_pick_the_right_one_even_across_pages(self):
         for category, count in (("VIAROSSO APARTMENTS", 4), ("PEPPER PARK APARTMENTS", 6), ("PLAZA DUNGEONS", 2)):
