@@ -83,6 +83,17 @@ class CatalogUiTests(unittest.TestCase):
             with self.assertRaises(ValueError):app.store_build_recipe()
             self.assertNotIn("Pain Easer",[r["name"] for r in catalog(app.profile).values()])
 
+    def test_materials_row_saves_per_recipe_and_reloads(self):
+        with ui() as app:
+            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.construction_recipe.set("WP9");app.select_recipe()
+            self.assertIn("Gamonin=GAM",app.materials_text.get())     # built-in table shown
+            app.materials_text.set("Gamonin=GAM, Metal D=MET")
+            collected=app.collect()
+            self.assertEqual(collected["materials"]["weaponpart_9"],{"Gamonin":"GAM","Metal D":"MET"})
+            app.materials_text.set("nonsense")
+            with self.assertRaisesRegex(ValueError,"Materials"):app.collect()
+
     def test_no_favorites_tab_or_drag_options_and_drag_is_plain_left(self):
         with ui() as app:
             self.assertNotIn("Favorites",[app.tabs.tab(t,"text") for t in app.tabs.tabs()])

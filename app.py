@@ -18,6 +18,7 @@ from recipes import RECIPES, catalog, find_recipe, add_recipe, remove_recipe
 from recycling import load_catalog, filter_recipes
 from appearance import SKINS, apply_skin, stop_sound
 from construction_catalog import load_construction_catalog, filter_construction
+import gogo
 
 ROOT = Path(__file__).resolve().parent
 PROFILE_PATH = ROOT / "profile.json"
@@ -358,6 +359,11 @@ class App:
         ttk.Label(form,text="0 = until blueprints run out").grid(row=3,column=1,sticky="w",padx=(10,0))
         self.recipe_description=tk.StringVar()
         self.recipe_aliases=tk.StringVar()  # kept for saved recipes; no longer shown
+        self.materials_text=tk.StringVar()
+        ttk.Label(form,text="Materials").grid(row=5,column=0,sticky="w",pady=(8,4))
+        materials=ttk.Entry(form,textvariable=self.materials_text,width=1)
+        materials.grid(row=5,column=1,sticky="ew",padx=(10,0),pady=(8,4));self.editable.append(materials)
+        ttk.Label(form,text="Name=LABEL, ...  (for GoGuardian)").grid(row=4,column=1,sticky="w",padx=(10,0))
         save=ttk.Button(form,text="Add / update recipe",command=self.save_custom_recipe)
         actions=ttk.Frame(form);actions.grid(row=6,column=0,columnspan=2,sticky="ew",pady=4)
         save.grid(in_=actions,row=0,column=0,sticky="w")
@@ -516,6 +522,7 @@ class App:
     def select_recipe(self):
         key=find_recipe(self.construction_recipe.get(),self.recipes)
         self.recipe_aliases.set(", ".join(self.recipes[key].get("aliases",())) if key else "")
+        self.materials_text.set(gogo.format_materials(gogo.ingredients_for(key,self.profile)) if key else "")
         self.refresh_recipe()
 
     def save_custom_recipe(self):
@@ -561,6 +568,7 @@ class App:
         selected=self.recipes.get(construction["recipe"],{})
         self.construction_recipe.set(selected.get("name",""))
         self.recipe_aliases.set(", ".join(selected.get("aliases",())))
+        self.materials_text.set(gogo.format_materials(gogo.ingredients_for(construction["recipe"],self.profile)) if construction["recipe"] else "")
         self.construction_available.set(str(construction["available"]))
         self.construction_count.set(str(construction["count"]))
         self.search_mode.set(SEARCH_LABELS[construction.get("search_mode","fast")])
@@ -604,6 +612,11 @@ class App:
                 key=find_recipe(self.construction_recipe.get(),catalog(profile))
                 if key is None:
                     key=add_recipe(profile,self.construction_recipe.get(),self.recipe_aliases.get().split(","))
+                typed=gogo.parse_materials(self.materials_text.get())
+                if typed and typed!=(gogo.INGREDIENT_CODES.get(key) or {}):
+                    profile.setdefault("materials",{})[key]=typed
+                elif key in profile.get("materials",{}) and not typed:
+                    profile["materials"].pop(key)
                 profile["construction"]={"recipe":key,
                                          # The stack size is no longer asked for; 10000 means "unknown"
                                          # and the batch ends when no blueprint can be found.

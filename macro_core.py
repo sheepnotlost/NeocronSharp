@@ -25,6 +25,7 @@ def default_profile():
         "construction": {"recipe": "weaponpart_7", "available": 1, "count": 1, "count_slots":False},
         "custom_recipes": {},
         "hidden_recipes": [],
+        "materials": {},
         "recycling": {"recipe":None},
         "preferences": {"skin":"basic","stop_sound":False},
         "stacks": {name: {"available": 0, "count": 0} for name in STACKS},
@@ -62,6 +63,14 @@ def validate_profile(profile, require_ready=True):
         raise ValueError("Choose a supported construction recipe.")
     if type(construction.get("count_slots",False)) is not bool:
         raise ValueError("Slot counter must be enabled or disabled.")
+    materials = profile.get("materials", {})
+    if not isinstance(materials, dict) or len(materials) > 500:
+        raise ValueError("Invalid materials list.")
+    for key, row in materials.items():
+        if (not isinstance(key, str) or not isinstance(row, dict) or len(row) > 12 or any(
+                not isinstance(n, str) or not 1 <= len(n) <= 40 or not isinstance(c, str)
+                or not 2 <= len(c) <= 4 for n, c in row.items())):
+            raise ValueError("Invalid materials list.")
     if type(construction.get("gogo_refill",False)) is not bool:
         raise ValueError("GoGuardian refills must be enabled or disabled.")
     if construction.get("search_mode","fast") not in ("fast","all_cells"):
@@ -176,6 +185,7 @@ def monitor_only_profile(profile):
         profile.setdefault("construction", {"recipe": "weaponpart_7", "available": 1, "count": 1})
         profile.setdefault("custom_recipes", {})
         profile.setdefault("hidden_recipes", [])
+        profile.setdefault("materials", {})
         profile.setdefault("recycling", {"recipe":None})
         profile.setdefault("preferences", {"skin":"basic","stop_sound":False})
         profile.pop("favorites", None)  # Favorites were removed; drop old shortcuts.

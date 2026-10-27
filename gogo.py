@@ -44,9 +44,32 @@ class GoGo:
         return (max(0, int(left)-2), max(0, int(top)-2), min(frame_shape[1], int(right)+2), min(frame_shape[0], int(bottom)+2))
 
 
-def ingredients_for(recipe_key):
-    """Label codes the recipe needs, or None when the recipe's labels are unknown."""
-    return INGREDIENT_CODES.get(recipe_key)
+def ingredients_for(recipe_key, profile=None):
+    """{ingredient: label code} for the recipe: the user's own list (saved in the profile)
+    first, then the built-in table. None when neither knows the recipe."""
+    mine = ((profile or {}).get("materials") or {}).get(recipe_key)
+    return dict(mine) if mine else INGREDIENT_CODES.get(recipe_key)
+
+
+def parse_materials(text):
+    """"Gamonin=GAM, Metal D=MET" -> {"Gamonin": "GAM", "Metal D": "MET"}. Raises ValueError."""
+    result = {}
+    for part in re.split(r"[,;\n]", text or ""):
+        part = part.strip()
+        if not part:
+            continue
+        name, sep, code = part.partition("=")
+        name, code = name.strip(), code.strip().upper()
+        if not sep or not name or len(name) > 40 or not re.fullmatch(r"[A-Z0-9]{2,4}", code):
+            raise ValueError(f"Materials: use Name=LABEL (2-4 letters/digits), separated by commas. Problem with '{part}'.")
+        result[name] = code
+    if len(result) > 12:
+        raise ValueError("Materials: at most 12 ingredients per recipe.")
+    return result
+
+
+def format_materials(materials):
+    return ", ".join(f"{name}={code}" for name, code in (materials or {}).items())
 
 
 def find_gogo(reader, gray, tiles=((0, 0), (1, 0), (0, 1), (1, 1)), checkpoint=lambda: None):
@@ -83,7 +106,9 @@ def _strip_in(words):
 def _close(word, code):
     """Same three letters, allowing one misread character (OCR on small game text)."""
     word = word.upper()
-    return len(word) == 3 and sum(a != b for a, b in zip(word, code)) <= 1
+    if len(word) != len(code) or len(code) < 2:
+        return False
+    return word == code or (len(code) >= 3 and sum(a != b for a, b in zip(word, code)) <= 1)
 
 
 def read_cells(reader, gray, gogo, wanted=None):
@@ -111,7 +136,8 @@ def read_cells(reader, gray, gogo, wanted=None):
         words_in = sorted(cell["words"], key=lambda item: (round(item[2]/8), item[1]))
         for text, _, _ in words_in:
             clean = text.strip()
-            if re.fullmatch(r"[A-Za-z]{3}", clean) and code is None and clean.lower() != "x":
+            if (re.fullmatch(r"[A-Za-z0-9]{2,4}", clean) and code is None and not re.fullmatch(r"x\d*", clean, re.I)
+                    and not clean.isdigit()):
                 code = clean.upper()
         match = re.search(r"x\s*(\d+)", " ".join(item[0] for item in words_in), re.I)
         if match:
@@ -137,12 +163,12 @@ def read_cells(reader, gray, gogo, wanted=None):
     return result
 
 
-def plan_refill(recipe_key, cells):
+def plan_refill(recipe_key, cells, codes=None):
     """[(ingredient, code, cell_point, amount)] moving at most BATCH of each needed ingredient.
 
     Ingredients the GoGo does not hold are skipped; raises LookupError when it holds none.
     """
-    codes = ingredients_for(recipe_key)
+    codes = codes if codes is not None else ingredients_for(recipe_key)
     if codes is None:
         raise LookupError("This recipe's material labels are not known, so GoGuardian refills are unavailable for it.")
     by_code = {}

@@ -347,8 +347,9 @@ class ConstructionRunner(VisualRunner):
         window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
         if window is None:
             raise Interrupted("GoGuardian window not found. Open it with its Take All / Sort / Stack buttons visible, or turn off More Materials in GoGo.")
-        wanted=set((gogo.ingredients_for(self.recipe) or {}).values())
-        try:plan=gogo.plan_refill(self.recipe,gogo.read_cells(reader,gray,window,wanted))
+        codes=gogo.ingredients_for(self.recipe,self.profile)
+        wanted=set((codes or {}).values())
+        try:plan=gogo.plan_refill(self.recipe,gogo.read_cells(reader,gray,window,wanted),codes)
         except LookupError as exc:raise Interrupted(str(exc)) from None
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
         for name,code,point,amount in plan:

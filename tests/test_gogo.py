@@ -80,7 +80,7 @@ class RefillSequenceTests(unittest.TestCase):
                 return {"field": [10, 10], "ok": [20, 10], "one": False, "scale": 1.} if defaults and shown["open"] else None
         outer = self
         r = ConstructionRunner.__new__(ConstructionRunner)
-        r.detector = Detector();r.recipe = "weaponpart_9";r.name = "Tangent Weaponpart 9"
+        r.detector = Detector();r.recipe = "weaponpart_9";r.name = "Tangent Weaponpart 9";r.profile = {}
         r.settings = {"dialog_timeout": .3, "settle_seconds": 0}
         r.frame = lambda: frame
         r.guard = lambda: None
@@ -130,6 +130,36 @@ class RefillSequenceTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "GoGuardian window not found"):
             runner.refill_from_gogo()
         self.assertFalse([e for e in events if e[0] == "drag"])
+
+
+class MaterialsListTests(unittest.TestCase):
+    def test_materials_text_round_trips_and_rejects_bad_entries(self):
+        parsed = gogo.parse_materials("Gamonin=gam, Metal D = MET ,Tiberal=TIB")
+        self.assertEqual(parsed, {"Gamonin": "GAM", "Metal D": "MET", "Tiberal": "TIB"})
+        self.assertEqual(gogo.parse_materials(gogo.format_materials(parsed)), parsed)
+        self.assertEqual(gogo.parse_materials(""), {})
+        for bad in ("Gamonin", "Gamonin=", "=GAM", "Gamonin=TOOLONG", "Gamonin=G"):
+            with self.assertRaises(ValueError, msg=bad):gogo.parse_materials(bad)
+
+    def test_a_users_list_overrides_the_built_in_table_and_works_for_new_recipes(self):
+        profile = {"materials": {"weaponpart_9": {"Gamonin": "GAM"}, "custom_x": {"Zinc": "ZN", "Iron": "IRN"}}}
+        self.assertEqual(gogo.ingredients_for("weaponpart_9", profile), {"Gamonin": "GAM"})
+        self.assertEqual(gogo.ingredients_for("custom_x", profile), {"Zinc": "ZN", "Iron": "IRN"})
+        self.assertEqual(gogo.ingredients_for("weaponpart_7", profile)["Trisol"], "TRS")
+        self.assertIsNone(gogo.ingredients_for("custom_y", profile))
+        cells = {(0, 0): {"code": "ZN", "count": 40, "point": (5, 5)}, (1, 0): {"code": "IRN", "count": 3, "point": (9, 9)}}
+        plan = gogo.plan_refill("custom_x", cells, gogo.ingredients_for("custom_x", profile))
+        self.assertEqual([(n, a) for n, _, _, a in plan], [("Zinc", 15), ("Iron", 3)])
+
+    def test_the_profile_validates_and_keeps_the_materials_list(self):
+        from macro_core import default_profile, validate_profile
+        profile = default_profile();profile["materials"] = {"custom_x": {"Zinc": "ZN"}}
+        validate_profile(profile, require_ready=False)
+        profile["materials"] = {"custom_x": {"Zinc": "Z"}}
+        with self.assertRaises(ValueError):validate_profile(profile, require_ready=False)
+
+    def test_a_refill_for_a_recipe_without_any_list_explains_what_to_do(self):
+        with self.assertRaisesRegex(LookupError, "labels are not known"):gogo.plan_refill("custom_zzz", {})
 
 
 class RefusedStartTests(unittest.TestCase):
