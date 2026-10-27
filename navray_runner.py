@@ -15,15 +15,16 @@ from vision_runner import VisualRunner
 
 GAIN = .16               # mouse counts per pixel of steering error at 2560 wide (only until the turn is calibrated)
 MAX_STEP = 45            # largest single mouse move (before the turn is calibrated)
-CAL_COUNTS = 150         # mouse counts used to measure how far the view slides per count
+CAL_NUDGES = (40, 20, 80, 10)    # mouse counts tried, in turn, to measure how far the view slides per count
 SCENE_BOX = (.22, .10, .82, .52)   # the part of the screen that is only scene: no HUD, not the character
 CAL_DAMP = .85           # share of a measured correction applied in one turn
 CAL_MAX_PX = 260         # largest single mouse move, in screen pixels
 LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
 DASHES_PER_LEG = 4       # dashes read in front of the character, then walked, before reading the next four
 LINED_UP = .03           # steering error (fraction of width) below which the character walks
+AGREE = .05              # the three looks before a move must agree on the heading to within this
 VEER = .22               # while walking, an error this big stops the leg and re-reads the path (a corner)
-LEG_SECONDS = 7.0        # longest a leg may last
+LEG_SECONDS = 8.0        # longest a leg may last
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
@@ -274,17 +275,18 @@ class NavRayRunner(VisualRunner):
             left, top, right, bottom = SCENE_BOX
             scene = cv2.cvtColor(frame[int(top*height):int(bottom*height), int(left*width):int(right*width)], cv2.COLOR_RGB2GRAY)
             return cv2.resize(scene, (480, 240), interpolation=cv2.INTER_AREA), scene.shape[1]
-        first, scene_width = grab()
-        self.backend.move_relative(CAL_COUNTS, 0)
-        self.wait(.3)
-        second, _ = grab()
-        self.backend.move_relative(-CAL_COUNTS, 0)             # put the view back
-        self.wait(.25)
-        dx, response = slide_pixels(first, second)
-        if response < .1 or abs(dx) < 1.0:
-            self.emit("status", f"Nav-Ray: calibration reading was weak (shift {dx:+.1f}, certainty {response:.2f}).")
-            return None
-        return dx*(scene_width/480)/CAL_COUNTS
+        for nudge in CAL_NUDGES:
+            first, scene_width = grab()
+            self.backend.move_relative(nudge, 0)
+            self.wait(.3)
+            second, _ = grab()
+            self.backend.move_relative(-nudge, 0)              # put the view back
+            self.wait(.25)
+            dx, response = slide_pixels(first, second)
+            if response >= .1 and abs(dx) >= 1.0:
+                return dx*(scene_width/480)/nudge
+            self.emit("status", f"Nav-Ray: calibration with {nudge} counts was weak (shift {dx:+.1f}, certainty {response:.2f}).")
+        return None
 
     def counts(self, error, width):
         """Mouse counts that turn the view by a steering error (fraction of the width)."""
@@ -301,21 +303,30 @@ class NavRayRunner(VisualRunner):
             chunk = max(-limit, min(limit, remaining))
             self.backend.move_relative(chunk, 0)
             remaining -= chunk
-            self.wait(.04)
-        self.wait(.25)
+            self.wait(.02)
+        self.wait(.12)
         return total
 
     def evaluate(self, track, lost):
-        """Stand still and read the dashes: a few looks, the last good one wins (a still picture is a clean one)."""
-        best = None
+        """Stand still and take three quick looks at the dashes. The heading is only trusted when they agree
+        (a stray mark or a moving picture makes them differ), otherwise look again. Returns the middle
+        reading as (view, frame), or None if no dashes were seen."""
+        readings, errors = [], []
         for _ in range(3):
-            frame = self.frame()
-            view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
-                                        tube=min(.18 + .03*lost, .4))
-            if view is not None:
-                best = (view, frame)
-            self.wait(.06)
-        return best
+            readings = []
+            for _ in range(3):
+                frame = self.frame()
+                view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
+                                            tube=min(.18 + .03*lost, .4))
+                if view is not None:
+                    readings.append((view, frame))
+            if not readings:
+                return None
+            errors = [self.aim_error(v, f) for v, f in readings]
+            if len(readings) >= 2 and max(errors) - min(errors) <= AGREE:
+                break
+        order = sorted(range(len(readings)), key=lambda i: errors[i])
+        return readings[order[len(order)//2]]                  # the median reading
 
     @staticmethod
     def next_dashes(view, height, count=DASHES_PER_LEG):
@@ -347,7 +358,7 @@ class NavRayRunner(VisualRunner):
         the path bends away, is lost, or the character is stuck. Returns the last path seen."""
         started = self.clock()
         self.backend.key("w", True)
-        passed, last_y, lost, still_since, previous_thumb = 0, None, 0, None, None
+        passed, last_y, lost, still_since, previous_thumb, reason = 0, None, 0, None, None, "time"
         try:
             while self.clock() - started < LEG_SECONDS:
                 self.checkpoint()
@@ -358,6 +369,7 @@ class NavRayRunner(VisualRunner):
                 if seen is None:
                     lost += 1
                     if lost >= 3:
+                        reason = "lost the dashes"
                         break
                 else:
                     lost, track = 0, seen
@@ -365,7 +377,11 @@ class NavRayRunner(VisualRunner):
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
                         passed += 1                          # the dash we were heading for was reached: on to the next
                     last_y = seen.aim[1]
-                    if passed >= DASHES_PER_LEG or abs(self.aim_error(seen, frame)) > VEER:
+                    if passed >= DASHES_PER_LEG:
+                        reason = f"passed {passed} dashes"
+                        break
+                    if abs(self.aim_error(seen, frame)) > VEER:
+                        reason = "the path bends away"
                         break
                 thumb = self.thumbnail(frame)
                 if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
@@ -378,8 +394,8 @@ class NavRayRunner(VisualRunner):
                 self.sleep(.005)
         finally:
             self.backend.key("w", False)
-        self.wait(.2)
-        return track, passed
+        self.wait(.05)
+        return track, passed, reason
 
     def walk(self):
         reader = self.detector.text_reader()
@@ -388,10 +404,12 @@ class NavRayRunner(VisualRunner):
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
         else:
             self.emit("status", "Nav-Ray: turning could not be calibrated; using the default gain.")
+        self.backend.key("shift", True)                  # run: Shift only acts while the character moves
         started = self.clock()
         state = {"health": None, "health_checked": started, "last_path": started}
         track, lost, legs, turned, turns_in_row = None, 0, 0, 0, 0
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
+        scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
         try:
             while True:
@@ -404,15 +422,22 @@ class NavRayRunner(VisualRunner):
                 self.vitals(reader, frame, state)
                 if got is None:
                     lost += 1
-                    if not seen_path:
-                        # Just after Start the route begins at the character, but it may lead out of view:
-                        # sweep all the way round looking for the dashes ahead.
+                    if seen_path and not scanning and lost >= 3:
+                        # The dashes went out of view (a corner, a pillar): look all the way round before
+                        # deciding the route is over.
+                        scanning, scan_first, scan_looks, searched = True, None, 0, 0
+                        self.emit("status", "Nav-Ray: dashes out of view, looking all the way round.")
+                    if scanning:
                         small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
                         scan_looks += 1
                         if scan_first is None:
                             scan_first = small
                         back_where_it_began = scan_looks > 15 and float(np.abs(small - scan_first).mean()) < SAME_VIEW
                         if back_where_it_began or searched >= SEARCH_COUNTS:
+                            if seen_path:
+                                self.save_failure(Interrupted("The walk ended here."))
+                                self.emit("done", "Nav-Ray: no more dashes all the way round. Arrived, or the route was lost.")
+                                return
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
                         self.backend.move_relative(look, 0)
@@ -420,12 +445,8 @@ class NavRayRunner(VisualRunner):
                         if self.clock() - last_report >= REPORT_EVERY:
                             last_report = self.clock()
                             self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
-                    else:
-                        if self.clock() - state["last_path"] > END_SECONDS:
-                            self.emit("done", "Nav-Ray: the path ended. Arrived, or the route was lost.")
-                            return
-                        self.backend.move_relative(last_side*max(10, SEARCH_STEP//2), 0)   # lost it: look back towards where it was
                     continue
+                scanning = False
                 view, frame = got
                 track, lost = view, 0
                 seen_path = True
@@ -442,8 +463,11 @@ class NavRayRunner(VisualRunner):
                 legs += 1
                 ahead = len(self.next_dashes(view, frame.shape[0]))
                 self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
-                track, passed = self.walk_leg(view, track, reader, state)
+                leg_started = self.clock()
+                track, passed, reason = self.walk_leg(view, track, reader, state)
+                self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
         finally:
+            self.backend.key("shift", False)
             self.backend.key("w", False)
 
     # ---- sequence ----

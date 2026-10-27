@@ -21,6 +21,12 @@ HALL, STAIRS = rgb("navray_path_hall_2000.png"), rgb("navray_path_stairs_2000.pn
 DARK = np.full((1125, 2000, 3), 40, np.uint8)
 
 
+def after_calibration(runner):
+    """Mouse moves after the calibration nudges (each nudge is a move and a move back; a weak reading tries the next)."""
+    moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
+    return moves[2*(1 if runner.px_per_count else len(navray_runner.CAL_NUDGES)):]
+
+
 def pathvision_find(frame):
     return pathvision.find_path(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
@@ -56,6 +62,7 @@ def make_runner(frames, health=(972,)):
     runner.emit = lambda kind, payload=None: events.append((kind, payload))
     runner.clock = lambda: clock["t"]
     runner.sleep = lambda seconds: clock.__setitem__("t", clock["t"] + seconds)
+    runner.last_frame = None
     runner.profile = {"client_size": [2000, 1125], "navray": {"destination": "Faction HQs > Black Dragon"}}
     reader = Reader(health)
 
@@ -105,24 +112,42 @@ def turning_runner(sign, pixels_per_count=2.0, frame=STAIRS, stop_after=9):
 
 
 class WalkTests(unittest.TestCase):
-    def test_it_walks_when_the_dashes_ahead_are_lined_up_and_reports_arrival_when_they_end(self):
+    def test_it_walks_when_the_dashes_ahead_are_lined_up_and_looks_all_round_before_reporting_arrival(self):
         runner, events = make_runner(lambda i: AHEAD if i <= 24 else DARK)
         runner.walk()
         recorded = runner.backend.events
         self.assertIn(("key", "w", True), recorded)
         self.assertEqual(recorded[-1], ("key", "w", False))
-        self.assertFalse([e for e in recorded if e[:2] == ("key", "shift")])               # walking, never running
+        self.assertIn(("key", "shift", True), recorded)                                    # running
+        self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])    # and everything released
         done = [p for k, p in events if k == "done"]
         self.assertEqual(len(done), 1)
         self.assertIn("arrived", done[0].lower())
+        statuses = [p for k, p in events if k == "status"]
+        self.assertTrue(any("looking all the way round" in p for p in statuses))       # it looked before giving up
+        turns = after_calibration(runner)
+        self.assertTrue(turns and all(t > 0 for t in turns))                             # a sweep, not a stop
 
     def test_it_turns_to_line_the_dashes_up_before_it_walks(self):
         runner, _ = make_runner(lambda i: STAIRS)                        # the dashes lie far to the left
         with self.assertRaisesRegex(Interrupted, "does not line the dashes up"):   # the fake mouse turns nothing
             runner.walk()
-        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]         # after the calibration nudges
+        turns = after_calibration(runner)
         self.assertTrue(turns and all(t < 0 for t in turns), turns)                # left, and in one bold move each
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked unaligned
+
+    def test_three_looks_must_agree_before_a_move_and_disagreeing_ones_are_repeated(self):
+        runner, _ = make_runner(lambda i: AHEAD)
+        looks = {"n": 0}
+        errors = iter([-.20, .15, .02,  .01, .02, .015])       # first round disagrees, second agrees
+
+        def aim_error(view, frame):
+            looks["n"] += 1
+            return next(errors)
+        runner.aim_error = aim_error
+        got = runner.evaluate(None, 0)
+        self.assertIsNotNone(got)
+        self.assertGreaterEqual(looks["n"], 6)                   # it looked again rather than trusting round one
 
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)
@@ -134,7 +159,7 @@ class WalkTests(unittest.TestCase):
         runner, events = make_runner(lambda i: DARK)
         with self.assertRaisesRegex(Interrupted, "turning all the way round"):
             runner.walk()
-        turns = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]
+        turns = after_calibration(runner)
         self.assertTrue(turns and all(t > 0 for t in turns))                       # sweeping round in one direction
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
 
@@ -157,6 +182,19 @@ class WalkTests(unittest.TestCase):
 
 
 class FocusTests(unittest.TestCase):
+    def test_a_view_that_swings_too_far_for_one_nudge_is_measured_with_the_next_nudge(self):
+        # Live: 150 counts swung the view by hundreds of pixels (certainty .03). A weak reading tries the next nudge.
+        readings = iter([(-200.0, .03), (-50.0, .8)])
+        original = navray_runner.slide_pixels
+        navray_runner.slide_pixels = lambda a, b: next(readings)
+        try:
+            runner, _ = make_runner(lambda i: STAIRS)
+            result = runner.calibrate_turn()
+        finally:
+            navray_runner.slide_pixels = original
+        scene_width = 2000*(navray_runner.SCENE_BOX[2] - navray_runner.SCENE_BOX[0])
+        self.assertAlmostEqual(result, -50.0*(scene_width/480)/navray_runner.CAL_NUDGES[1], places=6)
+
     def test_calibration_measures_how_the_view_slides_per_count(self):
         self.assertAlmostEqual(turning_runner(+1).calibrate_turn(), -2.0, delta=.3)   # scene slides left when turning right
         self.assertAlmostEqual(turning_runner(-1).calibrate_turn(), +2.0, delta=.3)
@@ -171,8 +209,7 @@ class FocusTests(unittest.TestCase):
                     runner.walk()
                 except Interrupted:
                     pass
-                moves = [e[1] for e in runner.backend.events if e[0] == "rel"][2:]    # after the calibration nudges
-                steering = [m for m in moves if m != 0][:2]
+                steering = [m for m in after_calibration(runner) if m != 0][:2]
                 # the dashes in the frame lie to the left: a normal mouse turns left (negative counts), an inverted one right
                 self.assertTrue(steering and all(m*sign < 0 for m in steering), steering)
 
