@@ -72,8 +72,8 @@ class WalkTests(unittest.TestCase):
         runner, events = make_runner(lambda i: STAIRS if i <= 12 else DARK)
         runner.walk()
         recorded = runner.backend.events
-        self.assertEqual(recorded[0], ("key", "w", True))
-        self.assertEqual(recorded[-1], ("key", "w", False))
+        self.assertEqual(recorded[:2], [("key", "w", True), ("key", "shift", True)])      # walk and run
+        self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])
         turns = [e[1] for e in recorded if e[0] == "rel" and e[1] != 0]
         self.assertTrue(turns and all(t < 0 for t in turns[:5]), turns[:5])      # path is to the left
         self.assertTrue(all(abs(t) <= navray_runner.MAX_STEP for t in turns))
@@ -102,6 +102,13 @@ class WalkTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Health dropped"):
             runner.walk()
         self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+
+    def test_damping_eases_off_when_the_error_is_closing(self):
+        steady, closing = navray_runner.Steering(), navray_runner.Steering()
+        steady.step(-.04, 0.0)
+        closing.step(-.10, 0.0)
+        # same current error, but the second one is shrinking fast: it must turn less
+        self.assertLess(abs(closing.step(-.04, .1)), abs(steady.step(-.04, .1)))
 
     def test_steering_step_is_proportional_and_clamped(self):
         self.assertEqual(navray_runner.steer_step(0.0), 0)

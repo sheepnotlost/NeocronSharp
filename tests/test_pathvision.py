@@ -33,6 +33,10 @@ class PathVisionTests(unittest.TestCase):
     def test_a_frame_without_a_path_returns_none(self):
         self.assertIsNone(pathvision.find_path(np.full((1125, 2000, 3), 40, np.uint8)))
 
+    def test_green_posters_on_a_wall_are_not_a_path(self):
+        # Live frame where the walk ended pressed against a wall of glowing signs: no dashes are visible.
+        self.assertIsNone(pathvision.find_path(load("navray_no_path_posters_2560.png")))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

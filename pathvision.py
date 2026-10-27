@@ -29,7 +29,7 @@ def dash_candidates(frame, ignore=()):
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     mask = ((hue >= 55) & (hue <= 85) & (sat >= 55) & (val >= 95)).astype(np.uint8)
-    count, _, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
     for i in range(1, count):
         x, y, w, h, area = stats[i]
@@ -45,36 +45,103 @@ def dash_candidates(frame, ignore=()):
         long_side, short_side = max(w, h), max(1, min(w, h))
         if long_side > 10*unit and long_side/short_side < 1.5 and area/(w*h) > .5:
             continue                                   # a filled blob, not a dash
-        found.append((float(cx), float(cy), int(area)))
+        found.append((float(cx), float(cy), int(area), _orientation(labels, i, x, y, w, h, unit)))
     return found
 
 
-def best_chain(candidates, tolerance=7.0, minimum=4):
-    """Largest set of candidates on one line, nearest (lowest on screen) first; [] if too few."""
+def _orientation(labels, index, x, y, w, h, unit):
+    """Direction (radians, image axes) a dash-shaped blob points in; nan for small or roundish blobs."""
+    if max(w, h) < 9*unit:
+        return float("nan")
+    moments = cv2.moments((labels[y:y+h, x:x+w] == index).astype(np.uint8), binaryImage=True)
+    a, b, c = moments["mu20"], moments["mu02"], moments["mu11"]
+    spread = float(np.hypot(a - b, 2*c))
+    major, minor = (a + b + spread)/2, (a + b - spread)/2
+    if minor <= 0 or major/minor < 3.0:
+        return float("nan")
+    return float(.5*np.arctan2(2*c, a - b))
+
+
+def _plausible(points, areas, angles, height):
+    """Is this chain shaped like dashes on the floor receding into the distance?
+
+    It must span some depth (a flat row of marks is text), and where the dashes have a measurable
+    direction their size must shrink with height on screen (far dashes are small). Text on a sign
+    fails both: rows of equal-height lines of random width.
+    """
+    ys = points[:, 1]
+    if ys.max() - ys.min() < .08*height:
+        return False
+    measured = ~np.isnan(angles)
+    if measured.sum() >= 4:
+        sizes = np.sqrt(areas[measured])
+        if np.ptp(ys[measured]) > 0 and np.ptp(sizes) > 0:
+            if np.corrcoef(ys[measured], sizes)[0, 1] < .7:
+                return False
+    return True
+
+
+def best_chain(candidates, tolerance=7.0, minimum=4, samples=3000, max_turn=np.radians(30), height=1440, tries=25):
+    """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
+
+    Every pair is tried for small inputs; busy scenes (hundreds of candidates) try a fixed random
+    sample of pairs so the cost stays bounded. Chains are examined best first and the first one
+    that looks like a floor path wins.
+    """
     points = np.array([(c[0], c[1]) for c in candidates], dtype=float)
-    best = []
-    for i in range(len(points)):
-        for j in range(i + 1, len(points)):
-            delta = points[j] - points[i]
-            length = float(np.hypot(*delta))
-            if length < 15:
-                continue
-            normal = np.array([-delta[1], delta[0]])/length
-            inliers = np.where(np.abs((points - points[i]) @ normal) <= tolerance)[0]
-            if len(inliers) > len(best):
-                best = inliers
-    if len(best) < minimum:
+    areas = np.array([c[2] for c in candidates], dtype=float)
+    angles = np.array([c[3] if len(c) > 3 else float("nan") for c in candidates], dtype=float)
+    count = len(points)
+    if count < minimum:
         return []
-    chosen = points[best]
-    return [tuple(p) for p in chosen[np.argsort(-chosen[:, 1])]]
+    first, second = np.triu_indices(count, 1)
+    if len(first) > samples:
+        pick = np.random.default_rng(0).choice(len(first), samples, replace=False)
+        first, second = first[pick], second[pick]
+    delta = points[second] - points[first]
+    length = np.hypot(delta[:, 0], delta[:, 1])
+    usable = length >= 15
+    if not usable.any():
+        return []
+    first, delta, length = first[usable], delta[usable], length[usable]
+    normal = np.stack([-delta[:, 1], delta[:, 0]], axis=1)/length[:, None]
+    offsets = points[None, :, :] - points[first][:, None, :]
+    inside = np.abs(np.einsum("pnk,pk->pn", offsets, normal)) <= tolerance
+    # A dash lies along the path: elongated blobs must point the way the line runs. Text lines on a
+    # sign, which are elongated across it, therefore never join a chain. Small blobs carry no direction.
+    line = np.arctan2(delta[:, 1], delta[:, 0])
+    turn = np.abs((angles[None, :] - line[:, None] + np.pi/2) % np.pi - np.pi/2)
+    inside &= np.isnan(angles)[None, :] | (turn <= max_turn)
+    seen = set()
+    for pair in np.argsort(-inside.sum(axis=1), kind="stable")[:tries*4]:
+        members = tuple(np.where(inside[pair])[0])
+        if len(members) < minimum:
+            break
+        if members in seen:
+            continue
+        seen.add(members)
+        index = list(members)
+        if _plausible(points[index], areas[index], angles[index], height):
+            chosen = points[index]
+            return [tuple(p) for p in chosen[np.argsort(-chosen[:, 1])]]
+        if len(seen) >= tries:
+            break
+    return []
 
 
 def find_path(frame, ignore=()):
-    """PathView for a BGR frame, or None when no path is visible."""
-    chain = best_chain(dash_candidates(frame, ignore))
+    """PathView for a BGR frame, or None when no path is visible.
+
+    The steering point comes from a straight-line fit through the whole chain, evaluated at a
+    look-ahead height, so one stray or flickering dash cannot jerk the aim around.
+    """
+    chain = best_chain(dash_candidates(frame, ignore), height=frame.shape[0])
     if not chain:
         return None
     height, width = frame.shape[:2]
-    # Aim at the first dash at or above mid-screen: far enough to steer smoothly, near enough to follow bends.
-    aim = next((p for p in chain if p[1] <= .5*height), chain[-1])
-    return PathView(tuple(chain), aim, (aim[0] - width/2)/width)
+    ys = np.array([p[1] for p in chain])
+    xs = np.array([p[0] for p in chain])
+    slope, intercept = np.polyfit(ys, xs, 1)
+    look_y = min(max(.5*height, float(ys.min())), float(ys.max()))
+    look_x = min(max(float(slope*look_y + intercept), 0.0), float(width))
+    return PathView(tuple(chain), (look_x, look_y), (look_x - width/2)/width)

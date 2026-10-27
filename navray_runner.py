@@ -13,15 +13,19 @@ import pathvision
 from macro_core import Interrupted
 from vision_runner import VisualRunner
 
-GAIN = .30               # mouse counts per pixel of steering error at 2560 wide
-MAX_STEP = 80            # largest single mouse move
-DEADZONE = .015          # steering error (fraction of width) treated as straight ahead
+GAIN = .16               # mouse counts per pixel of steering error at 2560 wide
+MAX_STEP = 45            # largest single mouse move
+DEADZONE = .02           # steering error (fraction of width) treated as straight ahead
+SMOOTH = .5              # share of each new reading blended into the smoothed error
+LEAD = .12               # seconds of error trend added, so the turn eases off before the aim is reached
 SEARCH_STEP = 30         # turn while the path is momentarily out of view
 FIND_SECONDS = 8.0       # how long to look for a path before giving up
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 3.0
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
+ALIGNED = .12           # steering error below which the character moves forward again
+TURN_IN_PLACE = .20      # above this the character stops and turns first (running into walls while turning)
 REPORT_EVERY = 2.0       # progress line in the log
 HEALTH_BOX = (.85, .84, .95, .875)      # "HLT 972 / 972" (fractions of the frame)
 PAGES = 30
@@ -33,6 +37,22 @@ def steer_step(error):
     if abs(error) < DEADZONE:
         return 0
     return max(-MAX_STEP, min(MAX_STEP, round(error*2560*GAIN)))
+
+
+class Steering:
+    """Smoothed, damped steering: blends readings and adds the error's trend so the camera does not overshoot."""
+
+    def __init__(self):
+        self.smooth = self.last = self.time = None
+
+    def step(self, error, now):
+        self.smooth = error if self.smooth is None else self.smooth + SMOOTH*(error - self.smooth)
+        rate = 0.0 if self.last is None or now <= self.time else (self.smooth - self.last)/(now - self.time)
+        self.last, self.time = self.smooth, now
+        return steer_step(self.smooth + LEAD*rate)
+
+    def reset(self):
+        self.smooth = self.last = self.time = None
 
 
 def _bgr(frame):
@@ -215,6 +235,15 @@ class NavRayRunner(VisualRunner):
     def walk(self):
         reader = self.detector.text_reader()
         self.backend.key("w", True)
+        self.backend.key("shift", True)                  # run
+        steering = Steering()
+        forward = True
+
+        def go(on):
+            nonlocal forward
+            if on != forward:
+                self.backend.key("w", on)
+                forward = on
         try:
             started = self.clock()
             seen_path, last_path = False, started
@@ -240,7 +269,8 @@ class NavRayRunner(VisualRunner):
                 view = pathvision.find_path(_bgr(frame))
                 if view is not None:
                     seen_path, last_path = True, now
-                    step = steer_step(view.error)
+                    step = steering.step(view.error, now)
+                    go(abs(steering.smooth) < (TURN_IN_PLACE if forward else ALIGNED))
                     if step:
                         self.backend.move_relative(step, 0)
                         turned += step
@@ -258,6 +288,9 @@ class NavRayRunner(VisualRunner):
                     previous_thumb = thumb
                 else:
                     still_since, previous_thumb = None, None
+                    steering.reset()
+                    if seen_path:
+                        go(False)                        # path out of view: stand and look for it
                     if not seen_path and now - started > FIND_SECONDS:
                         raise Interrupted("No Nav-Ray path found. Check that a route is active and visible.")
                     if seen_path and now - last_path > END_SECONDS:
@@ -267,6 +300,7 @@ class NavRayRunner(VisualRunner):
                         self.backend.move_relative(SEARCH_STEP, 0)
                 self.sleep(.005)
         finally:
+            self.backend.key("shift", False)
             self.backend.key("w", False)
 
     # ---- sequence ----
