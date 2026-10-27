@@ -5,7 +5,6 @@ macro.log
 analysis/
 .deps/
 diagnostics/
-runtime/
 Neocron Macro Suite Portable.zip
 tech-counter/
 *.lnk

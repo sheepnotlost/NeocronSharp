@@ -12,7 +12,7 @@ installed in your development environment. Pytest is not required by the app.
 
 ## Repository checkout
 
-The Git repository contains source, recognition artwork, recipe catalogs, styling and regression fixtures. The bundled runtime, portable ZIP, personal profile, logs, diagnostics and recordings are excluded. To run a checkout, copy the complete `runtime/` directory from the portable distribution beside `app.py`, then run **Launch.cmd**. The requirements file records the Python package versions; Windows supplies the local English OCR engine. Developer checks use `runtime/python.exe -m unittest discover -s tests -v`; `runtime/python.exe tools/build_portable.py` builds and extraction-checks a portable ZIP locally.
+The Git repository contains everything needed to run: source, the bundled `runtime/` (Python, libraries, Tesseract), recognition artwork, recipe catalogs, styling and regression fixtures. **Code > Download ZIP**, extract the whole folder, run **Launch.cmd**. The portable ZIP, personal profile, logs, diagnostics and recordings are excluded. The requirements file records the Python package versions; Windows supplies the local English OCR engine. Developer checks use `runtime/python.exe -m unittest discover -s tests -v`; `runtime/python.exe tools/build_portable.py` builds and extraction-checks a portable ZIP locally.
 
 ## Construction
 
