@@ -449,7 +449,7 @@ class NavRayRunner(VisualRunner):
                         # The dashes went out of view (a corner, a pillar): look all the way round before
                         # deciding the route is over.
                         scanning, scan_first, scan_looks, searched = True, None, 0, 0
-                        self.emit("status", "Nav-Ray: dashes out of view, looking all the way round.")
+                        self.emit("status", f"Nav-Ray: dashes out of view, looking all the way round ({'right' if last_side > 0 else 'left'} first).")
                     if scanning:
                         small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
                         scan_looks += 1
@@ -463,7 +463,7 @@ class NavRayRunner(VisualRunner):
                                 return
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
-                        self.backend.move_relative(look, 0)
+                        self.backend.move_relative(look*(last_side if seen_path else 1), 0)
                         searched += look
                         if self.clock() - last_report >= REPORT_EVERY:
                             last_report = self.clock()

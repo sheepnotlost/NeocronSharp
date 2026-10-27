@@ -87,6 +87,17 @@ class PathVisionTests(unittest.TestCase):
         # Live frame where a walk reported 20-30 "dashes" with none on screen: green-lit walls and a lettered panel.
         self.assertIsNone(pathvision.find_path(load("navray_teal_walls_no_path_2560.png")))
 
+    def test_one_big_dash_of_the_path_being_followed_is_enough_to_carry_on(self):
+        # Live frame: the walk was following a path and only one big dash (lower left) and a marker were still in view.
+        frame = load("navray_one_dash_left_2560.png")
+        prior = pathvision.PathView(((900.0, 1000.0), (700.0, 1050.0), (500.0, 1100.0)), (700.0, 1050.0),
+                                    -.1, -.1, -1.95, 2393.0, (900.0, 1000.0))
+        view = pathvision.find_path(frame, prior=prior, tube=.25)
+        self.assertIsNotNone(view)
+        self.assertTrue(380 <= view.points[0][0] <= 480, view.points)    # the nearest mark is that dash
+        self.assertTrue(380 <= view.aim[0] <= 480, view.aim)             # the dash at the left
+        self.assertLess(view.error, -.25)                                # so turn left towards it
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

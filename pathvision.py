@@ -187,6 +187,23 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
     return []
 
 
+def _continuation(candidates, prior, height):
+    """The next stretch of the path being followed when too few dashes show to make a chain (a corner, a
+    pillar): marks on the prior line, pointing along it, with at least one clear dash among them.
+    Never used to start following a path, only to carry on with one."""
+    line = np.arctan2(1.0, prior.slope)                    # direction of the prior line in image axes
+    picks = []
+    for x, y, area, angle in sorted(candidates, key=lambda c: -c[1]):
+        if y > .90*height:
+            continue
+        if angle == angle:
+            if abs((angle - line + np.pi/2) % np.pi - np.pi/2) > np.radians(35):
+                continue                                   # a dash, but pointing some other way
+        if angle == angle:
+            picks.append((x, y))                           # only clear dashes: loose small marks are mostly noise
+    return picks[:3]
+
+
 def find_path(frame, ignore=(), prior=None, tube=.18):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
@@ -203,13 +220,18 @@ def find_path(frame, ignore=(), prior=None, tube=.18):
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
     chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height))
+    if not chain and prior is not None:
+        chain = _continuation(candidates, prior, height)    # one or two dashes of the path already being followed
     if not chain:
         return None
     ys = np.array([p[1] for p in chain])
     xs = np.array([p[0] for p in chain])
     if ys.min() > .80*height:
         return None                                        # all of it is at or behind the character's feet
-    slope, intercept = np.polyfit(ys, xs, 1)               # kept for tracking: where the line runs
+    if len(chain) >= 3 and np.ptp(ys) > 0:
+        slope, intercept = np.polyfit(ys, xs, 1)           # kept for tracking: where the line runs
+    elif prior is not None:
+        slope, intercept = prior.slope, prior.intercept    # too few marks to fit: the path keeps its line
     centre = width/2
     ahead = [p for p in chain if p[1] <= REACH_Y*height]    # chain is nearest first
     target = ahead[0] if ahead else chain[-1]
