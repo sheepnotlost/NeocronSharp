@@ -16,6 +16,10 @@ class NavRayProfileTests(unittest.TestCase):
             validate_profile(profile)                      # needs Category > Destination
         profile["navray"]["destination"] = "Faction HQs > Black Dragon"
         validate_profile(profile)
+        profile["navray"]["destination"] = ""
+        profile["navray"]["scan"] = True                   # reading the lists needs no destination
+        validate_profile(profile)
+        profile["navray"]["scan"] = False
         profile["navray"]["destination"] = "x" * 200 + " > y"
         with self.assertRaises(ValueError):
             validate_profile(profile)
@@ -28,9 +32,11 @@ class NavRayProfileTests(unittest.TestCase):
             root = tk.Tk();root.withdraw();app = App(root, profile_path=path, backend=NoInput())
             try:
                 app.tabs.select(app.navray_tab)
-                app.navray_destination.set("Faction HQs > Black Dragon")
+                app.navray_catalog = {"FACTION HQS": ["PROTOPHARM", "BLACK DRAGON"]}
+                app.navray_category.set("FACTION HQS");app.pick_navray_category("BLACK DRAGON")
                 profile = app.collect()
                 self.assertEqual(profile["operation"], "navray")
-                self.assertEqual(profile["navray"]["destination"], "Faction HQs > Black Dragon")
+                self.assertEqual(profile["navray"]["destination"], "FACTION HQS > BLACK DRAGON")
+                self.assertFalse(profile["navray"]["scan"])
             finally:
                 app.close()

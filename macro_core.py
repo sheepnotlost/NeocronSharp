@@ -52,8 +52,13 @@ def validate_profile(profile, require_ready=True):
         raise ValueError("Choose a valid skin and optional stop sound setting.")
     navray_config=profile.get("navray",{"destination":""})
     if (not isinstance(navray_config,dict) or not isinstance(navray_config.get("destination",""),str)
-            or len(navray_config.get("destination",""))>120):
+            or len(navray_config.get("destination",""))>120 or type(navray_config.get("scan",False)) is not bool):
         raise ValueError("Invalid Nav-Ray destination.")
+    saved_catalog=navray_config.get("catalog",{}) if isinstance(navray_config,dict) else {}
+    if (not isinstance(saved_catalog,dict) or len(saved_catalog)>200
+            or any(not isinstance(k,str) or not isinstance(v,list) or len(v)>500 or any(not isinstance(i,str) for i in v)
+                   for k,v in saved_catalog.items())):
+        raise ValueError("Invalid saved Nav-Ray lists.")
     recycling=profile.get("recycling",{"recipe":None})
     if not isinstance(recycling,dict):raise ValueError("Invalid recycling selection.")
     if recycling.get("recipe") is not None:
@@ -147,7 +152,8 @@ def validate_profile(profile, require_ready=True):
     if require_ready:
         if operation == "navray":
             from navray import parse_destination
-            parse_destination(navray_config.get("destination", ""))
+            if not navray_config.get("scan"):
+                parse_destination(navray_config.get("destination", ""))
             return profile
         if operation == "recycling":
             if recycling.get("recipe") is None:raise ValueError("Choose a recycling recipe first.")

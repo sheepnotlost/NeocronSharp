@@ -19,6 +19,7 @@ from recycling import load_catalog, filter_recipes
 from appearance import SKINS, apply_skin, stop_sound
 from construction_catalog import load_construction_catalog, filter_construction
 import gogo
+import navray
 
 ROOT = Path(__file__).resolve().parent
 PROFILE_PATH = ROOT / "profile.json"
@@ -240,11 +241,33 @@ class App:
     def build_navray_tab(self):
         host=ttk.Frame(self.navray_tab,padding=12);host.pack(fill="both",expand=True)
         host.columnconfigure(1,weight=1)
-        ttk.Label(host,text="Destination").grid(row=0,column=0,sticky="w",pady=5)
-        self.navray_destination=tk.StringVar()
-        entry=ttk.Entry(host,textvariable=self.navray_destination,width=1)
-        entry.grid(row=0,column=1,sticky="ew",padx=(10,0),pady=5);self.editable.append(entry)
-        ttk.Label(host,text="Category > Destination. Open Nav-Ray first.").grid(row=1,column=1,sticky="w",padx=(10,0))
+        for row,label in ((0,"Category"),(1,"Destination")):
+            ttk.Label(host,text=label).grid(row=row,column=0,sticky="w",pady=5)
+        self.navray_category=tk.StringVar();self.navray_target=tk.StringVar()
+        self.navray_scan=tk.BooleanVar(value=False)
+        self.navray_category_box=ttk.Combobox(host,textvariable=self.navray_category,state="readonly",width=1)
+        self.navray_category_box.grid(row=0,column=1,sticky="ew",padx=(10,0),pady=5)
+        self.navray_target_box=ttk.Combobox(host,textvariable=self.navray_target,state="readonly",width=1)
+        self.navray_target_box.grid(row=1,column=1,sticky="ew",padx=(10,0),pady=5)
+        self.navray_category_box.bind("<<ComboboxSelected>>",lambda event:self.pick_navray_category())
+        scan=ttk.Checkbutton(host,text="Read lists from Nav-Ray (next Start)",variable=self.navray_scan)
+        scan.grid(row=2,column=1,sticky="w",padx=(10,0),pady=(8,0))
+        ttk.Label(host,text="Open Nav-Ray first.").grid(row=3,column=1,sticky="w",padx=(10,0))
+        self.editable.extend((self.navray_category_box,self.navray_target_box,scan))
+        self.load_navray_lists()
+
+    def load_navray_lists(self):
+        self.navray_catalog=navray.load_catalog(self.profile)
+        self.navray_category_box.configure(values=list(self.navray_catalog))
+
+    def pick_navray_category(self,target=""):
+        self.navray_target_box.configure(values=navray.numbered(self.navray_catalog.get(self.navray_category.get(),[])))
+        self.navray_target.set(target)
+
+    def set_navray_destination(self,text):
+        category,_,target=(text or "").partition(" > ")
+        self.navray_category.set(category if category in self.navray_catalog else "")
+        self.pick_navray_category(target if target in navray.numbered(self.navray_catalog.get(category,[])) else "")
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -604,7 +627,9 @@ class App:
         self.stop_on_slots.set(construction.get("stop_at_slots") is not None)
         self.minimum_slots.set(str(construction.get("stop_at_slots") if construction.get("stop_at_slots") is not None else 4))
         self.refresh_recipe()
-        self.navray_destination.set(self.profile.get("navray",{}).get("destination",""))
+        self.load_navray_lists()
+        self.navray_scan.set(self.profile.get("navray",{}).get("scan",False))
+        self.set_navray_destination(self.profile.get("navray",{}).get("destination",""))
         self.tabs.select(self.navray_tab if operation=="navray" else self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
         recycle_id=self.profile.get("recycling",{}).get("recipe")
         if recycle_id and self.recycle_tree.exists(recycle_id):
@@ -633,7 +658,8 @@ class App:
                                                 if label==self.operation_var.get())
             if self.tabs.select()==str(self.navray_tab):
                 profile["operation"]="navray"
-                profile["navray"]={"destination":self.navray_destination.get().strip()}
+                chosen=f"{self.navray_category.get()} > {self.navray_target.get()}" if self.navray_category.get() and self.navray_target.get() else ""
+                profile["navray"]={**self.profile.get("navray",{}),"destination":chosen,"scan":self.navray_scan.get()}
             elif self.tabs.select()==str(self.recycling_tab):
                 profile["operation"]="recycling"
                 selection=self.recycle_tree.selection()
@@ -821,6 +847,13 @@ class App:
                 except ValueError:pass
                 try:save_profile(self.profile_path,self.profile)
                 except (ValueError,OSError) as exc:self.report("Could not save material labels: "+str(exc))
+            elif kind == "navray_catalog":
+                self.profile.setdefault("navray",{})["catalog"]=payload
+                self.profile["navray"]["scan"]=False
+                self.navray_scan.set(False)
+                self.load_navray_lists()
+                try:save_profile(self.profile_path,self.profile)
+                except (ValueError,OSError) as exc:self.report("Could not save Nav-Ray lists: "+str(exc))
             elif kind == "detected":
                 self.show_detected(payload)
             elif kind == "blueprint_cycle":

@@ -60,7 +60,7 @@ class NavRayReadingTests(unittest.TestCase):
     def test_category_rows_are_read_in_order(self):
         frame = gray("navray_window_1082.png", (1080, 1920))
         window = navray.find_navray(self.reader, frame)
-        rows = navray.read_rows(self.reader, frame, window, "select")
+        rows = navray.read_rows(frame, window, "select")
         self.assertEqual(navray.find_row(rows, "Faction HQs"), 7)
         self.assertEqual(navray.find_row(rows, "Utilities"), 0)
         self.assertEqual(navray.find_row(rows, "Pepper Park Apartments"), 3)
@@ -68,9 +68,29 @@ class NavRayReadingTests(unittest.TestCase):
     def test_destination_rows_are_read(self):
         frame = gray("navray_window_destinations_924.png", (1080, 1920), at=(300, 200))
         window = navray.find_navray(self.reader, frame)
-        rows = navray.read_rows(self.reader, frame, window, "destination")
+        rows = navray.read_rows(frame, window, "destination")
         self.assertEqual(navray.find_row(rows, "Protopharm"), 0)
         self.assertEqual(navray.find_row(rows, "Black Dragon"), 2)
+
+    def test_every_row_of_both_lists_is_read_exactly_on_a_live_2560_frame(self):
+        # Live frame: the clicked category (OUTZONE DUNGEONS) is highlighted and the cursor sits on a row.
+        frame = gray("navray_lists_2560.png")
+        window = navray.find_navray(self.reader, frame)
+        self.assertIsNotNone(window)
+        select = dict(navray.read_rows(frame, window, "select"))
+        self.assertEqual([select[i] for i in range(8)], [
+            "PLAZA DUNGEONS", "VIAROSSO DUNGEONS", "PEPPER PARK DUNGEONS", "OUTZONE DUNGEONS",
+            "TECH HAVEN DUNGEONS", "MILITARY BASE DUNGEONS", "CANYON DUNGEONS", "WASTELAND DUNGEONS"])
+        destination = dict(navray.read_rows(frame, window, "destination"))
+        self.assertEqual(sorted(destination), list(range(7)))                 # the 8th row is under the buttons
+        self.assertEqual(destination[0], "Outzone 3 - Storage Halls 3 (hard)")
+        self.assertEqual(destination[4], "Outzone 3 - Water Cleaning Sec 9 (hard)")
+        self.assertEqual(destination[6], "Outzone 5 - Storage Halls 5 (hard)")
+
+    def test_tidy_removes_edge_junk_only(self):
+        self.assertEqual(navray.tidy("lOUTZONE DUNGEONS ="), "OUTZONE DUNGEONS")
+        self.assertEqual(navray.tidy("Outzone 4 - Storage Halls 4 (hard) ia"), "Outzone 4 - Storage Halls 4 (hard)")
+        self.assertEqual(navray.tidy("FACTION HQS"), "FACTION HQS")
 
     def test_a_frame_without_the_window_is_not_found(self):
         self.assertIsNone(navray.find_navray(self.reader, np.zeros((1080, 1920), np.uint8)))

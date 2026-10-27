@@ -16,7 +16,7 @@ The Git repository contains everything needed to run: source, the bundled `runti
 
 ## Nav-Ray
 
-In game press Tab and open Nav-Ray (F9). In the Nav-Ray tab type `Category > Destination` (for example `Faction HQs > Black Dragon`) and press Start in 3 seconds. The macro picks the destination, presses Start in Nav-Ray, then walks the dashed path (W plus mouse steering). Switch away from the game to stop. It stops by itself when the path ends, nothing moves, health drops or a loading screen appears. Walking inside one area only; early version, not yet verified in game.
+In game press Tab and open Nav-Ray (F9). In the Nav-Ray tab pick a Category and Destination from the lists (all 23 categories and 239 destinations are included, compiled from the in-game window) and press Start in 3 seconds. Tick Read lists from Nav-Ray to refresh them from the open window on the next Start. The macro picks the destination, presses Start in Nav-Ray, then walks the dashed path (W plus mouse steering). Switch away from the game to stop. It stops by itself when the path ends, nothing moves, health drops or a loading screen appears. Walking inside one area only; early version, not yet verified in game.
 
 ## Construction
 

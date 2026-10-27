@@ -139,3 +139,66 @@ class SelectionTests(unittest.TestCase):
         runner.wait = lambda seconds, safe_pause=False: None
         with self.assertRaisesRegex(Interrupted, "Nav-Ray window not found"):
             runner.find_window(reader)
+
+
+class OccurrenceTests(unittest.TestCase):
+    """choose() against a simulated Nav-Ray list that scrolls one row per wheel notch."""
+
+    def setUp(self):
+        import navray
+        self.navray = navray
+        self.catalog = navray.load_catalog()
+        self.window = navray.NavRay(0, 0, 1.0)
+        self.original = navray.read_rows
+        self.start = {"select": 0, "destination": 0}
+        self.lists = {"select": list(self.catalog), "destination": []}
+        runner, _ = make_runner(lambda i: DARK)
+        runner.frame = lambda: DARK
+        runner.wait = lambda seconds, safe_pause=False: None
+        runner.find_window = lambda reader: self.window
+        self.last = {"which": "select"}
+        self.clicks = []
+
+        def move(point):
+            for which in ("select", "destination"):
+                if tuple(point) == tuple(self.window.wheel_point(which)):
+                    self.last["which"] = which
+        runner.move = move
+        runner.click = self.clicks.append
+
+        def scroll(notches):
+            which = self.last["which"]
+            size, visible = len(self.lists[which]), navray.LIST_ROWS[which]
+            self.start[which] = max(0, min(max(0, size - visible), self.start[which] - notches))
+        runner.backend.scroll = scroll
+
+        def rows(gray, window, which):
+            page = self.lists[which][self.start[which]:self.start[which] + navray.LIST_ROWS[which]]
+            return list(enumerate(page))
+        navray.read_rows = rows
+        self.runner = runner
+
+    def tearDown(self):
+        self.navray.read_rows = self.original
+
+    def pick(self, category, wanted):
+        self.lists["destination"] = list(self.catalog[category])
+        self.start["destination"] = 0
+        self.clicks.clear()
+        self.runner.choose("destination", wanted, None)
+        point = self.clicks[-1]
+        row = round((point[1] - (self.navray.DEST_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
+        return self.start["destination"] + row         # the clicked entry's index in the whole list
+
+    def test_a_plain_name_is_found_after_scrolling(self):
+        index = self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
+        self.assertEqual(self.catalog["VIAROSSO APARTMENTS"][index], "Viarosso / Alamo Living / Enter C")
+
+    def test_numbered_duplicates_pick_the_right_one_even_across_pages(self):
+        for category, count in (("VIAROSSO APARTMENTS", 4), ("PEPPER PARK APARTMENTS", 6), ("PLAZA DUNGEONS", 2)):
+            entries = self.catalog[category]
+            label = max(set(entries), key=entries.count)
+            first = entries.index(label)
+            for n in range(1, count + 1):
+                with self.subTest(category=category, n=n):
+                    self.assertEqual(self.pick(category, f"{label} #{n}"), first + n - 1)
