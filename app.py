@@ -377,7 +377,7 @@ class App:
         self.construction_recipe=tk.StringVar()
         self.construction_available=tk.StringVar(value="1")
         self.construction_count=tk.StringVar(value="1")
-        for row,label in enumerate(("Recipe", "Blueprints in stack", "Build this batch")):
+        for row,label in ((0,"Recipe"),(2,"Build this batch")):
             ttk.Label(form,text=label).grid(row=row,column=0,sticky="w",pady=5)
         choice=self.construction_choice=ttk.Combobox(form,textvariable=self.construction_recipe,
                             values=[r["name"] for r in self.recipes.values()],state="normal",width=1)
@@ -385,11 +385,11 @@ class App:
         choice.bind("<<ComboboxSelected>>",lambda event:self.select_recipe())
         choice.bind("<FocusOut>",lambda event:self.refresh_recipe())
         self.editable.append(choice)
-        for row,var in ((1,self.construction_available),(2,self.construction_count)):
+        for row,var in ((2,self.construction_count),):
             entry=ttk.Entry(form,textvariable=var,width=10)
             entry.grid(row=row,column=1,sticky="w",padx=(10,0),pady=5)
             self.editable.append(entry)
-        ttk.Label(form,text="Enter the actual blueprint stack size. Build = 0 uses that entire stack.",
+        ttk.Label(form,text="Build = 0 keeps going until your blueprints run out. No stack size to enter.",
                   wraplength=485).grid(row=3,column=0,columnspan=2,sticky="w",pady=(8,0))
         self.recipe_description=tk.StringVar()
         ttk.Label(form,textvariable=self.recipe_description,wraplength=485).grid(
@@ -682,7 +682,9 @@ class App:
                 if key is None:
                     key=add_recipe(profile,self.construction_recipe.get(),self.recipe_aliases.get().split(","))
                 profile["construction"]={"recipe":key,
-                                         "available":int(self.construction_available.get()),
+                                         # The stack size is no longer asked for; 10000 means "unknown"
+                                         # and the batch ends when no blueprint can be found.
+                                         "available":10000,
                                          "count":int(self.construction_count.get()),
                                          "search_mode":next(k for k,v in SEARCH_LABELS.items() if v==self.search_mode.get()),
                                          "gogo_refill":self.gogo_refill.get(),

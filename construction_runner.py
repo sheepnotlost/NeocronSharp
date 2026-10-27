@@ -256,14 +256,14 @@ class ConstructionRunner(VisualRunner):
             dialog=self.detector.quantity(frame,checkpoint=self.guard,**({"expected":True} if hasattr(self.detector,"quantity_dense") else {}))
             if dialog is not None:
                 break
-            if available==1:
+            if available in (1,None):
                 processor=self.detector.processor(frame,checkpoint=self.guard)
                 if self.detector.has_loaded_blueprint(frame,processor):
                     return
             self.wait(.1)
             elapsed+=.1
         if dialog is None:
-            if available>1:
+            if available is not None and available>1:
                 raise Interrupted("Expected blueprint quantity dialog was not detected. No construction was started.")
             return
         if not dialog.get("one"):
@@ -424,12 +424,19 @@ class ConstructionRunner(VisualRunner):
         if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
             raise Interrupted("Processor is already working. Finish the current job before starting construction.")
         self.detector.construction_input(frame,processor)
+        stack_unknown=config["available"]>=10000
         for _ in range(target):
-            source,destination=self.locate_blueprint()
+            try:source,destination=self.locate_blueprint()
+            except Interrupted as exc:
+                # With no stack size entered, running out of blueprints is how a batch ends.
+                if stack_unknown and self.completed>0 and str(exc).startswith("No verified"):
+                    self.emit("done",f"Out of {self.name} blueprints after {self.completed} builds. Final result remains in the Processor.")
+                    return
+                raise
             self.emit("status", f"{self.name}: transferring one blueprint; ingredients stay untouched.")
             self.drag(source,destination)
             self.move((24,80))
-            self.confirm_one(config["available"])
+            self.confirm_one(None if stack_unknown else config["available"])
             frame,processor=self.processor_state()
             if self.detector.quantity(frame,checkpoint=self.guard) is not None:
                 raise Interrupted("Quantity dialog is still open. No construction was started.")
