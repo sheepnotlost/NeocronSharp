@@ -184,17 +184,41 @@ def tidy(text):
     return re.sub(r"[\s|=~_,;:!¦]+$", "", text)
 
 
+def row_picture(row_gray):
+    """Dark text on a light background, kept in grey so letter shapes stay sharp, for a normal row
+    (light text on dark) and the selected row (dark text on a bright bar) alike. None if no text."""
+    import cv2
+    import numpy as np
+    height, width = row_gray.shape
+    bright = row_gray > 120
+    if bright.mean() > .45:
+        columns = np.where(bright.mean(axis=0) > .5)[0]
+        if len(columns) < 10:
+            return None
+        left, right = columns.min() + 3, columns.max() - 3          # inside the bar: its ends are not text
+        return row_gray[:, left:right]
+    picture = 255 - row_gray
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(bright.astype(np.uint8), connectivity=8)
+    for index in range(1, count):
+        x, w = stats[index][0], stats[index][2]
+        at_edge = x <= 3 or x + w >= width - 3
+        if at_edge and w <= max(3, .012*width) and stats[index][3] >= .8*height:
+            picture[labels == index] = int(picture.max())          # the window frame at the crop edge, not a letter (an "I" is thin too)
+    return picture
+
+
 def read_row(row_gray):
-    """Text of one list row, or "" for an empty row. The selected row is dark text on a bright bar."""
-    bright = float((row_gray > 120).mean())
-    if bright < .04:
+    """Text of one list row, or "" for an empty row."""
+    if float((row_gray > 120).mean()) < .04:
+        return ""
+    picture = row_picture(row_gray)
+    if picture is None:
         return ""
     import cv2
     import pytesseract
     from ntc import ocr
     ocr.configure("")
-    image = row_gray if bright > .5 else 255 - row_gray      # Tesseract wants dark text on light
-    big = cv2.resize(image, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    big = cv2.resize(picture, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     big = cv2.copyMakeBorder(big, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=int(big.max()))
     return tidy(pytesseract.image_to_string(big, config="--psm 7"))
 

@@ -236,6 +236,15 @@ class OccurrenceTests(unittest.TestCase):
         self.assertTrue(self.drags)
         self.assertEqual(self.runner.backend.events, [])         # never the mouse wheel
 
+    def test_scrolling_up_finds_a_row_the_first_move_to_the_top_missed(self):
+        self.lists["destination"] = list(self.catalog["TRADER DIRECTORY"])
+        self.start["destination"] = len(self.lists["destination"]) - self.navray.LIST_ROWS["destination"]   # list left scrolled to the bottom
+        self.runner.to_top = lambda which, window: None            # the move to the top did not happen
+        self.clicks.clear()
+        self.runner.choose("destination", "WEAPONS", None)         # first entry: only reachable by going up
+        self.assertEqual(self.start["destination"], 0)
+        self.assertTrue(self.clicks)
+
     def test_each_page_overlaps_by_two_rows_so_nothing_is_skipped(self):
         self.pick("VIAROSSO APARTMENTS", "Viarosso / Alamo Living / Enter C")
         pages = [d for d in self.drags if d > 0]

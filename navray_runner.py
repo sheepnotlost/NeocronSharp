@@ -118,6 +118,9 @@ class NavRayRunner(VisualRunner):
     def page_down(self, which, window):
         return self.drag_thumb(which, window, navray.LIST_ROWS[which] - 2)
 
+    def page_up(self, which, window):
+        return self.drag_thumb(which, window, -(navray.LIST_ROWS[which] - 2))
+
     def step_to_occurrence(self, which, window, label, row, occurrence):
         """Row of the n-th of several identical-looking entries that follow each other, scrolling if needed."""
         target = row + occurrence - 1
@@ -132,30 +135,42 @@ class NavRayRunner(VisualRunner):
             raise Interrupted(f"Nav-Ray: could not locate '{label}' number {occurrence}. Nothing was clicked.")
         return target
 
-    def choose(self, which, wanted, reader):
-        label, occurrence = navray.split_label(wanted)
-        window = self.find_window(reader)
-        self.to_top(which, window)
-        previous, empty, saw = None, 0, []
+    def sweep(self, which, window, label, step, saw):
+        """Read pages while moving with `step` (page_down or page_up) until `label` shows or the list ends.
+        Returns the row it was found on, or None."""
+        previous, empty = None, 0
         for _ in range(PAGES):
             rows = self.read_page(which, window)
             if not rows and empty < 8:
                 empty += 1                       # the list may not have redrawn after the last click yet
                 self.wait(.3)
                 continue
-            saw = [text for _, text in rows] or saw
+            saw[:] = [text for _, text in rows] or saw
             row = navray.find_row(rows, label)
             if row is not None:
-                if occurrence > 1:
-                    row = self.step_to_occurrence(which, window, label, row, occurrence)
-                self.click(window.row_point(which, row))
-                self.wait(.4)
-                return
-            if rows == previous or self.page_down(which, window) is None:
-                break
+                return row
+            if rows == previous or step(which, window) is None:
+                return None
             previous = rows
-        shown = "; ".join(saw[:8]) if saw else "nothing readable"
-        raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list. Last rows read: {shown}.")
+        return None
+
+    def choose(self, which, wanted, reader):
+        label, occurrence = navray.split_label(wanted)
+        window = self.find_window(reader)
+        saw = []
+        self.to_top(which, window)
+        row = self.sweep(which, window, label, self.page_down, saw)
+        if row is None and occurrence == 1:
+            # Not found going down: the first move to the top may not have got all the way, so go back
+            # up from the bottom as well before giving up.
+            row = self.sweep(which, window, label, self.page_up, saw)
+        if row is None:
+            shown = "; ".join(saw[:8]) if saw else "nothing readable"
+            raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list. Last rows read: {shown}.")
+        if occurrence > 1:
+            row = self.step_to_occurrence(which, window, label, row, occurrence)
+        self.click(window.row_point(which, row))
+        self.wait(.4)
 
     def read_list(self, which, window, reader):
         """Every entry of a list, top to bottom, plus how many rows could not be read (a highlighted row reads blank)."""
