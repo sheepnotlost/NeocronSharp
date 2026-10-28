@@ -200,6 +200,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] Dash colour (27 Oct): the Nav-Ray dashes take the HUD colour scheme (`/set gfx_hudcolor <x>`, schemes in the game's ini/rposcolor.ini; the user switched to a red scheme and the dashes turned red). pathvision now finds green or red dashes and the macro locks onto whichever colour shows a path; red is far easier to tell from green walls and signs. Red detection is verified only on real green frames recoloured red (no real red frame is saved), so the red thresholds are untuned.
 
+- [x] Every Nav-Ray run records itself (27 Oct): each status line is saved with the game frame at that moment and the macro's state (diagnostics/last_run/, replaced by the next run, git-ignored). tools/review_run.py summarises it (legs by outcome, colour, calibration) and builds failures.png of the scenes where the walk got stuck or lost the dashes. Purpose: turn every failed run, including the user's own from the app, into test cases and tuning data instead of discarding it. Nothing in the macro adapts by itself yet.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

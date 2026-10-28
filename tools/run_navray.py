@@ -50,9 +50,6 @@ def main():
     def emit(kind, payload=None):
         count["n"] += 1
         print(f"[{time.monotonic() - started:6.1f}s] {count['n']:03d} {kind}: {payload}", flush=True)
-        frame = getattr(holder.get("runner"), "last_frame", None)
-        if frame is not None:
-            cv2.imwrite(str(folder / f"{count['n']:03d}.jpg"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 93])
 
     import routes
     book = routes.RouteBook()
@@ -64,6 +61,7 @@ def main():
             print("route saved:", payload["start"], "->", payload["end"], flush=True)
         emit(kind, payload)
     runner = holder["runner"] = NavRayRunner(profile, backend, Control(), emit_and_keep)
+    runner.start_recording(folder)
     runner.route_book = book
     # Open Nav-Ray ourselves if it is not showing: Tab for the interactive UI, then click NAV-RAY in the top menu.
     import navray

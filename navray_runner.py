@@ -3,7 +3,10 @@ dashed path by steering the camera (relative mouse motion) while holding W.
 
 All constants below are starting values to be tuned against live runs (mouse sensitivity, speed).
 """
+import json
 import re
+import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -67,7 +70,58 @@ def slide_pixels(first_gray, second_gray):
     return float(dx), float(response)
 
 
+RECORD_FRAMES = 400            # frames kept per run
+RECORD_SIZE = (1280, 720)
+
+
 class NavRayRunner(VisualRunner):
+    # ---- every run leaves a record: the game frame at each decision, and what was decided ----
+    record_dir = None            # set to a folder to record; the app and tools point it at diagnostics/last_run
+    record_count = 0
+    record_started = 0.0
+
+    def start_recording(self, folder):
+        """Begin a fresh record in `folder` (the previous run's record is replaced). Every status line the run
+        emits is saved with the game frame at that moment, so a failed run can be replayed and studied, and
+        its frames turned into test cases."""
+        self.record_dir = Path(folder)
+        self.record_dir.mkdir(parents=True, exist_ok=True)
+        for old in list(self.record_dir.glob("*.jpg")) + list(self.record_dir.glob("events.jsonl")):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        self.record_count, self.record_started = 0, time.monotonic()
+        plain = self.emit
+
+        def recording_emit(kind, payload=None, _plain=plain):
+            self.record(kind, payload)
+            _plain(kind, payload)
+        self.emit = recording_emit
+
+    def record(self, kind, payload):
+        if self.record_dir is None or self.record_count >= RECORD_FRAMES:
+            return
+        self.record_count += 1
+        name = f"{self.record_count:03d}"
+        frame = getattr(self, "last_frame", None)
+        saved = False
+        if frame is not None and hasattr(frame, "shape"):
+            try:
+                small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), RECORD_SIZE, interpolation=cv2.INTER_AREA)
+                saved = bool(cv2.imwrite(str(self.record_dir / f"{name}.jpg"), small, [cv2.IMWRITE_JPEG_QUALITY, 85]))
+            except (cv2.error, OSError):
+                pass
+        try:
+            line = {"n": self.record_count, "t": round(time.monotonic() - self.record_started, 2), "kind": kind,
+                    "text": payload if isinstance(payload, str) else None, "frame": f"{name}.jpg" if saved else None,
+                    "px_per_count": getattr(self, "px_per_count", None), "dash_color": getattr(self, "dash_color", None)}
+            with open(self.record_dir / "events.jsonl", "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(line, ensure_ascii=False) + chr(10))
+        except (OSError, TypeError):
+            pass
+
+
     # ---- setup: choose the destination in the open Nav-Ray window ----
     def find_window(self, reader):
         # The OCR occasionally misses the button row on one capture, so look a few times.
@@ -687,6 +741,8 @@ class NavRayRunner(VisualRunner):
 
     def run(self):
         try:
+            if self.record_dir is None:
+                self.start_recording(Path(__file__).parent / "diagnostics" / "last_run")
             self.guard()
             self.execute()
         except Exception as exc:

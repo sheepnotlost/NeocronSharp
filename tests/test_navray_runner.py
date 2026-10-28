@@ -291,6 +291,28 @@ class FocusTests(unittest.TestCase):
         self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/2.0 + 1 for m in moves), moves)
 
 
+class RecordingTests(unittest.TestCase):
+    def test_every_status_line_is_saved_with_the_game_frame_and_a_new_run_replaces_the_old_record(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            runner, events = make_runner(lambda i: AHEAD)
+            runner.last_frame = AHEAD
+            runner.start_recording(folder)
+            runner.emit("status", "Nav-Ray: leg 1, 4 dashes ahead")
+            runner.emit("status", "Nav-Ray: leg 1 ended after 3s: stuck against something.")
+            lines = [json.loads(l) for l in (Path(folder) / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([l["text"] for l in lines], ["Nav-Ray: leg 1, 4 dashes ahead", "Nav-Ray: leg 1 ended after 3s: stuck against something."])
+            self.assertTrue(all((Path(folder) / l["frame"]).exists() for l in lines))
+            self.assertEqual(len(events), 2)                                        # the normal emit still happens
+            again, _ = make_runner(lambda i: AHEAD)
+            again.last_frame = AHEAD
+            again.start_recording(folder)
+            self.assertEqual(list(Path(folder).glob("*.jpg")), [])                  # the old frames are gone
+            again.emit("status", "second run")
+            self.assertEqual(len(list(Path(folder).glob("*.jpg"))), 1)
+
+
 class InterfaceModeTests(unittest.TestCase):
     """Tab toggles the game's interactive-UI mode, so the macro must look at the screen, not assume the state."""
 
