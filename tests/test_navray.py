@@ -154,3 +154,31 @@ class LitWallTests(unittest.TestCase):
         self.assertFalse(navray.unreadable("ADMINISTRATION", "NEOCRON CITY SECTORS", entries))
         self.assertFalse(navray.unreadable("garbled ———", "NEOCRON CITY SECTORS", entries))
         self.assertFalse(navray.unreadable("Enter A", "Enter C", ["Enter A", "Enter C"]))
+
+
+class SelectionCheckTests(unittest.TestCase):
+    """Live (28 Oct, 17:04): a click under the Start/Stop buttons selected nothing and the run went on."""
+    @classmethod
+    def setUpClass(cls):
+        cls.reader = TextReader()
+
+    def window(self, name):
+        frame = gray(name, (1080, 1920))
+        window = navray.find_navray(self.reader, frame)
+        self.assertIsNotNone(window)
+        return frame, window
+
+    def test_no_destination_selected_is_seen(self):
+        frame, window = self.window("navray_no_destination_selected_1080.png")
+        self.assertIsNone(navray.selected_row(frame, window, "destination"))
+        self.assertEqual(navray.selected_row(frame, window, "select"), 5)       # NEOCRON CITY SECTORS
+
+    def test_a_selected_destination_is_seen(self):
+        frame, window = self.window("navray_destination_selected_1080.png")
+        self.assertEqual(navray.selected_row(frame, window, "destination"), 1)  # PLAZA SEC-2
+
+    def test_an_entry_past_the_visible_rows_is_not_inferred(self):
+        entries = ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8", "I9"]
+        rows = [(0, "A1"), (1, "B2"), (2, "C3"), (3, "D4"), (4, "E5"), (5, "F6"), (6, "G7")]
+        self.assertIsNone(navray.infer_row(rows, entries, "H8", visible=7))
+        self.assertEqual(navray.infer_row(rows, entries, "H8", visible=8), 7)

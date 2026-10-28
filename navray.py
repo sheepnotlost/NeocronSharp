@@ -101,10 +101,12 @@ def find_row(rows, wanted):
     return None
 
 
-def infer_row(rows, entries, wanted):
+def infer_row(rows, entries, wanted, visible=None):
     """The row a wanted entry must be on, worked out from its neighbours when its own text could not be read
     (a highlighted row, a pointer over the text). `entries` is the list's known contents in game order.
-    Needs at least one neighbour read exactly, and every neighbour read exactly has to agree. None otherwise."""
+    Needs at least one neighbour read exactly, and every neighbour read exactly has to agree. None otherwise,
+    and None when the entry lies past the `visible` rows of the page (live: the Destination list's 8th row is
+    under the Start/Stop buttons, and a click there selected nothing)."""
     label, occurrence = split_label(wanted)
     positions = [i for i, entry in enumerate(entries) if _norm(entry) == _norm(label)]
     if len(positions) < occurrence:
@@ -121,7 +123,7 @@ def infer_row(rows, entries, wanted):
     if len(offsets) != 1:
         return None
     row = target + offsets.pop()
-    return row if 0 <= row < max(LIST_ROWS.values()) else None
+    return row if 0 <= row < (visible or max(LIST_ROWS.values())) else None
 
 
 def unreadable(shown, wanted, entries):
@@ -336,17 +338,30 @@ def read_row(row_gray):
     return text
 
 
+def row_crops(gray, window, which):
+    """The visible rows of a list as grey crops, top to bottom."""
+    left, top, right, bottom = window.list_box(which)
+    crops = []
+    for row in range(LIST_ROWS[which]):
+        y0 = top + round((5 + ROW_PITCH*row - 1)*window.scale)
+        y1 = min(bottom, top + round((5 + ROW_PITCH*row + ROW_H + 1)*window.scale))
+        crops.append(gray[max(0, y0):y1, left:right].copy())
+    return crops
+
+
+def selected_row(gray, window, which):
+    """The row of the list showing the selection bar, or None when no visible row is selected."""
+    for row, crop in enumerate(row_crops(gray, window, which)):
+        if crop.size and _selected(crop):
+            return row
+    return None
+
+
 def read_rows(gray, window, which):
     """[(row, text)] of the non-empty visible entries of the "select" or "destination" list.
     Rows are read side by side (each reading is a separate Tesseract process, so they overlap)."""
     from concurrent.futures import ThreadPoolExecutor
-    left, top, right, bottom = window.list_box(which)
-    scale = window.scale
-    crops = []
-    for row in range(LIST_ROWS[which]):
-        y0 = top + round((5 + ROW_PITCH*row - 1)*scale)
-        y1 = min(bottom, top + round((5 + ROW_PITCH*row + ROW_H + 1)*scale))
-        crops.append(gray[max(0, y0):y1, left:right].copy())
+    crops = row_crops(gray, window, which)
     with ThreadPoolExecutor(max_workers=4) as pool:
         texts = list(pool.map(lambda crop: read_row(crop) if crop.size else "", crops))
     return [(row, text) for row, text in enumerate(texts) if text]

@@ -571,7 +571,13 @@ class SelectionTests(unittest.TestCase):
         runner.move = lambda point: None
         runner.click = clicks.append
         runner.drag = lambda a, b: None
-        runner.choose("select", "Faction HQs", reader)
+        import navray
+        original = navray.selected_row
+        navray.selected_row = lambda gray, window, which: 7              # a still capture cannot highlight
+        try:
+            runner.choose("select", "Faction HQs", reader)
+        finally:
+            navray.selected_row = original
         # FACTION HQS is the 8th row of the Select list (text at x 204, y 345 in the capture, +100 offset).
         self.assertEqual(len(clicks), 1)
         self.assertLessEqual(abs(clicks[0][0] - (204 + 100 + 60)), 8)
@@ -598,7 +604,7 @@ class OccurrenceTests(unittest.TestCase):
         self.navray = navray
         self.catalog = navray.load_catalog()
         self.window = navray.NavRay(1000, 1000, 1.0)
-        self.original = (navray.read_rows, navray.find_thumb)
+        self.original = (navray.read_rows, navray.find_thumb, navray.selected_row)
         self.start = {"select": 0, "destination": 0}
         self.lists = {"select": list(self.catalog), "destination": []}
         self.last = {"which": "select"}
@@ -632,11 +638,18 @@ class OccurrenceTests(unittest.TestCase):
         def rows(gray, window, which):
             page = self.lists[which][self.start[which]:self.start[which] + navray.LIST_ROWS[which]]
             return list(enumerate(page))
-        navray.read_rows, navray.find_thumb = rows, thumb
+        def selected(gray, window, which):
+            # The game highlights a clicked row, unless the click missed every visible row.
+            if not self.clicks:
+                return None
+            dy = navray.DEST_DY if which == "destination" else navray.SELECT_DY
+            row = round((self.clicks[-1][1] - (window.y + dy + navray.ROW_H/2))/navray.ROW_PITCH)
+            return row if 0 <= row < navray.LIST_ROWS[which] else None
+        navray.read_rows, navray.find_thumb, navray.selected_row = rows, thumb, selected
         self.runner = runner
 
     def tearDown(self):
-        self.navray.read_rows, self.navray.find_thumb = self.original
+        self.navray.read_rows, self.navray.find_thumb, self.navray.selected_row = self.original
 
     def pick(self, category, wanted):
         self.lists["destination"] = list(self.catalog[category])
@@ -708,6 +721,22 @@ class OccurrenceTests(unittest.TestCase):
             self.runner.choose("select", "WASTELAND DUNGEONS", None)
         self.assertLessEqual(len(self.drags), 3)
         self.assertEqual(self.clicks, [])
+
+    def test_an_entry_worked_out_to_lie_under_the_buttons_is_scrolled_to_not_clicked_there(self):
+        # Live (28 Oct): PEPPER PARK SEC-1 was worked out to be row 7, under Start/Stop; the click selected nothing.
+        real = self.navray.read_rows
+        self.navray.read_rows = lambda g, w, which: [(r, "PEPPER PARK SEC-1 garbled" if t == "PEPPER PARK SEC-1" else t)
+                                                     for r, t in real(g, w, which)]
+        self.runner.entries = list(self.catalog["NEOCRON CITY SECTORS"])
+        index = self.pick("NEOCRON CITY SECTORS", "PEPPER PARK SEC-1")
+        self.assertEqual(self.catalog["NEOCRON CITY SECTORS"][index], "PEPPER PARK SEC-1")
+        self.assertEqual(len(self.clicks), 1)
+
+    def test_a_click_that_selects_nothing_stops_instead_of_starting(self):
+        self.navray.selected_row = lambda gray, window, which: None
+        with self.assertRaisesRegex(Interrupted, "did not become selected"):
+            self.pick("TRADER DIRECTORY", "WEAPONS")
+        self.assertEqual(len(self.clicks), 2)                    # tried once more first
 
     def test_scrolling_up_finds_a_row_the_first_move_to_the_top_missed(self):
         self.lists["destination"] = list(self.catalog["TRADER DIRECTORY"])

@@ -301,7 +301,7 @@ class NavRayRunner(VisualRunner):
                 return row
             known = self.entries if which == "destination" else self.categories
             if known:
-                row = navray.infer_row(rows, known, label)
+                row = navray.infer_row(rows, known, label, navray.LIST_ROWS[which])
                 if row is not None and navray.unreadable(dict(rows).get(row, ""), label, known):
                     self.emit("status", f"Nav-Ray: {label} could not be read; worked out to be row {row} from its neighbours.")
                     return row
@@ -328,8 +328,17 @@ class NavRayRunner(VisualRunner):
             raise Interrupted(f"Nav-Ray: '{label}' was not found in the {which} list. Last rows read: {shown}.")
         if occurrence > 1:
             row = self.step_to_occurrence(which, window, label, row, occurrence)
-        self.click(window.row_point(which, row))
-        self.wait(.4)
+        # Check the click took: the row must show the selection bar. Live (28 Oct): a click that selected
+        # nothing went unnoticed, Start answered "No valid destination selected." and the walk set off with
+        # no route to follow.
+        for attempt in range(2):
+            self.click(window.row_point(which, row))
+            self.wait(.4)
+            self.clear_pointer()
+            if navray.selected_row(self.detector.gray(self.frame()), window, which) == row:
+                return
+        raise Interrupted(f"Nav-Ray: clicked '{label}' in the {which} list but it did not become selected. "
+                          "Nothing was started.")
 
     def read_list(self, which, window, reader):
         """Every entry of a list, top to bottom, plus how many rows could not be read (a highlighted row reads blank)."""
