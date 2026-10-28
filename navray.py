@@ -278,35 +278,51 @@ def _clean(text):
     return ordinary/max(1, len(body)) - .15*len(re.findall(r"[^A-Za-z0-9 \-()/'&]", body))
 
 
+_ROW_CACHE = {}
+
+
 def read_row(row_gray):
     """Text of one list row, or "" for an empty row.
 
-    Read two ways and the cleaner reading wins: as plain grey, and with background light filtered out
-    (the window is see-through, so a lamp behind it can wash out part of a row)."""
+    Read as plain grey first. Only when that reading looks doubtful (short, or full of stray marks) is it
+    read again with background light filtered out (the window is see-through, so a lamp behind it can wash
+    out part of a row) and the cleaner reading kept. Rows are cached by their pixels: a page that has not
+    changed is not read again."""
     if float((row_gray > 120).mean()) < .04:
         return ""
+    key = (row_gray.shape, row_gray.tobytes())
+    if key in _ROW_CACHE:
+        return _ROW_CACHE[key]
     readings = []
-    for make in (plain_picture, row_picture):
-        picture = make(row_gray)
-        if picture is not None:
-            readings.append(_ocr(picture))
+    picture = plain_picture(row_gray)
+    if picture is not None:
+        readings.append(_ocr(picture))
+    if not readings or len(readings[0]) < 4 or _clean(readings[0]) < .93:
+        filtered = row_picture(row_gray)
+        if filtered is not None:
+            readings.append(_ocr(filtered))
     best = max(range(len(readings)), key=lambda i: (round(_clean(readings[i]), 3), -i)) if readings else None
-    return readings[best] if best is not None else ""                 # on a tie the plain reading stands
+    text = readings[best] if best is not None else ""
+    if len(_ROW_CACHE) > 400:
+        _ROW_CACHE.clear()
+    _ROW_CACHE[key] = text
+    return text
 
 
 def read_rows(gray, window, which):
-    """[(row, text)] of the non-empty visible entries of the "select" or "destination" list."""
+    """[(row, text)] of the non-empty visible entries of the "select" or "destination" list.
+    Rows are read side by side (each reading is a separate Tesseract process, so they overlap)."""
+    from concurrent.futures import ThreadPoolExecutor
     left, top, right, bottom = window.list_box(which)
     scale = window.scale
-    rows = []
+    crops = []
     for row in range(LIST_ROWS[which]):
         y0 = top + round((5 + ROW_PITCH*row - 1)*scale)
         y1 = min(bottom, top + round((5 + ROW_PITCH*row + ROW_H + 1)*scale))
-        crop = gray[max(0, y0):y1, left:right]
-        text = read_row(crop) if crop.size else ""
-        if text:
-            rows.append((row, text))
-    return rows
+        crops.append(gray[max(0, y0):y1, left:right].copy())
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        texts = list(pool.map(lambda crop: read_row(crop) if crop.size else "", crops))
+    return [(row, text) for row, text in enumerate(texts) if text]
 
 
 def find_thumb(gray, window, which):
