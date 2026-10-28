@@ -55,6 +55,30 @@ def main():
             cv2.imwrite(str(folder / f"{count['n']:03d}.jpg"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 93])
 
     runner = holder["runner"] = NavRayRunner(profile, backend, Control(), emit)
+    # Open Nav-Ray ourselves if it is not showing: Tab for the interactive UI, then click NAV-RAY in the top menu.
+    import navray
+    reader = runner.detector.text_reader()
+
+    def menu_item():
+        gray = runner.detector.gray(runner.frame())
+        strip = gray[:int(.06*gray.shape[0])]
+        for text, x, y, w, h in reader.read_words(strip):
+            if text.upper().startswith("NAV"):
+                return (x + w//2, y + h//2)
+        return None
+    if navray.find_navray(reader, runner.detector.gray(runner.frame())) is None:
+        point = menu_item()
+        if point is None:
+            emit("status", "Nav-Ray window not showing: pressing Tab for the interactive UI.")
+            backend.key("tab", True)
+            time.sleep(.08)
+            backend.key("tab", False)
+            time.sleep(.8)
+            point = menu_item()
+        if point is not None:
+            emit("status", f"Clicking NAV-RAY in the top menu at {point}.")
+            runner.click(point)
+            time.sleep(1.0)
     runner.run()
 
 

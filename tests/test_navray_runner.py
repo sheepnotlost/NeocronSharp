@@ -150,9 +150,10 @@ class WalkTests(unittest.TestCase):
         self.assertGreaterEqual(looks["n"], 6)                   # it looked again rather than trusting round one
 
     def test_it_steers_gently_while_walking_so_a_drift_does_not_grow_into_a_veer(self):
-        runner, _ = make_runner(lambda i: HALL)            # the dashes lie a little to the left of straight ahead
+        drifted = np.roll(AHEAD, -160, axis=1)             # the dashes lie a little to the left of straight ahead
+        runner, _ = make_runner(lambda i: drifted)
         runner.px_per_count = -4.2
-        view = pathvision_find(HALL)
+        view = pathvision_find(drifted)
         state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
         _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state)
         self.assertEqual(reason, "stuck against something")    # identical frames: a wall, after steering

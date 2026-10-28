@@ -27,7 +27,7 @@ class PathView:
 def _excluded(fx, fy):
     """HUD areas that are always on screen and green, and the character itself (fractions of the frame)."""
     return (fy < .06 or (fx < .20 and fy < .20) or (fx > .84 and fy > .78)
-            or fx > .92 or (fx < .47 and fy > .76)
+            or fx > .92 or (fx > .89 and .30 < fy < .82) or (fx < .47 and fy > .76)
             or (.43 < fx < .60 and fy > .50))
 
 
@@ -37,13 +37,13 @@ def dash_candidates(frame, ignore=()):
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    mask = ((hue >= 55) & (hue <= 85) & (sat >= 55) & (val >= 95)).astype(np.uint8)
+    mask = ((hue >= 55) & (hue <= 88) & (sat >= 35) & (val >= 62)).astype(np.uint8)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
     for i in range(1, count):
         x, y, w, h, area = stats[i]
         cx, cy = centres[i]
-        if not 6*unit*unit <= area <= 6000*unit*unit:
+        if not 6*unit*unit <= area <= 40000*unit*unit:
             continue
         if _excluded(cx/width, cy/height):
             continue
@@ -51,6 +51,12 @@ def dash_candidates(frame, ignore=()):
             continue                                   # the reticle
         if any(x0 <= cx <= x1 and y0 <= cy <= y1 for x0, y0, x1, y1 in ignore):
             continue
+        inside = labels[y:y + h, x:x + w] == i
+        saturation = float(sat[y:y + h, x:x + w][inside].mean())
+        if saturation < MIN_SATURATION:
+            continue                                   # washed-out green: glass, walls, sign backing
+        if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
+            continue                                   # blotchy colour: a picture or sign, not a flat overlay
         direction = _orientation(labels, i, x, y, w, h, unit)
         # A clear dash shape passes whatever the floor looks like (green-lit floors give little contrast);
         # anything else must stand out, which a flat green glow on a wall does not.
@@ -63,6 +69,8 @@ def dash_candidates(frame, ignore=()):
     return found
 
 
+MIN_SATURATION = 62   # real dashes are a rich green (measured 70-120); signs and glass are washed out (43-55)
+MAX_HUE_SPREAD = 4.0  # and a flat overlay: the hue barely varies across a dash (measured 1.4-3.1)
 MIN_CONTRAST = 14    # a dash is this much brighter (grey levels) than the floor around it
 
 
@@ -102,11 +110,15 @@ def _plausible(points, areas, angles, height):
     fails both: rows of equal-height lines of random width.
     """
     ys = points[:, 1]
-    if ys.max() - ys.min() < .08*height:
-        return False
     # A path runs away from the camera, so it climbs the screen at a good rate. A near-flat row of marks
     # (the lettering of a shop sign, a row of lights) climbs hardly at all.
-    if ys.max() - ys.min() < .25*(points[:, 0].max() - points[:, 0].min()):
+    flat = ys.max() - ys.min() < .25*(points[:, 0].max() - points[:, 0].min())
+    big = 1200*(height/1440)**2
+    if flat and int(np.sum((areas >= big) & ~np.isnan(angles))) < 2:
+        return False                                       # a row of small marks is lettering, not a path
+    if float(ys.max()) < .30*height:
+        return False                                       # all of it high on the screen: on a wall or ceiling, not the floor
+    if not flat and ys.max() - ys.min() < .04*height:
         return False
     measured = ~np.isnan(angles)
     # Dashes are spaced out. Text (lettering on a sign) puts many marks a few pixels apart.
@@ -123,7 +135,7 @@ def _plausible(points, areas, angles, height):
         big = [i for i in order if measured[i]]
         if any(areas[a] <= areas[b] for a, b in zip(big, big[1:])):
             return False
-    if measured.sum() >= 4:
+    if measured.sum() >= 4 and not flat:
         sizes = np.sqrt(areas[measured])
         if np.ptp(ys[measured]) > 0 and np.ptp(sizes) > 0:
             if np.corrcoef(ys[measured], sizes)[0, 1] < .7:
@@ -180,7 +192,8 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
         if anchor is not None:
             nearest = float(np.min(np.hypot(points[list(members)][:, 0] - anchor[0], points[list(members)][:, 1] - anchor[1])))
             bonus = 12*max(0.0, 1 - nearest/(.5*height*16/9))
-        ranked.append((len(members) + bonus, members))
+        mass = float(np.sum(np.sqrt(areas[list(members)])))          # a few bold dashes outweigh a cluster of specks
+        ranked.append((mass + bonus*5, members))
         if len(seen) >= tries*2:
             break
     for _, members in sorted(ranked, key=lambda item: -item[0])[:tries]:
@@ -199,7 +212,7 @@ def _continuation(candidates, prior, height, width):
     picks = []
     big = 300*(width/2000)**2                              # a real dash, not a speck of lettering
     for x, y, area, angle in sorted(candidates, key=lambda c: -c[1]):
-        if y > .90*height or area < big:
+        if y > .90*height or y < .30*height or area < big:
             continue
         if angle == angle:
             if abs((angle - line + np.pi/2) % np.pi - np.pi/2) > np.radians(35):
@@ -233,6 +246,9 @@ def find_path(frame, ignore=(), prior=None, tube=.18):
     xs = np.array([p[0] for p in chain])
     if ys.min() > .80*height:
         return None                                        # all of it is at or behind the character's feet
+    if ys.max() - ys.min() < .25*(xs.max() - xs.min()):
+        # A path running across the view lies in a flat row: its near end is the one by the character, not the lowest.
+        chain = sorted(chain, key=lambda p: np.hypot(p[0] - .5*width, p[1] - .80*height))
     if len(chain) >= 3 and np.ptp(ys) > 0:
         slope, intercept = np.polyfit(ys, xs, 1)           # kept for tracking: where the line runs
     elif prior is not None:
