@@ -205,6 +205,7 @@ class NavRayRunner(VisualRunner):
         """
         found = navray.find_thumb(self.detector.gray(self.frame()), window, which)
         if found is None:
+            self.ensure_window()
             self.emit("status", f"Nav-Ray: no scroll thumb found on the {which} list.")
             return self.wheel(which, window, rows)
         x, top, bottom = found
@@ -219,9 +220,22 @@ class NavRayRunner(VisualRunner):
         moved = 0.0 if after is None else (after[1] - top)*navray.LIST_ROWS[which]/(bottom - top)
         self.emit("status", f"Nav-Ray: {which} list asked {rows:+.0f} rows, thumb {top}-{bottom} -> "
                   f"{'none' if after is None else after[1]}, moved {moved:+.1f}.")
+        if after is None or moved*rows < 0 and abs(moved) >= 2 or abs(moved) > abs(rows) + navray.LIST_ROWS[which]:
+            self.ensure_window()                                   # the thumb vanished or jumped: is the window gone?
         if abs(rows) <= 2*navray.LIST_ROWS[which] and abs(moved) < .3*abs(rows) and not self.at_end(which, window, rows):
+            self.ensure_window()
             return self.wheel(which, window, rows)
         return moved
+
+    def ensure_window(self):
+        """Stop when the Nav-Ray window is no longer on screen. Live (28 Oct): the game left the interactive
+        UI while a list was being scrolled; "thumbs" were then found in the scenery and twenty seconds of
+        drags spun the camera round."""
+        try:
+            self.find_window(self.detector.text_reader())
+        except Interrupted:
+            raise Interrupted("Nav-Ray: the Nav-Ray window disappeared while its list was being scrolled "
+                              "(did the game leave the interactive UI?). Nothing was clicked.") from None
 
     def at_end(self, which, window, rows):
         """Is the thumb already at the end the move was heading for (so no movement is expected)?"""
@@ -285,9 +299,10 @@ class NavRayRunner(VisualRunner):
             row = navray.find_row(rows, label)
             if row is not None:
                 return row
-            if which == "destination" and self.entries:
-                row = navray.infer_row(rows, self.entries, label)
-                if row is not None and row not in dict(rows):
+            known = self.entries if which == "destination" else self.categories
+            if known:
+                row = navray.infer_row(rows, known, label)
+                if row is not None and navray.unreadable(dict(rows).get(row, ""), label, known):
                     self.emit("status", f"Nav-Ray: {label} could not be read; worked out to be row {row} from its neighbours.")
                     return row
             if rows == previous or step(which, window) is None:
@@ -296,6 +311,7 @@ class NavRayRunner(VisualRunner):
         return None
 
     entries = None                # the known entries of the chosen category, for working out an unreadable row
+    categories = None             # the known categories of the Select list, in game order, for the same
 
     def choose(self, which, wanted, reader):
         label, occurrence = navray.split_label(wanted)
@@ -340,6 +356,7 @@ class NavRayRunner(VisualRunner):
         for sweep in range(3):
             window = self.find_window(reader)
             categories, gaps = self.read_list("select", window, reader)
+            self.categories = categories                     # for working out a category row that cannot be read
             pending = [name for name in categories if name not in catalog]
             if not pending:
                 break
@@ -908,9 +925,10 @@ class NavRayRunner(VisualRunner):
         self.route_destination = f"{category} > {destination}"
         reader = self.detector.text_reader()
         self.open_navray(reader)
+        known = {navray._norm(k): v for k, v in navray.load_catalog(self.profile).items()}
+        self.categories = list(navray.load_catalog(self.profile))
         self.emit("status", f"Nav-Ray: choosing {category}.")
         self.choose("select", category, reader)
-        known = {navray._norm(k): v for k, v in navray.load_catalog(self.profile).items()}
         self.entries = known.get(navray._norm(category))
         self.emit("status", f"Nav-Ray: choosing {destination}.")
         self.choose("destination", destination, reader)

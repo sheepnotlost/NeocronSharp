@@ -124,6 +124,20 @@ def infer_row(rows, entries, wanted):
     return row if 0 <= row < max(LIST_ROWS.values()) else None
 
 
+def unreadable(shown, wanted, entries):
+    """May a row that reads as `shown` be taken for `wanted` once its neighbours say so? Yes when it read
+    blank, or as junk that is not any known entry but still resembles the wanted name (live: a lit wall
+    behind the window turned NEOCRON CITY SECTORS into INEGGRON'CITY SECTORS). Never when it reads as
+    another real entry: that is a different place, not a bad reading."""
+    import difflib
+    seen = _norm(shown)
+    if not seen:
+        return True
+    if any(seen == _norm(entry) for entry in entries):
+        return False
+    return difflib.SequenceMatcher(None, seen, _norm(wanted)).ratio() >= .6
+
+
 @dataclass(frozen=True)
 class NavRay:
     x: float          # top-left of the word "Small"
@@ -207,6 +221,20 @@ def tidy(text):
     return re.sub(r"[\s|=~_,;:!¦]+$", "", text)
 
 
+def _selected(row_gray):
+    """Is this the highlighted (selected) row: dark text on a bright bar?
+
+    The window is see-through, so a light wall or lamp behind it can make the start of a row just as
+    bright as the bar (live: 57-69% of the row start over a lit wall in Plaza 1, the bar 60-65%). The bar
+    is the brightest thing on its row, though, so nothing stands out above its level, while a wall has
+    the bright letters on it (measured: p90 - median 0-14 on the bar, 43-49 over the wall)."""
+    import numpy as np
+    start = row_gray[:, :max(8, int(.4*row_gray.shape[1]))]
+    if float((start > 120).mean()) <= .5:
+        return False
+    return float(np.percentile(start, 90)) - float(np.median(start)) < 30
+
+
 def row_picture(row_gray):
     """Dark text on a light background for a normal row (light text on dark) and for the selected row
     (dark text on a bright bar) alike. None if no text.
@@ -217,8 +245,7 @@ def row_picture(row_gray):
     import cv2
     import numpy as np
     height, width = row_gray.shape
-    start = row_gray[:, :max(8, int(.4*width))]
-    selected = float((start > 120).mean()) > .5
+    selected = _selected(row_gray)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(5, int(height*.45)) | 1, max(5, int(height*.45)) | 1))
     if selected:
         columns = np.where((row_gray > 120).mean(axis=0) > .5)[0]
@@ -245,7 +272,7 @@ def plain_picture(row_gray):
     import numpy as np
     height, width = row_gray.shape
     bright = row_gray > 120
-    if float((row_gray[:, :max(8, int(.4*width))] > 120).mean()) > .5:
+    if _selected(row_gray):
         columns = np.where(bright.mean(axis=0) > .5)[0]
         if len(columns) < 10:
             return None

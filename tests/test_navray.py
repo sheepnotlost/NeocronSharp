@@ -111,3 +111,46 @@ class NavRayReadingTests(unittest.TestCase):
 
     def test_a_frame_without_the_window_is_not_found(self):
         self.assertIsNone(navray.find_navray(self.reader, np.zeros((1080, 1920), np.uint8)))
+
+
+class LitWallTests(unittest.TestCase):
+    """Live (28 Oct, Plaza 1): a light wall behind the see-through window made the start of the NEOCRON CITY
+    SECTORS row as bright as the selected row's bar, so it was read as a bar and garbled (INEGGRON'CITY
+    SECTORS) and the category was never found."""
+    @classmethod
+    def setUpClass(cls):
+        cls.reader = TextReader()
+
+    def rows(self, name, size):
+        frame = gray(name, size)
+        window = navray.find_navray(self.reader, frame)
+        self.assertIsNotNone(window)
+        left, top, right, bottom = window.list_box("select")
+        crops = []
+        for row in range(navray.LIST_ROWS["select"]):
+            y0 = top + round((5 + navray.ROW_PITCH*row - 1)*window.scale)
+            y1 = top + round((5 + navray.ROW_PITCH*row + navray.ROW_H + 1)*window.scale)
+            crops.append(frame[y0:y1, left:right])
+        return frame, window, crops
+
+    def test_a_lit_wall_behind_the_window_is_not_taken_for_the_selected_row(self):
+        frame, window, crops = self.rows("navray_lit_wall_plaza1_2560.png", (1440, 2560))
+        self.assertEqual([navray._selected(crop) for crop in crops], [False]*8)
+        read = dict(navray.read_rows(frame, window, "select"))
+        self.assertTrue(read[5].startswith("NEOCRON"), read[5])          # was cut to "EQCRON Ci yY SECTOR"
+        self.assertEqual(read[6], "ADMINISTRATION")
+
+    def test_the_real_selected_row_is_still_recognised(self):
+        frame, window, crops = self.rows("navray_selected_row_1080.png", (1080, 1920))
+        self.assertEqual([navray._selected(crop) for crop in crops], [False]*5 + [True] + [False]*2)
+        self.assertEqual(dict(navray.read_rows(frame, window, "select"))[5], "NEOCRON CITY SECTORS")
+        frame, window, crops = self.rows("navray_lists_2560.png", None)
+        self.assertTrue(navray._selected(crops[3]))
+
+    def test_a_garbled_row_may_be_worked_out_but_a_different_entry_never(self):
+        entries = ["OUTZONE APARTMENTS", "NEOCRON CITY SECTORS", "ADMINISTRATION"]
+        self.assertTrue(navray.unreadable("", "NEOCRON CITY SECTORS", entries))
+        self.assertTrue(navray.unreadable("INEGGRON'CITY SECTORS", "NEOCRON CITY SECTORS", entries))
+        self.assertFalse(navray.unreadable("ADMINISTRATION", "NEOCRON CITY SECTORS", entries))
+        self.assertFalse(navray.unreadable("garbled ———", "NEOCRON CITY SECTORS", entries))
+        self.assertFalse(navray.unreadable("Enter A", "Enter C", ["Enter A", "Enter C"]))

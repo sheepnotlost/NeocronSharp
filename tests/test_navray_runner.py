@@ -666,6 +666,49 @@ class OccurrenceTests(unittest.TestCase):
         self.assertEqual(self.catalog["TRADER DIRECTORY"][index], "WEAPONS")
         self.assertTrue(any("worked out" in p for k, p in self.events if k == "status"))
 
+    def test_a_garbled_category_over_a_lit_wall_is_worked_out_from_its_neighbours(self):
+        # Live (28 Oct, Plaza 1): a light wall behind the window garbled the wanted row to INEGGRON'CITY SECTORS.
+        real = self.navray.read_rows
+        self.navray.read_rows = lambda g, w, which: [(r, "INEGGRON'CITY SECTORS" if t == "NEOCRON CITY SECTORS" else t)
+                                                     for r, t in real(g, w, which)]
+        self.runner.categories = list(self.catalog)
+        self.runner.choose("select", "NEOCRON CITY SECTORS", None)
+        point = self.clicks[-1]
+        row = round((point[1] - (self.window.y + self.navray.SELECT_DY + self.navray.ROW_H/2))/self.navray.ROW_PITCH)
+        self.assertEqual(self.start["select"] + row, list(self.catalog).index("NEOCRON CITY SECTORS"))
+        self.assertTrue(any("worked out" in p for k, p in self.events if k == "status"))
+
+    def test_a_row_that_reads_as_another_real_entry_is_never_clicked_for_the_wanted_one(self):
+        real = self.navray.read_rows
+        self.navray.read_rows = lambda g, w, which: [(r, "ADMINISTRATION" if t == "NEOCRON CITY SECTORS" else t)
+                                                     for r, t in real(g, w, which)]
+        self.runner.categories = list(self.catalog)
+        with self.assertRaisesRegex(Interrupted, "was not found"):
+            self.runner.choose("select", "NEOCRON CITY SECTORS", None)
+        self.assertEqual(self.clicks, [])
+
+    def test_scrolling_stops_when_the_window_disappears_instead_of_dragging_the_scenery(self):
+        # Live (28 Oct): the game left the interactive UI mid-list; "thumbs" were then found in the scenery
+        # and twenty seconds of drags spun the camera round.
+        state = {"drags_left": 2}
+        real_drag, real_thumb = self.runner.drag, self.navray.find_thumb
+
+        def drag(source, destination):
+            real_drag(source, destination)
+            state["drags_left"] -= 1
+        self.runner.drag = drag
+        self.navray.find_thumb = lambda g, w, which: (500, 300, 340) if state["drags_left"] <= 0 else real_thumb(g, w, which)
+
+        def find_window(reader):
+            if state["drags_left"] <= 0:
+                raise Interrupted("Nav-Ray window not found.")
+            return self.window
+        self.runner.find_window = find_window
+        with self.assertRaisesRegex(Interrupted, "disappeared"):
+            self.runner.choose("select", "WASTELAND DUNGEONS", None)
+        self.assertLessEqual(len(self.drags), 3)
+        self.assertEqual(self.clicks, [])
+
     def test_scrolling_up_finds_a_row_the_first_move_to_the_top_missed(self):
         self.lists["destination"] = list(self.catalog["TRADER DIRECTORY"])
         self.start["destination"] = len(self.lists["destination"]) - self.navray.LIST_ROWS["destination"]   # list left scrolled to the bottom

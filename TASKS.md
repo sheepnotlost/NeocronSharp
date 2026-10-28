@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Nav-Ray Select list over a lit wall — 28 October 2026
+
+- [x] 03:29 and 03:31 runs (Plaza 1): "NEOCRON CITY SECTORS was not found in the select list" although it was on the first page. A light wall behind the see-through window made the start of that row as bright as the selected row's bar, so it was read as a bar and garbled (INEGGRON'CITY SECTORS). The bar is now told apart from a lit wall by having nothing brighter than itself on the row (p90 − median 0–14 on the bar, 43–49 over the wall). Fixture: the run's own frame, upscaled.
+- [x] A category (as the destination list already did) that reads blank or as junk resembling the wanted name is worked out from its exactly-read neighbours in the catalog order; a row that reads as another real entry never is.
+- [x] 03:31 run: the game left the interactive UI mid-list (the window vanished), "thumbs" were then found in the scenery and twenty seconds of drags spun the camera round. Scrolling now checks the window is still there when the thumb vanishes, jumps, or moves the wrong way, and stops with a message. Why the UI toggled is not known from the recording; nothing in the macro presses Tab there.
+
 ### Nav-Ray look-ahead and sharper corners — 28 October 2026
 
 - [x] Trace the dashed line far ahead (dash by dash past the straight chain, small far marks included) and find the first corner in it. Checked on the 02-29-32 video: the far turns at 22–25 s and the right turn at the end of the City Admin corridor (36–38 s) are traced.
