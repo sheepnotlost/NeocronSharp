@@ -1,7 +1,8 @@
 # Handoff prompt for ChatGPT
 
-You are taking over the **NeocronSharp**, a Windows desktop helper for the MMO Neocron Evolution
-(Tk app, Python, screen capture + OCR + simulated input). Repository: `sheepnotlost/neocron-macro-suite`,
+You are taking over **NeocronSharp**, a Windows desktop helper for the MMO Neocron Evolution
+(Tk app, Python, screen capture + OCR + simulated input). The C# tracker/map app lives in `NeocronSharp/` and
+opens from the Tracker & Map tab (see README.md). Repository: `sheepnotlost/NeocronSharp`,
 branch `main`. The local working copy is the folder this file is in.
 
 ## Read first

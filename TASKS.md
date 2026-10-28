@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### NeocronSharp merge — 28 October 2026
+
+- [x] Merge the C# NeocronSharp app (tracker/sector map, coordinate recorder, point navigation, loot, environment, quests, plugins) into `NeocronSharp/`, unchanged in features; open it from a new Tracker & Map tab, Open NPC Tracker.cmd or Open Coordinate Recorder.cmd.
+- [x] Fix its game-client lookup for the merged folder; build the example plugins from the solution. 100 C# tests, 318 Python tests and the UI smoke check pass.
+- [x] Rename the project, docs and GitHub repository to NeocronSharp (https://github.com/sheepnotlost/NeocronSharp).
+
 ### Research text wrapping and resizable activity log — 27 October 2026
 
 - [x] Fix the unweighted paragraph grid that collapsed Research sequence settings to one character per line, including after maximization/skin changes.
