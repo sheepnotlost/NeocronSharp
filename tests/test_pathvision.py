@@ -165,6 +165,19 @@ class PathVisionTests(unittest.TestCase):
         frame = load("navray_red_text_label_stuck_1280.jpg")
         self.assertIsNone(pathvision.find_path(frame, color=5))
 
+    def test_dashes_of_a_path_that_bends_round_a_corner_are_found(self):
+        # Live (video, green skin): the route turns a corner into a doorway beside the character, so the near dashes do not
+        # lie on one straight line. The macro saw nothing, swept all round, and reported "arrived" 17 s into the walk.
+        for name, count in (("navray_green_dashes_behind_1920.jpg", 2), ("navray_green_dashes_behind2_1920.jpg", 3)):
+            view = pathvision.find_path(load(name), color=70)
+            self.assertIsNotNone(view, name)
+            self.assertGreaterEqual(len(view.points), count, name)
+            self.assertGreater(view.error, .05, name)                          # they lead to the right of the character
+            self.assertTrue(all(y > .5*1080 for _, y in view.points), name)    # on the floor, near the character
+
+    def test_a_big_green_poster_is_not_a_bending_path(self):
+        self.assertIsNone(pathvision.find_path(load("navray_no_path_posters_2560.png")))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

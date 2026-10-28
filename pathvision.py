@@ -291,6 +291,29 @@ def _continuation(candidates, prior, height, width):
     return picks[:3]
 
 
+def _curved(candidates, width, height):
+    """Big dashes of a path that bends (round a corner or into a doorway): they do not lie on one straight line, so
+    best_chain finds nothing. Take the clear dashes (large, elongated, in the floor part of the screen) that are
+    near the character, nearest first, as the next stretch of the path. At least two are needed, and they must
+    be reasonably close together: scattered marks are not a path."""
+    big = 560*(width/1920)**2
+    anchor = (.5*width, .85*height)
+    largest = 9000*(width/1920)**2                          # bigger than any real dash: a poster or a sign panel
+    picks = [(float(np.hypot(x - anchor[0], y - anchor[1])), x, y, a) for x, y, a, angle in candidates
+             if angle == angle and big <= a <= largest and .35*height <= y <= .97*height]
+    picks.sort()
+    picks = [p for p in picks if p[0] <= .75*width]
+    chain, areas = [], []
+    for distance, x, y, a in picks:
+        if not chain or np.hypot(x - chain[-1][0], y - chain[-1][1]) <= .30*width:
+            chain.append((x, y))
+            areas.append(a)
+        if len(chain) >= 4:
+            break
+    # A path close enough to bend round the character has a really big dash among its first few marks.
+    return chain if len(chain) >= 2 and max(areas) >= 2.5*big else []
+
+
 def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
@@ -307,6 +330,9 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
     chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height), width=width)
+    if not chain:
+        chain = _curved(candidates, width, height)           # a bending path: the next clear dashes, nearest first
+        chain = sorted(chain, key=lambda point: -point[1]) if chain else chain    # nearest (lowest) first, like a straight chain
     if not chain and prior is not None:
         chain = _continuation(candidates, prior, height, width)    # one or two dashes of the path already being followed
     if not chain:
