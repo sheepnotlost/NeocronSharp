@@ -25,11 +25,10 @@ class PathView:
 
 
 def _excluded(fx, fy, color="green"):
-    """HUD areas that are always on screen in the dash colour, and (for green only: the character's own green
-    gear) the character itself (fractions of the frame)."""
+    """HUD areas that are always on screen in the dash colour (fractions of the frame).
+    The character region needs shape checks instead: real floor dashes also cross it."""
     return (fy < .06 or (fx < .20 and fy < .20) or (fx > .84 and fy > .78)
-            or fx > .92 or (fx > .89 and .30 < fy < .82) or (fx < .47 and fy > .76)
-            or (color == "green" and .43 < fx < .60 and fy > .50))
+            or fx > .92 or (fx > .89 and .30 < fy < .82) or (fx < .47 and fy > .76))
 
 
 # The dashes follow the HUD colour scheme (/set gfx_hudcolor): green by default, any colour you pick.
@@ -103,11 +102,18 @@ def dash_candidates(frame, ignore=(), color="green"):
             continue
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
+        direction = _orientation(labels, i, x, y, w, h, unit)
+        if not strict and .43 < cx/width < .60 and cy/height > .50:
+            if direction != direction or area < 100*unit*unit:
+                continue                               # gear and tiny character markers, while retaining clear floor dashes
         if saturation < (90 if strict else MIN_SATURATION):
-            continue                                   # washed-out green: glass, walls, sign backing
+            # Translucent dashes on pale tiles measure saturation 43-58. Accept these only
+            # on the floor with both a clear dash shape and contrast above the surrounding tiles.
+            if (strict or cy < .35*height or direction != direction
+                    or _contrast(gray, labels, i, x, y, w, h, unit) < FAINT_CONTRAST):
+                continue                               # washed-out glass, walls and sign backing
         if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
             continue                                   # blotchy colour: a picture or sign, not a flat overlay
-        direction = _orientation(labels, i, x, y, w, h, unit)
         # A clear dash shape passes whatever the floor looks like (green-lit floors give little contrast);
         # anything else must stand out, which a flat green glow on a wall does not.
         if direction != direction and _contrast(gray, labels, i, x, y, w, h, unit) < MIN_CONTRAST:
@@ -122,6 +128,7 @@ def dash_candidates(frame, ignore=(), color="green"):
 MIN_SATURATION = 62   # real dashes are a rich green (measured 70-120); signs and glass are washed out (43-55)
 MAX_HUE_SPREAD = 4.0  # and a flat overlay: the hue barely varies across a dash (measured 1.4-3.1)
 MIN_CONTRAST = 14    # a dash is this much brighter (grey levels) than the floor around it
+FAINT_CONTRAST = 16  # low-saturation floor dashes measured 16.6-23.5; wall/gear clutter measured <=15.8
 
 
 def _contrast(gray, labels, index, x, y, w, h, unit):

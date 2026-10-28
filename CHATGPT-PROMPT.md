@@ -56,7 +56,12 @@ Status (27 Oct 2026):
   Archer & Wesson shop in about 35 s, default green HUD.
 - The next run (Neocron City Sectors > Viarosso SEC-3) stopped early at a corner where the route bends into a
   doorway. A fix for bending paths (`_curved`) is pushed and tested on frames from that video, but it has not
-  been run live yet.
+  been verified to complete a route live.
+- A newer video, `2026-10-27 22-24-13.mp4`, shows a walk reaching the tiled bend, then repeatedly losing
+  visible dashes after turning; it stopped at 22:25:19 with "turning does not line the dashes up". Frames at
+  52.7s and 63.9s show near-centre translucent dashes rejected by the character exclusion box and saturation
+  cutoff. The detector now keeps clear dash shapes there and permits faint floor dashes with contrast >=16.
+  Both frames are regression fixtures at 1280/1920/2560 widths; the revised detector still needs a live walk.
 - Known weak spots:
   - "Arrived" is only a guess (no dashes after a full sweep), so any lost path ends the walk as "arrived".
   - Turning is jerky and can overshoot.

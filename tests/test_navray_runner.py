@@ -117,6 +117,17 @@ def turning_runner(sign, pixels_per_count=2.0, frame=STAIRS, stop_after=9):
 
 
 class WalkTests(unittest.TestCase):
+    def test_a_real_turn_onto_pale_tiles_keeps_the_path_lined_up(self):
+        # 22:24:13 video at 52.7s: the old detector lost these near-centre dashes
+        # after turning and the walk backed out of an already aligned heading.
+        frame = rgb("navray_pale_tiles_after_turn_1920.jpg")
+        runner, _ = make_runner(lambda i: frame)
+        runner.dash_color = 70
+        got = runner.evaluate(None, 0)
+        self.assertIsNotNone(got)
+        view, seen_frame = got
+        self.assertLess(abs(runner.aim_error(view, seen_frame)), navray_runner.TURN_FIRST)
+
     def test_it_walks_when_the_dashes_ahead_are_lined_up_and_looks_all_round_before_reporting_arrival(self):
         runner, events = make_runner(lambda i: AHEAD if i <= 24 else moving_dark(i))
         runner.walk()

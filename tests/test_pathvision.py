@@ -178,6 +178,22 @@ class PathVisionTests(unittest.TestCase):
     def test_a_big_green_poster_is_not_a_bending_path(self):
         self.assertIsNone(pathvision.find_path(load("navray_no_path_posters_2560.png")))
 
+    def test_translucent_dashes_on_pale_tiles_survive_a_turn(self):
+        # 22:24:13 video at 52.7s / 63.9s (22:25:05.7 / 22:25:16.9 in macro.log).
+        # The turn exposed the near dashes on pale tiles (saturation 43-58), inside the
+        # character exclusion box. Losing these dashes caused repeated half-turn undos.
+        for name in ("navray_pale_tiles_after_turn_1920.jpg", "navray_pale_tiles_before_undo_1920.jpg"):
+            frame = load(name)
+            for width in (1280, 1920, 2560):
+                with self.subTest(frame=name, width=width):
+                    scaled = cv2.resize(frame, (width, width*9//16))
+                    view = pathvision.find_path(scaled, color=70)
+                    self.assertIsNotNone(view)
+                    self.assertGreaterEqual(len(view.points), 3)
+                    self.assertTrue(.50*width < view.aim[0] < .60*width, view.aim)
+                    self.assertTrue(.50*scaled.shape[0] < view.aim[1] < .65*scaled.shape[0], view.aim)
+                    self.assertTrue(all(y > .40*scaled.shape[0] for _, y in view.points), view.points)
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

@@ -85,7 +85,7 @@ gogo.py + construction_runner.refill_from_gogo/enter_quantity/inventory_destinat
 
 ## Nav-Ray auto-walk (27 Oct)
 
-navray.py (window/list reading), pathvision.py (dashed path detection), navray_runner.py (setup + steering loop), windows_backend.move_relative, Nav-Ray tab in app.py. Offline-verified on real captures only; live behaviour (steering gain/direction, list scrolling, Tab, arrival) is untested. Spec and plan: docs/superpowers/.
+navray.py (window/list reading), pathvision.py (dashed path detection), navray_runner.py (setup + steering loop), windows_backend.move_relative, Nav-Ray tab in app.py. One verified live success: Trader Directory > Weapons (22:10 video + log). The Viarosso SEC-3 walk in `2026-10-27 22-24-13.mp4` reached a tiled bend, then lost visible dashes after turns and stopped at 22:25:19. Its 52.7s/63.9s frames exposed the character exclusion and saturation cutoff rejecting translucent floor dashes. The revised detector keeps clear dash shapes near the character and accepts faint floor dashes only with contrast >=16; real-frame regressions cover 1280/1920/2560 widths. This latest fix is offline-verified only; route completion, reliable arrival and red HUD behaviour need further live evidence. Spec and plan: docs/superpowers/; current takeover notes: CHATGPT-PROMPT.md.
 
 ## Code map
 

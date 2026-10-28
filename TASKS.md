@@ -204,6 +204,14 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] First live success (27 Oct 22:10, video + log, default green skin): Trader Directory > Weapons walked from Plaza start into the Archer & Wesson shop in about 35 s, the HUD colour read as hue 70, three legs (one 10 s tether leg), then a full sweep found no more dashes and it reported arrival. This is ONE run. The fixes that preceded it, each found from videos of earlier failed runs: dash colour read from the HUD (not learned from signs), text/label rows rejected, stuck detection across legs, dashes no longer discarded after every turn, far dash rows accepted. Still to confirm: that it repeats, other destinations, the red skin after the latest changes, and arrival detection (it sweeps all round for ~6 s before stopping).
 
+## Nav-Ray pale-tile turn loss — 27 Oct, 22:24 recording
+
+- [x] Review `2026-10-27 22-24-13.mp4` against macro.log and diagnostics/last_run. The walk reached the tiled bend, repeatedly lost visible dashes after turning, and stopped at 22:25:19 with "turning does not line the dashes up". This run did not reach the destination.
+- [x] Exact video frames at 52.7s and 63.9s: near-centre floor dashes were removed by the character exclusion box and the saturation cutoff (measured saturation 43-58 on pale tiles). Keep clear elongated dashes in that box; allow faint floor dashes only with measured contrast of at least 16, retaining hue/chain/clutter checks.
+- [x] Add both real frames as regression fixtures, checked at 1280/1920/2560 widths, plus the runner's standing evaluation of the aligned post-turn frame. Existing wall/sign/gear rejection fixtures remain covered.
+- [x] All 70 focused tests pass: `runtime\python.exe -m unittest tests.test_pathvision tests.test_navray tests.test_navray_runner tests.test_routes`. OCR checks needed access outside the sandbox; no Tk windows or game input. Full suite and portable ZIP were not run.
+- [ ] The revised detector has not been tested in a new live walk. Arrival remains ambiguous; zone changes/doors remain unsupported.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.
