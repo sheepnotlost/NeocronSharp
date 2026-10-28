@@ -11,6 +11,8 @@ import numpy as np
 
 
 REACH_Y = .80    # a dash lower than this (fraction of the height) is at the character's feet: already reached
+ROUTE_TURN = np.radians(125)   # the way on may bend this much from one dash to the next (a corner seen in perspective)
+CORNER_TURN = np.radians(35)   # a bend this sharp in the route ahead is a corner to turn at
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,8 @@ class PathView:
     slope: float = 0.0     # the fitted line: x = slope * y + intercept
     intercept: float = 0.0
     forward_point: tuple = (0.0, 0.0)   # the far end of the chain: the way on
+    route: tuple = ()      # the whole dashed line ahead as far as it can be traced, nearest first (points, then beyond)
+    corner: int = -1       # index in `route` of the first corner (a sharp bend), -1 when the line ahead runs straight
 
 
 def _excluded(fx, fy, color="green"):
@@ -362,6 +366,60 @@ def _bend(candidates, width, height):
     return [(x, y) for x, y, _, _ in chain] if len(chain) >= 3 and bent else []
 
 
+def _heading(a, b):
+    return np.arctan2(b[1] - a[1], b[0] - a[0])
+
+
+def _bend_angle(first, second):
+    return abs((second - first + np.pi) % (2*np.pi) - np.pi)
+
+
+def extend_route(chain, candidates, width, height, limit=24):
+    """The dashed line beyond `chain`, traced dash by dash from its far end so the macro can see where the path goes
+    well ahead, round corners included. Each next mark is about as far from the last as the dashes before it (they
+    crowd together further away), leads away from the camera or across it, never back, and bends at most ROUTE_TURN
+    from the way the line was going; the straightest, nearest such mark wins. Small far-off marks count here: they
+    continue a path already found, they never start one."""
+    route = [(float(x), float(y)) for x, y in chain]
+    if len(route) < 2:
+        return route
+    used = {(round(x), round(y)) for x, y in route}
+    pool = [(float(c[0]), float(c[1])) for c in candidates if (round(c[0]), round(c[1])) not in used]
+    while pool and len(route) < limit:
+        last = route[-1]
+        back = route[-3] if len(route) >= 3 else route[-2]
+        step = float(np.hypot(last[0] - route[-2][0], last[1] - route[-2][1]))
+        if step < 4:
+            break
+        heading = _heading(back, last)
+        best = None
+        for index, (x, y) in enumerate(pool):
+            distance = float(np.hypot(x - last[0], y - last[1]))
+            if not .3*step <= distance <= 1.7*step + .012*width or y > last[1] + .02*height:
+                continue
+            turn = _bend_angle(heading, _heading(last, (x, y)))
+            if turn > ROUTE_TURN:
+                continue
+            score = distance/step + 1.5*turn
+            if best is None or score < best[0]:
+                best = (score, index)
+        if best is None:
+            break
+        route.append(pool.pop(best[1]))
+    return route
+
+
+def first_corner(route):
+    """Index of the first point where the route turns by more than CORNER_TURN, judged over two marks on each side
+    so one misplaced mark does not make a corner; -1 for a straight line."""
+    for k in range(1, len(route) - 1):
+        before = _heading(route[max(0, k - 2)], route[k])
+        after = _heading(route[k], route[min(len(route) - 1, k + 2)])
+        if _bend_angle(before, after) > CORNER_TURN:
+            return k
+    return -1
+
+
 def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
@@ -374,6 +432,7 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     character's feet), and as it is reached the next one becomes the target.
     """
     candidates = dash_candidates(frame, ignore, color)
+    everything = candidates                                 # the line ahead may leave the prior's tube at a corner
     height, width = frame.shape[:2]
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
@@ -407,5 +466,6 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     ahead = [p for p in chain if p[1] <= REACH_Y*height]    # chain is nearest first
     target = ahead[0] if ahead else chain[-1]
     near_x = min(max(float(slope*.75*height + intercept), 0.0), float(width))
+    route = extend_route(chain, everything, width, height)
     return PathView(tuple(chain), (float(target[0]), float(target[1])), (target[0] - centre)/width,
-                    (near_x - centre)/width, float(slope), float(intercept), chain[-1])
+                    (near_x - centre)/width, float(slope), float(intercept), chain[-1], tuple(route), first_corner(route))

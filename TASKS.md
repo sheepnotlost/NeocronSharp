@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Nav-Ray look-ahead and sharper corners — 28 October 2026
+
+- [x] Trace the dashed line far ahead (dash by dash past the straight chain, small far marks included) and find the first corner in it. Checked on the 02-29-32 video: the far turns at 22–25 s and the right turn at the end of the City Admin corridor (36–38 s) are traced.
+- [x] At a close corner, steer for the way beyond it and pivot sharply (stop forward motion above 0.10, full correction); a line running across the view close by is a turn onto its far end. On the video, 38.2 s now steers +0.24 where the old run walked on into the wall.
+- [x] Ride out a dropout of up to 0.4 s on a straight stretch; after a pivot, look at the whole view when the old line's tube shows nothing. Not yet checked live.
+
 ### NeocronSharp merge — 28 October 2026
 
 - [x] Merge the C# NeocronSharp app (tracker/sector map, coordinate recorder, point navigation, loot, environment, quests, plugins) into `NeocronSharp/`, unchanged in features; open it from a new Tracker & Map tab, Open NPC Tracker.cmd or Open Coordinate Recorder.cmd.

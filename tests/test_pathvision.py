@@ -214,3 +214,27 @@ class PathVisionTests(unittest.TestCase):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])
         self.assertIsNone(pathvision.find_path(frame, ignore=[everything]))
+
+
+class RouteTests(unittest.TestCase):
+    """The line ahead is traced past the straight chain, so a corner is seen before the character reaches it."""
+
+    def test_far_marks_extend_the_route_round_a_corner(self):
+        chain = [(1000.0, 900.0), (1000.0, 800.0)]
+        beyond = [(1000.0, 720.0), (1000.0, 655.0), (1060.0, 625.0), (1115.0, 600.0), (1165.0, 580.0)]
+        noise = [(300.0, 300.0), (1700.0, 1000.0)]
+        candidates = [(x, y, 40.0, float("nan")) for x, y in beyond + noise]
+        route = pathvision.extend_route(chain, candidates, 1920, 1080)
+        self.assertEqual(route, chain + beyond)
+        corner = pathvision.first_corner(route)
+        self.assertGreater(corner, 1)
+        self.assertLessEqual(route[corner][1], 655.0)
+
+    def test_a_straight_line_has_no_corner(self):
+        route = [(1000.0, 900.0 - 80*i) for i in range(6)]
+        self.assertEqual(pathvision.first_corner(route), -1)
+
+    def test_marks_back_towards_the_camera_are_not_the_way_on(self):
+        chain = [(1000.0, 900.0), (1000.0, 800.0)]
+        candidates = [(1000.0, 860.0, 40.0, float("nan")), (1040.0, 900.0, 40.0, float("nan"))]
+        self.assertEqual(pathvision.extend_route(chain, candidates, 1920, 1080), chain)

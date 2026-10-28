@@ -35,6 +35,12 @@ TETHER_SECONDS = 90.0      # a tethered walk may run this long before it re-read
 TETHER_DAMP = .7         # share of the measured error corrected on every look while tethered
 TETHER_TURN_IN_PLACE = .22   # while tethered, a heading error this big stops forward motion until the turn catches up
 TETHER_RESUME = .10      # ...and forward motion resumes below this
+CORNER_NEAR = .55        # a corner in the traced route lower on screen than this (fraction of the height) is close:
+                         # steer for the way beyond it, so the character turns at the corner instead of overshooting
+CORNER_TURN_IN_PLACE = .10   # at a close corner, a heading error this big stops forward motion for a sharp pivot
+CORNER_RESUME = .05      # ...and forward motion resumes below this
+CORNER_DAMP = 1.0        # share of the error corrected on each look at a close corner (no gradual drift round it)
+LOST_GRACE = .4          # seconds the dashes may drop out of view while walking a straight stretch before stopping
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
@@ -594,17 +600,37 @@ class NavRayRunner(VisualRunner):
         """The next `count` dashes ahead of the character, nearest first."""
         return [p for p in view.points if p[1] <= pathvision.REACH_Y*height][:count]
 
+    @staticmethod
+    def corner_point(view, height, width):
+        """Where to head when the traced line ahead turns close by, else None. A corner low on screen (near the
+        character): the two marks just past it, the way the path goes on. A line running across the view close by
+        (the character is at the turn already): its far end. Turning for these at the corner, not after it, keeps
+        the character on the path round sharp bends."""
+        route = view.route or view.points
+        if view.corner >= 0 and route[view.corner][1] >= CORNER_NEAR*height:
+            beyond = route[view.corner + 1:view.corner + 3]
+            return (sum(p[0] for p in beyond)/len(beyond), sum(p[1] for p in beyond)/len(beyond))
+        if len(route) >= 2:
+            near, far = route[0], route[-1]
+            if near[1] >= CORNER_NEAR*height and abs(far[1] - near[1]) < .25*abs(far[0] - near[0]):
+                return far
+        return None
+
     def aim_error(self, view, frame):
         """Where the next dashes lie sideways of straight ahead, as a fraction of the width: the first two
-        dashes together, so that one odd mark cannot decide the heading."""
+        dashes together, so that one odd mark cannot decide the heading; past a close corner, its way on."""
         height, width = frame.shape[:2]
-        ahead = self.next_dashes(view, height)[:2] or [view.aim]
+        corner = self.corner_point(view, height, width)
+        ahead = [corner] if corner is not None else self.next_dashes(view, height)[:2] or [view.aim]
         return (sum(p[0] for p in ahead)/len(ahead) - width/2)/width
 
     def steer_error(self, view, frame):
         """The error to steer on while walking: the second and third dashes ahead, which move less from look to
-        look than the one at the character's feet."""
+        look than the one at the character's feet; past a close corner, its way on."""
         height, width = frame.shape[:2]
+        corner = self.corner_point(view, height, width)
+        if corner is not None:
+            return (corner[0] - width/2)/width
         ahead = self.next_dashes(view, height, 3)
         pick = ahead[1:3] or ahead or [view.aim]
         return (sum(p[0] for p in pick)/len(pick) - width/2)/width
@@ -647,6 +673,7 @@ class NavRayRunner(VisualRunner):
         forward = True
         self.backend.key("w", True)
         passed, last_y, reason = 0, None, "time"
+        missing_since, at_corner = None, False
         scene_history, next_scene = [], started
         state["still_mark"] = started                      # stuck time counts only while walking, but carries over from leg to leg
         try:
@@ -656,10 +683,20 @@ class NavRayRunner(VisualRunner):
                 self.vitals(reader, frame, state)
                 now = self.clock()
                 seen = self.find_dashes(_bgr(frame), prior=track, tube=.25)
+                if seen is None and track is not None:
+                    seen = self.find_dashes(_bgr(frame))   # a pivot at a corner moves the line out of the old tube
                 if seen is None:
+                    # A straight stretch may blink out for a moment (stairs, a passer-by): keep going briefly. Never
+                    # coast blind at a corner: release W at once and search from standing.
+                    missing_since = now if missing_since is None else missing_since
+                    if not at_corner and now - missing_since < LOST_GRACE:
+                        self.sleep(.005)
+                        continue
                     reason = "lost the dashes"
-                    break  # release W immediately; search from standing, never coast blind through a turn
+                    break
                 else:
+                    missing_since = None
+                    at_corner = self.corner_point(seen, frame.shape[0], frame.shape[1]) is not None
                     track = seen
                     state["last_path"] = now
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
@@ -667,13 +704,15 @@ class NavRayRunner(VisualRunner):
                     last_y = seen.aim[1]
                     if tether:
                         error = self.steer_error(seen, frame)
-                        if forward and abs(error) > TETHER_TURN_IN_PLACE:
-                            self.backend.key("w", False)               # far off: turn in place, then go on
+                        stop_at = CORNER_TURN_IN_PLACE if at_corner else TETHER_TURN_IN_PLACE
+                        go_at = CORNER_RESUME if at_corner else TETHER_RESUME
+                        if forward and abs(error) > stop_at:
+                            self.backend.key("w", False)               # far off, or a corner: pivot, then go on
                             forward = False
-                        elif not forward and abs(error) <= TETHER_RESUME:
+                        elif not forward and abs(error) <= go_at:
                             self.backend.key("w", True)
                             forward = True
-                        self.correct_while_walking(seen, frame, TETHER_DAMP)
+                        self.correct_while_walking(seen, frame, CORNER_DAMP if at_corner else TETHER_DAMP)
                     else:
                         if passed >= DASHES_PER_LEG:
                             reason = f"passed {passed} dashes"

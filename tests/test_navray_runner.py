@@ -438,6 +438,30 @@ class WalkTests(unittest.TestCase):
         self.assertFalse(runner.backend.held_keys)
 
 
+class CornerSteeringTests(unittest.TestCase):
+    """At a close corner the macro steers for the way beyond it (a sharp turn), not for the dash in front."""
+
+    @staticmethod
+    def view(route, corner, points=None):
+        points = tuple(points or route[:2])
+        return pathvision.PathView(points, points[-1], 0.0, route=tuple(route), corner=corner)
+
+    def test_a_close_corner_aims_past_it(self):
+        route = [(960.0, 1000.0), (960.0, 900.0), (960.0, 800.0), (1100.0, 790.0), (1240.0, 780.0)]
+        frame = np.zeros((1080, 1920, 3), np.uint8)
+        view = self.view(route, 2)
+        self.assertEqual(NavRayRunner.corner_point(view, 1080, 1920), (1170.0, 785.0))
+        self.assertGreater(NavRayRunner.steer_error(NavRayRunner, view, frame), navray_runner.CORNER_TURN_IN_PLACE)
+
+    def test_a_far_corner_waits_until_it_is_close(self):
+        route = [(960.0, 1000.0), (960.0, 800.0), (960.0, 500.0), (1100.0, 495.0), (1240.0, 490.0)]
+        self.assertIsNone(NavRayRunner.corner_point(self.view(route, 2), 1080, 1920))
+
+    def test_a_line_across_the_view_close_by_is_a_turn_onto_its_far_end(self):
+        route = [(1000.0, 800.0), (1150.0, 795.0), (1300.0, 790.0)]
+        self.assertEqual(NavRayRunner.corner_point(self.view(route, -1), 1080, 1920), (1300.0, 790.0))
+
+
 class FocusTests(unittest.TestCase):
     def test_a_view_that_swings_too_far_for_one_nudge_is_measured_with_the_next_nudge(self):
         # Live: 150 counts swung the view by hundreds of pixels (certainty .03). A weak reading tries the next nudge.
