@@ -379,6 +379,26 @@ class WalkTests(unittest.TestCase):
         w = [e[2] for e in runner.backend.events if e[:2] == ("key", "w")]
         self.assertEqual(w, [True, False])                         # held all the way through, let go at the end
 
+    def test_a_fading_banner_is_still_recognised_and_its_place_ignored_for_a_while(self):
+        # Live (28 Oct): the OCR read a fading banner as "Entering.peygjstrict", and one or two of its letters were
+        # still chained as dashes when too few showed to make a row.
+        runner, _ = make_runner(lambda i: DARK)
+        runner.detector.text_reader = lambda: type("R", (), {"read_words": lambda self, g: [("Entering.peygjstrict", 0, 0, 1, 1)]})()
+        frame = cv2.cvtColor(DARK, cv2.COLOR_RGB2BGR)
+        self.assertTrue(runner.district_banner(frame, (500, 590, 1500, 620)))
+        seen = []
+        original = navray_runner.pathvision.find_path
+        navray_runner.pathvision.find_path = lambda bgr, ignore=(), **kwargs: seen.append(ignore)
+        try:
+            runner.dash_color = 70
+            runner.find_dashes(frame)
+            runner.sleep(navray_runner.BANNER_HOLD + 1)
+            runner.find_dashes(frame)
+        finally:
+            navray_runner.pathvision.find_path = original
+        self.assertEqual([tuple(round(v) for v in box) for box in seen[0]], [(500, 590, 1500, 620)])
+        self.assertEqual(seen[1], ())                              # forgotten once the hold is over
+
     def test_one_misread_location_name_is_not_a_new_zone(self):
         # Live (28 Oct, 18:08): a garbled reading of the Location ended the push towards the zone line early.
         readings = iter(["PLAZA SEC-2", "PLAZA SEC-2", "_PLAC-2_J", "PLAZA SEC-2", "", "PLAZA SEC-2", "PLAZA SEC-3",

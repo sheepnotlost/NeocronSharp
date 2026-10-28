@@ -41,6 +41,7 @@ CORNER_TURN_IN_PLACE = .10   # at a close corner, a heading error this big stops
 CORNER_RESUME = .05      # ...and forward motion resumes below this
 CORNER_DAMP = 1.0        # share of the error corrected on each look at a close corner (no gradual drift round it)
 BANNER_RECHECK = 1.5     # seconds a reading of the district banner is trusted before the row is read again
+BANNER_HOLD = 5.0        # seconds the place where the banner was read stays ignored (it fades and breaks up)
 ZONE_MEMORY = 20.0       # the district banner was read this recently: the zone line is close
 ZONE_PUSH_SECONDS = 10.0  # near the zone line the dashes stop: keep walking forward this long for the zone to change
 ZONE_CHECK_EVERY = 1.0   # how often the Location name is read while pushing through
@@ -400,10 +401,17 @@ class NavRayRunner(VisualRunner):
             self.dash_color = hue if hue is not None else "green"
             self.emit("status", f"Nav-Ray: the HUD colour is hue {hue}, so the dashes are "
                       f"{'that colour' if hue is not None else 'green (no clear HUD colour)'}.")
+        if self.banner_box is not None and self.clock() - self.banner_box[0] < BANNER_HOLD:
+            # The banner fades and breaks up: keep ignoring where it was read for a few seconds (live, 28 Oct:
+            # one or two of its letters were still chained as dashes).
+            height, width = bgr.shape[:2]
+            x0, y0, x1, y1 = self.banner_box[1]
+            ignore = tuple(ignore) + ((x0*width, y0*height, x1*width, y1*height),)
         return pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=self.dash_color,
                                     text=self.district_banner)
 
     banner = None                # (when read, row height, was it the banner): the last reading of a banner-like row
+    banner_box = None            # (when read, box as fractions of the frame): where the banner was last read
 
     def district_banner(self, bgr, box):
         """Is the row of marks in `box` the game's "Entering new district: ..." line? Read with the OCR, and the
@@ -417,7 +425,11 @@ class NavRayRunner(VisualRunner):
             words = [w[0].lower() for w in self.detector.text_reader().read_words(crop)]
         except Exception:                                  # OCR trouble must never stop a walk
             words = []
-        found = "entering" in words or any(w.startswith("district") for w in words)
+        # Parts of words are enough: a fading banner reads like "Entering.peygjstrict".
+        found = any("enter" in w or "district" in w for w in words)
+        if found:
+            height, width = bgr.shape[:2]
+            self.banner_box = (now, (box[0]/width, box[1]/height, box[2]/width, box[3]/height))
         # Just after crossing, the new district's own banner is still shown: that is not a zone line ahead.
         ahead = found and now >= self.zone_quiet_until
         if ahead and not self.near_zone(now):
@@ -907,7 +919,7 @@ class NavRayRunner(VisualRunner):
             if known:
                 self.emit("status", f"Nav-Ray: this route is known ({known['walks']} walks, best {known['seconds']}s, "
                           f"{self.route_start} to {known.get('end')}).")
-        self.zone_seen, self.banner, self.zone_quiet_until = None, None, float("-inf")
+        self.zone_seen, self.banner, self.banner_box, self.zone_quiet_until = None, None, None, float("-inf")
         self.current_area = navray._norm(self.route_start) if len(navray._norm(self.route_start)) >= 4 else ""
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
