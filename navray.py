@@ -101,6 +101,29 @@ def find_row(rows, wanted):
     return None
 
 
+def infer_row(rows, entries, wanted):
+    """The row a wanted entry must be on, worked out from its neighbours when its own text could not be read
+    (a highlighted row, a pointer over the text). `entries` is the list's known contents in game order.
+    Needs at least one neighbour read exactly, and every neighbour read exactly has to agree. None otherwise."""
+    label, occurrence = split_label(wanted)
+    positions = [i for i, entry in enumerate(entries) if _norm(entry) == _norm(label)]
+    if len(positions) < occurrence:
+        return None
+    target = positions[occurrence - 1]
+    offsets = set()
+    for row, text in rows:
+        seen = _norm(text)
+        if not seen:
+            continue
+        matches = [i for i, entry in enumerate(entries) if _norm(entry) == seen]
+        if len(matches) == 1:
+            offsets.add(row - matches[0])
+    if len(offsets) != 1:
+        return None
+    row = target + offsets.pop()
+    return row if 0 <= row < max(LIST_ROWS.values()) else None
+
+
 @dataclass(frozen=True)
 class NavRay:
     x: float          # top-left of the word "Small"
@@ -185,35 +208,58 @@ def tidy(text):
 
 
 def row_picture(row_gray):
-    """Dark text on a light background, kept in grey so letter shapes stay sharp, for a normal row
-    (light text on dark) and the selected row (dark text on a bright bar) alike. None if no text."""
+    """Dark text on a light background for a normal row (light text on dark) and for the selected row
+    (dark text on a bright bar) alike. None if no text.
+
+    The window is see-through, so a lamp or sign behind it can light up part of a row. Letters are thin,
+    so a top-hat (or, on the selected bar, a black-hat) keeps only thin strokes and drops any broad bright
+    or dark area, whatever lies behind. The bar is recognised from the start of the row, where the text is."""
+    import cv2
+    import numpy as np
+    height, width = row_gray.shape
+    start = row_gray[:, :max(8, int(.4*width))]
+    selected = float((start > 120).mean()) > .5
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(5, int(height*.45)) | 1, max(5, int(height*.45)) | 1))
+    if selected:
+        columns = np.where((row_gray > 120).mean(axis=0) > .5)[0]
+        if len(columns) < 10:
+            return None
+        left = columns.min() + 3                                    # the bar's own end is not text
+        thin = cv2.morphologyEx(row_gray, cv2.MORPH_BLACKHAT, kernel)[:, left:]
+    else:
+        thin = cv2.morphologyEx(row_gray, cv2.MORPH_TOPHAT, kernel)
+        count, labels, stats, _ = cv2.connectedComponentsWithStats((row_gray > 120).astype(np.uint8), connectivity=8)
+        for index in range(1, count):
+            x, w = stats[index][0], stats[index][2]
+            if (x <= 3 or x + w >= width - 3) and w <= max(3, .012*width) and stats[index][3] >= .8*height:
+                thin[labels == index] = 0                           # the window frame at the crop edge, not a letter
+    peak = float(thin.max())
+    if peak < 25:
+        return None
+    return (255 - np.clip(thin.astype(np.float32)*(255.0/peak), 0, 255)).astype(np.uint8)
+
+
+def plain_picture(row_gray):
+    """The row as plain dark-on-light grey: letters keep their full shape (best when nothing lights the row)."""
     import cv2
     import numpy as np
     height, width = row_gray.shape
     bright = row_gray > 120
-    if bright.mean() > .45:
+    if float((row_gray[:, :max(8, int(.4*width))] > 120).mean()) > .5:
         columns = np.where(bright.mean(axis=0) > .5)[0]
         if len(columns) < 10:
             return None
-        left, right = columns.min() + 3, columns.max() - 3          # inside the bar: its ends are not text
-        return row_gray[:, left:right]
+        return row_gray[:, columns.min() + 3:columns.max() - 3]
     picture = 255 - row_gray
     count, labels, stats, _ = cv2.connectedComponentsWithStats(bright.astype(np.uint8), connectivity=8)
     for index in range(1, count):
         x, w = stats[index][0], stats[index][2]
-        at_edge = x <= 3 or x + w >= width - 3
-        if at_edge and w <= max(3, .012*width) and stats[index][3] >= .8*height:
-            picture[labels == index] = int(picture.max())          # the window frame at the crop edge, not a letter (an "I" is thin too)
+        if (x <= 3 or x + w >= width - 3) and w <= max(3, .012*width) and stats[index][3] >= .8*height:
+            picture[labels == index] = int(picture.max())
     return picture
 
 
-def read_row(row_gray):
-    """Text of one list row, or "" for an empty row."""
-    if float((row_gray > 120).mean()) < .04:
-        return ""
-    picture = row_picture(row_gray)
-    if picture is None:
-        return ""
+def _ocr(picture):
     import cv2
     import pytesseract
     from ntc import ocr
@@ -221,6 +267,31 @@ def read_row(row_gray):
     big = cv2.resize(picture, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     big = cv2.copyMakeBorder(big, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=int(big.max()))
     return tidy(pytesseract.image_to_string(big, config="--psm 7"))
+
+
+def _clean(text):
+    """How much a reading looks like a list entry: its share of ordinary characters, minus stray marks."""
+    if not text:
+        return -1.0
+    body = re.sub(r"[ .…]+$", "", text)                   # the game's cut-off marker at the end is fine
+    ordinary = sum(1 for c in body if c.isalnum() or c in " -()/'&")
+    return ordinary/max(1, len(body)) - .15*len(re.findall(r"[^A-Za-z0-9 \-()/'&]", body))
+
+
+def read_row(row_gray):
+    """Text of one list row, or "" for an empty row.
+
+    Read two ways and the cleaner reading wins: as plain grey, and with background light filtered out
+    (the window is see-through, so a lamp behind it can wash out part of a row)."""
+    if float((row_gray > 120).mean()) < .04:
+        return ""
+    readings = []
+    for make in (plain_picture, row_picture):
+        picture = make(row_gray)
+        if picture is not None:
+            readings.append(_ocr(picture))
+    best = max(range(len(readings)), key=lambda i: (round(_clean(readings[i]), 3), -i)) if readings else None
+    return readings[best] if best is not None else ""                 # on a tie the plain reading stands
 
 
 def read_rows(gray, window, which):

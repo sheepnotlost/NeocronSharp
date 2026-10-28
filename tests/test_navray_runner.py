@@ -315,7 +315,7 @@ class OccurrenceTests(unittest.TestCase):
         self.lists = {"select": list(self.catalog), "destination": []}
         self.last = {"which": "select"}
         self.clicks, self.drags = [], []
-        runner, _ = make_runner(lambda i: DARK)
+        runner, self.events = make_runner(lambda i: DARK)
         runner.frame = lambda: DARK
         runner.wait = lambda seconds, safe_pause=False: None
         runner.find_window = lambda reader: self.window
@@ -364,6 +364,19 @@ class OccurrenceTests(unittest.TestCase):
         self.assertEqual(self.catalog["VIAROSSO APARTMENTS"][index], "Viarosso / Alamo Living / Enter C")
         self.assertTrue(self.drags)
         self.assertEqual(self.runner.backend.events, [])         # never the mouse wheel
+
+    def test_a_row_that_cannot_be_read_is_still_clicked_by_working_it_out_from_its_neighbours(self):
+        # Live: the selected first row (WEAPONS) read blank, and the cursor garbled the one below it.
+        real = self.navray.read_rows
+
+        def unreadable(gray, window, which):
+            rows = real(gray, window, which)
+            return [(r, "garbled ———" if t == "AMMUNITION" else t) for r, t in rows if t != "WEAPONS"]
+        self.navray.read_rows = unreadable
+        self.runner.entries = list(self.catalog["TRADER DIRECTORY"])
+        index = self.pick("TRADER DIRECTORY", "WEAPONS")
+        self.assertEqual(self.catalog["TRADER DIRECTORY"][index], "WEAPONS")
+        self.assertTrue(any("worked out" in p for k, p in self.events if k == "status"))
 
     def test_scrolling_up_finds_a_row_the_first_move_to_the_top_missed(self):
         self.lists["destination"] = list(self.catalog["TRADER DIRECTORY"])

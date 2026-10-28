@@ -171,10 +171,17 @@ class NavRayRunner(VisualRunner):
             row = navray.find_row(rows, label)
             if row is not None:
                 return row
+            if which == "destination" and self.entries:
+                row = navray.infer_row(rows, self.entries, label)
+                if row is not None and row not in dict(rows):
+                    self.emit("status", f"Nav-Ray: {label} could not be read; worked out to be row {row} from its neighbours.")
+                    return row
             if rows == previous or step(which, window) is None:
                 return None
             previous = rows
         return None
+
+    entries = None                # the known entries of the chosen category, for working out an unreadable row
 
     def choose(self, which, wanted, reader):
         label, occurrence = navray.split_label(wanted)
@@ -622,6 +629,8 @@ class NavRayRunner(VisualRunner):
         self.open_navray(reader)
         self.emit("status", f"Nav-Ray: choosing {category}.")
         self.choose("select", category, reader)
+        known = {navray._norm(k): v for k, v in navray.load_catalog(self.profile).items()}
+        self.entries = known.get(navray._norm(category))
         self.emit("status", f"Nav-Ray: choosing {destination}.")
         self.choose("destination", destination, reader)
         window = self.find_window(reader)

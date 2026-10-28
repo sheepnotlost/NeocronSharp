@@ -91,6 +91,19 @@ class NavRayReadingTests(unittest.TestCase):
         self.assertIsNone(navray.find_row([(0, "Enter A"), (1, "Enter B")], "Enter C"))
         self.assertIsNone(navray.find_row([(0, "WEAP0NS")], "WEAPONS"))
 
+    def test_an_unreadable_row_is_worked_out_from_its_neighbours(self):
+        entries = ["WEAPONS", "AMMUNITION", "ARMOUR", "TOOLS", "PSI EQUIPMENT", "CHEMICALS", "ITEM PARTS", "IMPLANTS"]
+        # live: WEAPONS (the selected row) and ARMOUR could not be read; the others were
+        rows = [(1, "AMMUNITION ——eees"), (3, "TOOLS"), (4, "PSI EQUIPMENT"), (5, "CHEMICALS"), (6, "ITEM PARTS")]
+        self.assertEqual(navray.infer_row(rows, entries, "WEAPONS"), 0)
+        self.assertEqual(navray.infer_row(rows, entries, "ARMOUR"), 2)
+        scrolled = [(0, "ARMOUR"), (1, "TOOLS"), (2, "PSI EQUIPMENT")]                  # the same list scrolled two rows
+        self.assertIsNone(navray.infer_row(scrolled, entries, "AMMUNITION"))                            # above the page
+        self.assertEqual(navray.infer_row(scrolled, entries, "CHEMICALS"), 3)
+        self.assertIsNone(navray.infer_row([(0, "TOOLS"), (1, "ARMOUR")], entries, "WEAPONS"))            # neighbours disagree
+        self.assertIsNone(navray.infer_row([], entries, "WEAPONS"))
+        self.assertIsNone(navray.infer_row(rows, entries, "NOT AN ENTRY"))
+
     def test_tidy_removes_edge_junk_only(self):
         self.assertEqual(navray.tidy("lOUTZONE DUNGEONS ="), "OUTZONE DUNGEONS")
         self.assertEqual(navray.tidy("Outzone 4 - Storage Halls 4 (hard) ia"), "Outzone 4 - Storage Halls 4 (hard)")
