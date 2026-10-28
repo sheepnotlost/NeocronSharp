@@ -9,6 +9,7 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Trace the dashed line far ahead (dash by dash past the straight chain, small far marks included) and find the first corner in it. Checked on the 02-29-32 video: the far turns at 22–25 s and the right turn at the end of the City Admin corridor (36–38 s) are traced.
 - [x] At a close corner, steer for the way beyond it and pivot sharply (stop forward motion above 0.10, full correction); a line running across the view close by is a turn onto its far end. On the video, 38.2 s now steers +0.24 where the old run walked on into the wall.
 - [x] Ride out a dropout of up to 0.4 s on a straight stretch; after a pivot, look at the whole view when the old line's tube shows nothing. Not yet checked live.
+- [x] 02-51-16 video: the walk overshot a left turn at 61 s, then chased the VIAROSSO / SUBWAY sign's letters and gave up turning between the sign and a wall screen. Sign lettering is now refused (marks crowded by other green, or short chains with letters beside them), routes never extend into signs or screens, and the search after losing the path starts on the side the dashes were last seen while walking. Checked on both videos' frames; not yet checked live.
 
 ### NeocronSharp merge — 28 October 2026
 

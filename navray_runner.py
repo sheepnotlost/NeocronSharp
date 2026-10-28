@@ -697,6 +697,7 @@ class NavRayRunner(VisualRunner):
                 else:
                     missing_since = None
                     at_corner = self.corner_point(seen, frame.shape[0], frame.shape[1]) is not None
+                    state["last_side"] = 1 if self.steer_error(seen, frame) >= 0 else -1   # where to look first if it goes
                     track = seen
                     state["last_path"] = now
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
@@ -877,6 +878,7 @@ class NavRayRunner(VisualRunner):
                 leg_started = self.clock()
                 track, passed, reason = self.walk_leg(view, track, reader, state, tether=bool(self.px_per_count))
                 self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
+                last_side = state.pop("last_side", last_side)    # the side the dashes were on when last seen walking
                 self.route_legs.append({"turn": int(turned - recorded_turn), "seconds": round(self.clock() - leg_started, 1),
                                         "dashes": passed, "reason": reason})
                 recorded_turn = turned

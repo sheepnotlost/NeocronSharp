@@ -75,13 +75,9 @@ def _hue_window(color):
     return (centre - 12) % 180, (centre + 12) % 180, True
 
 
-def dash_candidates(frame, ignore=(), color="green"):
-    """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour (a name from COLOR_HUES or a numeric hue).
-    `ignore` = pixel boxes (x0,y0,x1,y1)."""
-    height, width = frame.shape[:2]
-    unit = width/2000
+def _dash_mask(frame, color="green", parts=False):
+    """1 where a pixel has the dash colour. With `parts`: (mask, shifted hue, saturation, strict)."""
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     low, high, strict = _hue_window(color)
     centre = ((low + high + (180 if low > high else 0))/2) % 180
     # Shift the hue circle so the dash colour sits in one block at 90 (this also makes red, which wraps, simple).
@@ -91,6 +87,16 @@ def dash_candidates(frame, ignore=(), color="green"):
         mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 35) & (val >= 62)).astype(np.uint8)
     else:
         mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 90) & (val >= 70)).astype(np.uint8)
+    return (mask, hue, sat, strict) if parts else mask
+
+
+def dash_candidates(frame, ignore=(), color="green"):
+    """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour (a name from COLOR_HUES or a numeric hue).
+    `ignore` = pixel boxes (x0,y0,x1,y1)."""
+    height, width = frame.shape[:2]
+    unit = width/2000
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    mask, hue, sat, strict = _dash_mask(frame, color, parts=True)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
     for i in range(1, count):
@@ -127,6 +133,32 @@ def dash_candidates(frame, ignore=(), color="green"):
             continue                                   # a filled blob, not a dash
         found.append((float(cx), float(cy), int(area), direction))
     return found
+
+
+BUSY = .12           # share of dash-coloured picture around a mark above which it is part of a sign or screen:
+                     # floor dashes stand alone on grey (measured <= .05 along real routes); sign letters sit in
+                     # lit panels with borders and arrows (measured up to .44). Such marks never extend a route.
+LETTER_GAP = .04     # marks this close (fraction of the width) beside a mark but off its line are neighbouring letters
+CHAIN_BUSY = .08     # ...and a chain whose typical mark is this crowded is lettering, not a path (signs measured
+                     # .12-.29 for the middle mark of their chains, real routes .01-.03)
+
+
+def crowding(frame, candidates, color="green"):
+    """For each candidate, the share of the dash colour in a box around it (not counting the mark itself), with the
+    HUD blanked out so a dash beside a panel is not counted as crowded."""
+    height, width = frame.shape[:2]
+    mask = _dash_mask(frame, color)
+    mask[int(.78*height):] = 0
+    mask[:int(.06*height)] = 0
+    mask[:int(.20*height), :int(.20*width)] = 0
+    mask[:, int(.92*width):] = 0
+    values = []
+    for x, y, area, *_ in candidates:
+        r = int(max(.035*width, 4*np.sqrt(area)))
+        box = mask[max(0, int(y) - r):int(y) + r, max(0, int(x) - r):int(x) + r]
+        total = float(box.sum())
+        values.append((total - min(area, total))/max(1, box.size))
+    return values
 
 
 MIN_SATURATION = 62   # real dashes are a rich green (measured 70-120); signs and glass are washed out (43-55)
@@ -213,7 +245,7 @@ def _plausible(points, areas, angles, height, width=None):
 
 
 def best_chain(candidates, tolerance=7.0, minimum=2, samples=3000, max_turn=np.radians(30), height=1440, tries=25,
-               anchor=None, width=None):
+               anchor=None, width=None, busy=None):
     """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
 
     Every pair is tried for small inputs; busy scenes (hundreds of candidates) try a fixed random
@@ -278,6 +310,8 @@ def best_chain(candidates, tolerance=7.0, minimum=2, samples=3000, max_turn=np.r
             break
     for _, members in sorted(ranked, key=lambda item: -item[0])[:tries]:
         index = list(members)
+        if busy is not None and float(np.median(np.asarray(busy)[index])) > CHAIN_BUSY:
+            continue                                       # lettering on a sign or screen
         if _plausible(points[index], areas[index], angles[index], height, width):
             chosen = points[index]
             return [tuple(p) for p in chosen[np.argsort(-chosen[:, 1])]]
@@ -374,7 +408,7 @@ def _bend_angle(first, second):
     return abs((second - first + np.pi) % (2*np.pi) - np.pi)
 
 
-def extend_route(chain, candidates, width, height, limit=24):
+def extend_route(chain, candidates, width, height, limit=24, busy=None):
     """The dashed line beyond `chain`, traced dash by dash from its far end so the macro can see where the path goes
     well ahead, round corners included. Each next mark is about as far from the last as the dashes before it (they
     crowd together further away), leads away from the camera or across it, never back, and bends at most ROUTE_TURN
@@ -384,7 +418,8 @@ def extend_route(chain, candidates, width, height, limit=24):
     if len(route) < 2:
         return route
     used = {(round(x), round(y)) for x, y in route}
-    pool = [(float(c[0]), float(c[1])) for c in candidates if (round(c[0]), round(c[1])) not in used]
+    pool = [(float(c[0]), float(c[1])) for i, c in enumerate(candidates) if (round(c[0]), round(c[1])) not in used
+            and (busy is None or busy[i] <= BUSY)]                # never on into a sign or a screen
     while pool and len(route) < limit:
         last = route[-1]
         back = route[-3] if len(route) >= 3 else route[-2]
@@ -407,6 +442,21 @@ def extend_route(chain, candidates, width, height, limit=24):
             break
         route.append(pool.pop(best[1]))
     return route
+
+
+def _lettered(chain, route, candidates, width, height):
+    """True when a mark of the chain has two or more other marks close beside it that are not part of the line: the
+    letters of a sign. Floor dashes have at most one stray mark near any of them (measured on live routes). Used for
+    short chains only: far off, real dashes bunch together in perspective and would count as letters."""
+    on_line = {(round(x), round(y)) for x, y in route}
+    for x, y in chain:
+        if y >= REACH_Y*height:
+            continue
+        beside = sum(1 for c in candidates if (round(c[0]), round(c[1])) not in on_line
+                     and np.hypot(c[0] - x, c[1] - y) <= LETTER_GAP*width)
+        if beside >= 2:
+            return True
+    return False
 
 
 def first_corner(route):
@@ -433,10 +483,13 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     """
     candidates = dash_candidates(frame, ignore, color)
     everything = candidates                                 # the line ahead may leave the prior's tube at a corner
+    crowded = crowding(frame, everything, color)
+    busy_at = {(round(c[0]), round(c[1])): b for c, b in zip(everything, crowded)}
     height, width = frame.shape[:2]
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
-    chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height), width=width)
+    busy = [busy_at[(round(c[0]), round(c[1]))] for c in candidates]
+    chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height), width=width, busy=busy)
     bend = _bend(candidates, width, height)
     anchor = (.5*width, .85*height)
     if bend and (not chain or np.hypot(bend[0][0] - anchor[0], bend[0][1] - anchor[1]) + .06*width
@@ -445,6 +498,10 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     if not chain:
         chain = _curved(candidates, width, height)           # a bending path: the next clear dashes, nearest first
         chain = sorted(chain, key=lambda point: -point[1]) if chain else chain    # nearest (lowest) first, like a straight chain
+    if chain and (float(np.median([busy_at.get((round(x), round(y)), 0.0) for x, y in chain])) > CHAIN_BUSY
+                  or len(chain) <= 3 and _lettered(chain, extend_route(chain, everything, width, height, busy=crowded),
+                                                   everything, width, height)):
+        chain = []                                         # a run of sign lettering, not a path
     if not chain and prior is not None:
         chain = _continuation(candidates, prior, height, width)    # one or two dashes of the path already being followed
     if not chain:
@@ -466,6 +523,6 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     ahead = [p for p in chain if p[1] <= REACH_Y*height]    # chain is nearest first
     target = ahead[0] if ahead else chain[-1]
     near_x = min(max(float(slope*.75*height + intercept), 0.0), float(width))
-    route = extend_route(chain, everything, width, height)
+    route = extend_route(chain, everything, width, height, busy=crowded)
     return PathView(tuple(chain), (float(target[0]), float(target[1])), (target[0] - centre)/width,
                     (near_x - centre)/width, float(slope), float(intercept), chain[-1], tuple(route), first_corner(route))

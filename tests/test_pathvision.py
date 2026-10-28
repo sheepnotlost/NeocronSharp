@@ -238,3 +238,15 @@ class RouteTests(unittest.TestCase):
         chain = [(1000.0, 900.0), (1000.0, 800.0)]
         candidates = [(1000.0, 860.0, 40.0, float("nan")), (1040.0, 900.0, 40.0, float("nan"))]
         self.assertEqual(pathvision.extend_route(chain, candidates, 1920, 1080), chain)
+
+    def test_sign_lettering_is_not_a_chain_but_lone_floor_dashes_are(self):
+        # 02-51-16 video: a walk chased the VIAROSSO sign, whose letters stand side by side off any one line.
+        chain = [(1000.0, 600.0), (1040.0, 560.0)]
+        letters = [(1030.0, 610.0, 40.0, float("nan")), (1060.0, 600.0, 40.0, float("nan"))]
+        marks = [(x, y, 40.0, float("nan")) for x, y in chain]
+        self.assertTrue(pathvision._lettered(chain, chain, marks + letters, 1920, 1080))
+        self.assertFalse(pathvision._lettered(chain, chain, marks + letters[:1], 1920, 1080))
+
+    def test_a_lit_sign_with_no_path_in_view_is_not_followed(self):
+        # 02-51-16 video, 70s: after overshooting a turn the walk chased the VIAROSSO / SUBWAY sign's letters.
+        self.assertIsNone(pathvision.find_path(load("navray_sign_viarosso_025116_70.png"), color=70))
