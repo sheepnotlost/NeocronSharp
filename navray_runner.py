@@ -245,6 +245,40 @@ class NavRayRunner(VisualRunner):
         # all the way round for the dashes.
         self.emit("status", "Nav-Ray: no dashes in view yet; the walk will look all round for them.")
 
+    def menu_words(self, reader):
+        """[(text, x, y, w, h)] of the words in the top menu strip, which shows only in interactive-UI mode."""
+        gray = self.detector.gray(self.frame())
+        return reader.read_words(gray[:max(40, int(.06*gray.shape[0]))])
+
+    def ui_visible(self, reader):
+        """Is the game in interactive-UI mode (cursor free, menu bar HYPERCOM / INVENTORY ... on screen)?"""
+        words = {t.upper() for t, *_ in self.menu_words(reader)}
+        return bool({"HYPERCOM", "INVENTORY", "IMPLANTS", "PROCESSOR"} & words)
+
+    def set_ui(self, reader, on):
+        """Put the game into (or out of) interactive-UI mode. Tab toggles it, so look at the screen each time
+        instead of assuming which state it was in."""
+        for _ in range(3):
+            if self.ui_visible(reader) == on:
+                return True
+            self.press("tab")
+            self.wait(.6)
+        return self.ui_visible(reader) == on
+
+    def open_navray(self, reader):
+        """Make sure the Nav-Ray window is open: interactive UI on, then NAV-RAY in the top menu."""
+        for _ in range(3):
+            if navray.find_navray(reader, self.detector.gray(self.frame())) is not None:
+                return True
+            self.set_ui(reader, True)
+            for text, x, y, w, h in self.menu_words(reader):
+                if text.upper().startswith("NAV"):
+                    self.emit("status", "Nav-Ray: opening the window from the top menu.")
+                    self.click((x + w//2, y + h//2))
+                    self.wait(1.0)
+                    break
+        return navray.find_navray(reader, self.detector.gray(self.frame())) is not None
+
     def press(self, name):
         self.backend.key(name, True)
         try:
@@ -553,6 +587,7 @@ class NavRayRunner(VisualRunner):
             return self.scan()
         category, destination = navray.parse_destination(self.profile["navray"]["destination"])
         reader = self.detector.text_reader()
+        self.open_navray(reader)
         self.emit("status", f"Nav-Ray: choosing {category}.")
         self.choose("select", category, reader)
         self.emit("status", f"Nav-Ray: choosing {destination}.")
@@ -562,7 +597,10 @@ class NavRayRunner(VisualRunner):
         self.move((24, 80))
         self.emit("status", "Nav-Ray: waiting for the route.")
         self.wait_for_path(window)
-        self.press("tab")                    # leave the interactive UI; the mouse now turns the camera
+        # Leave the interactive UI so the mouse turns the camera. Checked on screen: a blind Tab would
+        # switch it ON if the game was already out of it.
+        if not self.set_ui(reader, False):
+            raise Interrupted("Nav-Ray: could not leave the interactive UI (Tab). Click the game view and try again.")
         self.wait(.3)
         self.emit("status", "Nav-Ray: walking the path.")
         self.walk()

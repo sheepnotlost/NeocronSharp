@@ -239,6 +239,36 @@ class FocusTests(unittest.TestCase):
         self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/2.0 + 1 for m in moves), moves)
 
 
+class InterfaceModeTests(unittest.TestCase):
+    """Tab toggles the game's interactive-UI mode, so the macro must look at the screen, not assume the state."""
+
+    def runner(self, ui_on):
+        state = {"ui": ui_on}
+        runner, _ = make_runner(lambda i: DARK)
+        runner.wait = lambda seconds, safe_pause=False: None
+        original = runner.backend.key
+
+        def key(name, down):
+            original(name, down)
+            if name == "tab" and down:
+                state["ui"] = not state["ui"]
+        runner.backend.key = key
+
+        class Reader:
+            def read_words(self, gray, up=3):
+                return [("HYPERCOM", 0, 0, 10, 10), ("INVENTORY", 20, 0, 10, 10)] if state["ui"] else [("Location", 0, 0, 10, 10)]
+        return runner, Reader(), state
+
+    def test_it_presses_tab_only_when_the_ui_is_in_the_wrong_state(self):
+        for start, want in ((True, False), (False, False), (False, True), (True, True)):
+            with self.subTest(start=start, want=want):
+                runner, reader, state = self.runner(start)
+                self.assertTrue(runner.set_ui(reader, want))
+                self.assertEqual(state["ui"], want)
+                presses = [e for e in runner.backend.events if e == ("key", "tab", True)]
+                self.assertEqual(len(presses), 0 if start == want else 1)
+
+
 class SelectionTests(unittest.TestCase):
     def test_choose_clicks_the_row_of_the_wanted_category_on_a_real_capture(self):
         from text_reader import TextReader
