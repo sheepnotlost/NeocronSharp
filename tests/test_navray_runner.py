@@ -181,6 +181,38 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(reason, "lost the dashes")
         self.assertGreaterEqual(runner.clock() - started, navray_runner.COAST_SECONDS*.6)    # it coasted before stopping
 
+    def test_tethered_walking_is_one_continuous_run_that_keeps_steering(self):
+        drifted = np.roll(AHEAD, -160, axis=1)            # the dashes lie a little to the left
+        frames = lambda i: np.roll(drifted, (i % 5)*3, axis=1)
+        runner, _ = make_runner(frames)
+        runner.px_per_count = -4.2
+        view = pathvision_find(drifted)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        presses = [e for e in runner.backend.events if e[:2] == ("key", "w")]
+        self.assertEqual(presses, [("key", "w", True), ("key", "w", False)])        # held the whole time, released at the end
+        steering = [e[1] for e in runner.backend.events if e[0] == "rel"]
+        self.assertGreaterEqual(len(steering), 3)                                    # corrected on look after look
+        self.assertTrue(all(m < 0 for m in steering), steering)                      # always towards the dashes (left)
+
+    def test_a_large_heading_error_turns_in_place_then_resumes_while_tethered(self):
+        runner, _ = make_runner(lambda i: np.roll(AHEAD, -520 + min(i, 12)*45, axis=1))   # far off, swinging into line
+        runner.px_per_count = -4.2
+        view = pathvision_find(np.roll(AHEAD, -520, axis=1))
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        w = [e[2] for e in runner.backend.events if e[:2] == ("key", "w")]
+        self.assertIn(False, w[:-1])                      # it stopped to turn in place...
+        self.assertTrue(w.count(True) >= 2)               # ...and went on again
+
+    def test_the_dash_colour_is_learned_from_the_first_path_seen(self):
+        import cv2 as cv
+        red = cv.cvtColor(cv.imread(str(FIXTURES / "navray_red_corridor_2000.png")), cv.COLOR_BGR2RGB)
+        runner, events = make_runner(lambda i: red)
+        self.assertIsNotNone(runner.find_dashes(cv.cvtColor(red, cv.COLOR_RGB2BGR)))
+        self.assertEqual(runner.dash_color, "red")
+        self.assertTrue(any("dashes are red" in p for k, p in events if k == "status"))
+
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)
         ahead = NavRayRunner.next_dashes(view, AHEAD.shape[0])

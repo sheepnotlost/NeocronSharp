@@ -24,14 +24,20 @@ class PathView:
     forward_point: tuple = (0.0, 0.0)   # the far end of the chain: the way on
 
 
-def _excluded(fx, fy):
-    """HUD areas that are always on screen and green, and the character itself (fractions of the frame)."""
+def _excluded(fx, fy, color="green"):
+    """HUD areas that are always on screen in the dash colour, and (for green only: the character's own green
+    gear) the character itself (fractions of the frame)."""
     return (fy < .06 or (fx < .20 and fy < .20) or (fx > .84 and fy > .78)
             or fx > .92 or (fx > .89 and .30 < fy < .82) or (fx < .47 and fy > .76)
-            or (.43 < fx < .60 and fy > .50))
+            or (color == "green" and .43 < fx < .60 and fy > .50))
 
 
-COLORS = ("green", "red")      # the dashes follow the HUD colour scheme (/set gfx_hudcolor): green by default
+# The dashes follow the HUD colour scheme (/set gfx_hudcolor): green by default, any colour you pick.
+# OpenCV hues run 0-179; red wraps round (170..179 and 0..10 are one colour). Ranges are (low, high) with
+# low > high meaning "wraps". The scene is mostly grey, dark teal and warm yellow-orange lights, so red,
+# magenta and blue stand out best.
+COLOR_HUES = {"green": (55, 88), "red": (170, 10), "magenta": (135, 168), "blue": (100, 130)}
+COLORS = tuple(COLOR_HUES)
 
 
 def dash_candidates(frame, ignore=(), color="green"):
@@ -40,12 +46,15 @@ def dash_candidates(frame, ignore=(), color="green"):
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    if color == "red":
-        # Red wraps round the hue circle (0 and 179 are neighbours): shift it so the dashes sit in one block.
-        hue = ((hue.astype(np.int16) + 90) % 180).astype(np.uint8)
-        mask = ((hue >= 80) & (hue <= 100) & (sat >= 90) & (val >= 70)).astype(np.uint8)   # 80..100 = original 170..10
+    low, high = COLOR_HUES[color]
+    centre = ((low + high + (180 if low > high else 0))/2) % 180
+    # Shift the hue circle so the dash colour sits in one block at 90 (this also makes red, which wraps, simple).
+    hue = ((hue.astype(np.int16) + 90 - int(round(centre))) % 180).astype(np.uint8)
+    half = ((high - low) % 180)/2
+    if color == "green":
+        mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 35) & (val >= 62)).astype(np.uint8)
     else:
-        mask = ((hue >= 55) & (hue <= 88) & (sat >= 35) & (val >= 62)).astype(np.uint8)
+        mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 90) & (val >= 70)).astype(np.uint8)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
     for i in range(1, count):
@@ -53,7 +62,7 @@ def dash_candidates(frame, ignore=(), color="green"):
         cx, cy = centres[i]
         if not 6*unit*unit <= area <= 40000*unit*unit:
             continue
-        if _excluded(cx/width, cy/height):
+        if _excluded(cx/width, cy/height, color):
             continue
         if abs(cx - width/2) < 28*unit and abs(cy - .504*height) < 28*unit:
             continue                                   # the reticle
@@ -61,7 +70,7 @@ def dash_candidates(frame, ignore=(), color="green"):
             continue
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
-        if saturation < (MIN_SATURATION if color != "red" else 90):
+        if saturation < (MIN_SATURATION if color == "green" else 90):
             continue                                   # washed-out green: glass, walls, sign backing
         if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
             continue                                   # blotchy colour: a picture or sign, not a flat overlay

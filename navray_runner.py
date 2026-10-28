@@ -29,6 +29,10 @@ VEER = .22               # while walking, an error this big (after corrections) 
 WALK_DAMP = .5           # share of the measured error corrected on each look while walking
 LEG_SECONDS = 8.0        # longest a leg may last
 COAST_SECONDS = 1.6      # keep walking straight this long after the dashes drop out of view while lined up (first person: they pass under the camera)
+TETHER_SECONDS = 90.0      # a tethered walk may run this long before it re-reads the path from standing
+TETHER_DAMP = .7         # share of the measured error corrected on every look while tethered
+TETHER_TURN_IN_PLACE = .22   # while tethered, a heading error this big stops forward motion until the turn catches up
+TETHER_RESUME = .10      # ...and forward motion resumes below this
 COAST_ALIGNED = .08      # ...if the last good heading was within this of straight ahead
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
@@ -440,7 +444,7 @@ class NavRayRunner(VisualRunner):
         pick = ahead[1:3] or ahead or [view.aim]
         return (sum(p[0] for p in pick)/len(pick) - width/2)/width
 
-    def correct_while_walking(self, view, frame):
+    def correct_while_walking(self, view, frame, damp=WALK_DAMP):
         """A small calibrated turn towards the dashes, made on the move, so a drift never grows into a veer."""
         if not self.px_per_count:
             return 0
@@ -448,7 +452,7 @@ class NavRayRunner(VisualRunner):
         if abs(error) <= LINED_UP:
             return 0
         limit = max(5, round(CAL_MAX_PX/abs(self.px_per_count)))
-        counts = round(max(-limit, min(limit, -(error*frame.shape[1])*WALK_DAMP/self.px_per_count)))
+        counts = round(max(-limit, min(limit, -(error*frame.shape[1])*damp/self.px_per_count)))
         if counts:
             self.backend.move_relative(counts, 0)
         return counts
@@ -466,15 +470,21 @@ class NavRayRunner(VisualRunner):
                 elif reading[0] < state["health"] - max(1, reading[1]*.02):
                     raise Interrupted(f"Health dropped ({state['health']} to {reading[0]}). Stopped.")
 
-    def walk_leg(self, view, track, reader, state):
+    def walk_leg(self, view, track, reader, state, tether=False):
         """Walk towards the next dashes with W held; stop after DASHES_PER_LEG of them have been passed, or when
-        the path bends away, is lost, or the character is stuck. Returns the last path seen."""
+        the path bends away, is lost, or the character is stuck. Returns the last path seen.
+
+        `tether` walks without those limits: one continuous loop that keeps steering on the dashes (the
+        dashes march towards the destination, so it follows the line they trace), stopping forward motion
+        only to turn in place when the heading is far off, and ending only when the dashes are lost for good,
+        the character is stuck, or TETHER_SECONDS pass."""
         started = self.clock()
+        forward = True
         self.backend.key("w", True)
         passed, last_y, lost, still_since, previous_thumb, reason = 0, None, 0, None, None, "time"
         last_error, seen_at = None, started
         try:
-            while self.clock() - started < LEG_SECONDS:
+            while self.clock() - started < (TETHER_SECONDS if tether else LEG_SECONDS):
                 self.checkpoint()
                 frame = self.frame()
                 self.vitals(reader, frame, state)
@@ -493,13 +503,23 @@ class NavRayRunner(VisualRunner):
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
                         passed += 1                          # the dash we were heading for was reached: on to the next
                     last_y = seen.aim[1]
-                    if passed >= DASHES_PER_LEG:
-                        reason = f"passed {passed} dashes"
-                        break
-                    if abs(self.steer_error(seen, frame)) > VEER:
-                        reason = "the path bends away"
-                        break
-                    self.correct_while_walking(seen, frame)
+                    if tether:
+                        error = self.steer_error(seen, frame)
+                        if forward and abs(error) > TETHER_TURN_IN_PLACE:
+                            self.backend.key("w", False)               # far off: turn in place, then go on
+                            forward = False
+                        elif not forward and abs(error) <= TETHER_RESUME:
+                            self.backend.key("w", True)
+                            forward = True
+                        self.correct_while_walking(seen, frame, TETHER_DAMP)
+                    else:
+                        if passed >= DASHES_PER_LEG:
+                            reason = f"passed {passed} dashes"
+                            break
+                        if abs(self.steer_error(seen, frame)) > VEER:
+                            reason = "the path bends away"
+                            break
+                        self.correct_while_walking(seen, frame)
                 thumb = self.thumbnail(frame)
                 if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
                     still_since = still_since if still_since is not None else now
@@ -513,7 +533,7 @@ class NavRayRunner(VisualRunner):
         finally:
             self.backend.key("w", False)
         self.wait(.05)
-        return track, passed, reason
+        return track, passed, reason if reason != "time" or not tether else "tether time limit"
 
     def finish_route(self, started):
         """Hand the finished walk to whoever keeps the route library (a single event; no file access here)."""
@@ -618,7 +638,7 @@ class NavRayRunner(VisualRunner):
                 ahead = len(self.next_dashes(view, frame.shape[0]))
                 self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
                 leg_started = self.clock()
-                track, passed, reason = self.walk_leg(view, track, reader, state)
+                track, passed, reason = self.walk_leg(view, track, reader, state, tether=bool(self.px_per_count))
                 self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
                 self.route_legs.append({"turn": int(turned - recorded_turn), "seconds": round(self.clock() - leg_started, 1),
                                         "dashes": passed, "reason": reason})
