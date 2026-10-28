@@ -109,6 +109,13 @@ class PathVisionTests(unittest.TestCase):
         # the same scene a moment earlier showed shop plants, glass and signs but no dashes
         self.assertIsNone(pathvision.find_path(load("navray_first_person_no_dashes_2560.jpg")))
 
+    def test_two_big_aligned_dashes_of_a_sparse_path_are_enough(self):
+        # Live third-person frame: the path is only two big dashes ahead (plus ones under the character).
+        view = pathvision.find_path(load("navray_sparse_big_dashes_2560.png"))
+        self.assertIsNotNone(view)
+        self.assertTrue(all(y > 800 for _, y in view.points), view.points)
+        self.assertLess(view.error, 0)                                   # they lead to the left
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

@@ -125,15 +125,17 @@ def _plausible(points, areas, angles, height):
     spacing = np.hypot(*np.diff(points[np.argsort(-ys)], axis=0).T)
     if len(spacing) >= 3 and float((spacing < 12*height/1440).mean()) > .30:
         return False
+    if len(points) == 2:
+        # two big dashes: they must lie well apart, on the floor part of the screen, the nearer one the bigger
+        if float(np.hypot(*(points[0] - points[1]))) < 80 or float(ys.min()) < .35*height:
+            return False
+        return True
     if len(points) == 3:
         # The thin evidence of a three-mark chain must be clean: marks well apart, and the nearer
         # (lower) big dash larger than the farther one.
         order = np.argsort(-ys)
         gaps = np.hypot(*np.diff(points[order], axis=0).T)
         if gaps.min() < 40:
-            return False
-        big = [i for i in order if measured[i]]
-        if any(areas[a] <= areas[b] for a, b in zip(big, big[1:])):
             return False
     if measured.sum() >= 4 and not flat:
         sizes = np.sqrt(areas[measured])
@@ -143,7 +145,7 @@ def _plausible(points, areas, angles, height):
     return True
 
 
-def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.radians(30), height=1440, tries=25,
+def best_chain(candidates, tolerance=7.0, minimum=2, samples=3000, max_turn=np.radians(30), height=1440, tries=25,
                anchor=None):
     """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
 
@@ -160,8 +162,19 @@ def best_chain(candidates, tolerance=7.0, minimum=3, samples=3000, max_turn=np.r
         return []
     # Four marks make a chain. Three do only when two of them are big dashes pointing along it (the
     # near stretch of a path whose far end is out of view); three small dots prove nothing.
+    # Two do only when both are big dashes, each pointing along the line joining them (a sparse path seen close up).
     def enough(members):
-        return len(members) >= 4 or (len(members) == 3 and int((~np.isnan(angles[list(members)])).sum()) >= 2)
+        index = list(members)
+        if len(index) >= 4:
+            return True
+        oriented = int((~np.isnan(angles[index])).sum())
+        if len(index) == 3:
+            return oriented >= 2
+        if len(index) == 2 and oriented == 2 and float(areas[index].min()) >= 1000*(height/1440)**2:
+            joint = np.arctan2(points[index[1], 1] - points[index[0], 1], points[index[1], 0] - points[index[0], 0])
+            off = np.abs((angles[index] - joint + np.pi/2) % np.pi - np.pi/2)
+            return bool(off.max() <= np.radians(22))
+        return False
     first, second = np.triu_indices(count, 1)
     if len(first) > samples:
         pick = np.random.default_rng(0).choice(len(first), samples, replace=False)
