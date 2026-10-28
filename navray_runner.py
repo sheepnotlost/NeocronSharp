@@ -31,16 +31,15 @@ AGREE = .05              # the three looks before a move must agree on the headi
 VEER = .22               # while walking, an error this big (after corrections) stops the leg and re-reads the path (a corner)
 WALK_DAMP = .5           # share of the measured error corrected on each look while walking
 LEG_SECONDS = 8.0        # longest a leg may last
-COAST_SECONDS = 1.6      # keep walking straight this long after the dashes drop out of view while lined up (first person: they pass under the camera)
 TETHER_SECONDS = 90.0      # a tethered walk may run this long before it re-reads the path from standing
 TETHER_DAMP = .7         # share of the measured error corrected on every look while tethered
 TETHER_TURN_IN_PLACE = .22   # while tethered, a heading error this big stops forward motion until the turn catches up
 TETHER_RESUME = .10      # ...and forward motion resumes below this
-COAST_ALIGNED = .08      # ...if the last good heading was within this of straight ahead
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
 SCAN_PX = 220            # how far the view sweeps per look while scanning all round for the path
+LOCAL_SCAN_WIDTH = .45   # after losing a path, search both sides of the last heading without turning all the way back
 SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 1.2       # the view not changing this long while walking means a wall: back off and look for the way round
@@ -48,6 +47,7 @@ SCENE_SAMPLE_SECONDS = 1.0  # compare the background over several seconds, not o
 SCENE_STUCK_SECONDS = 3.0
 SCENE_HISTORY_SECONDS = 6.0
 DOOR_RETRY_SECONDS = 10.0  # do not immediately toggle a door again if the first interaction did not clear the obstruction
+DOOR_TARGET_WAIT = 2.0    # allow a moving character or NPC to clear the target before attempting the door
 MAX_STUCK = 6            # wall recoveries in one walk before giving up
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
@@ -74,7 +74,7 @@ def door_target(frame, color="green", reader=None):
     the complete word DOOR. Neither a route dash nor a generic obstacle is enough.
     """
     height, width = frame.shape[:2]
-    roi = frame[int(.12*height):int(.48*height), int(.30*width):int(.70*width)]
+    roi = frame[int(.12*height):int(.48*height), int(.25*width):int(.75*width)]
     hsv = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
     low, high, _ = pathvision._hue_window(color)
     hue, saturation, value = cv2.split(hsv)
@@ -98,6 +98,16 @@ def door_target(frame, color="green", reader=None):
             if any(re.sub(r"[^A-Z]", "", str(word[0]).upper()) == "DOOR" for word in words):
                 return True
     return False
+
+
+def actor_target(frame, color="green"):
+    """The game's large top-centre target bar indicates an actor rather than a door."""
+    height, width = frame.shape[:2]
+    roi = frame[int(.02*height):int(.075*height), int(.35*width):int(.65*width)]
+    hue, saturation, value = cv2.split(cv2.cvtColor(roi, cv2.COLOR_RGB2HSV))
+    low, high, _ = pathvision._hue_window(color)
+    match = (hue >= low) & (hue <= high) if low <= high else ((hue >= low) | (hue <= high))
+    return bool(np.mean(match & (saturation >= 80) & (value >= 100)) >= .30)
 
 
 def slide_pixels(first_gray, second_gray):
@@ -408,10 +418,25 @@ class NavRayRunner(VisualRunner):
 
     def try_open_door(self, reader):
         """Try the currently targeted door once, keeping mouse-look and focus guards."""
-        frame = self.frame()
-        if not door_target(frame, getattr(self, "dash_color", None) or "green", reader):
-            return False
-        self.emit("status", "Nav-Ray: door ahead; trying right-click.")
+        color = getattr(self, "dash_color", None) or "green"
+        deadline = self.clock() + DOOR_TARGET_WAIT
+        obstructed = False
+        while True:
+            frame = self.frame()
+            if actor_target(frame, color):
+                obstructed = True
+            elif door_target(frame, color, reader):
+                self.emit("status", "Nav-Ray: door ahead; checking target before right-click.")
+                fresh = self.frame()  # target may change while recording/logging or as an NPC walks past
+                if not actor_target(fresh, color) and door_target(fresh, color, reader):
+                    break
+                obstructed = True
+            elif not obstructed:
+                return False
+            if self.clock() >= deadline:
+                self.emit("status", "Nav-Ray: door target unclear; no right-click sent.")
+                return False
+            self.wait(.15)
         self.checkpoint()
         running = "shift" in getattr(self.backend, "held_keys", ())
         if running:
@@ -621,8 +646,7 @@ class NavRayRunner(VisualRunner):
         started = self.clock()
         forward = True
         self.backend.key("w", True)
-        passed, last_y, lost, reason = 0, None, 0, "time"
-        last_error, seen_at = None, started
+        passed, last_y, reason = 0, None, "time"
         scene_history, next_scene = [], started
         state["still_mark"] = started                      # stuck time counts only while walking, but carries over from leg to leg
         try:
@@ -633,14 +657,10 @@ class NavRayRunner(VisualRunner):
                 now = self.clock()
                 seen = self.find_dashes(_bgr(frame), prior=track, tube=.25)
                 if seen is None:
-                    lost += 1
-                    coasting = (last_error is not None and abs(last_error) <= COAST_ALIGNED and now - seen_at < COAST_SECONDS)
-                    if lost >= 2 and not coasting:
-                        reason = "lost the dashes"
-                        break
+                    reason = "lost the dashes"
+                    break  # release W immediately; search from standing, never coast blind through a turn
                 else:
-                    lost, track = 0, seen
-                    last_error, seen_at = self.steer_error(seen, frame), now
+                    track = seen
                     state["last_path"] = now
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
                         passed += 1                          # the dash we were heading for was reached: on to the next
@@ -731,6 +751,7 @@ class NavRayRunner(VisualRunner):
         recorded_turn = 0
         door_tried_at = float("-inf")
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
+        scan_offset, scan_phase = 0, 0
         scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
         try:
@@ -757,24 +778,37 @@ class NavRayRunner(VisualRunner):
                         # The dashes went out of view (a corner, a pillar): look all the way round before
                         # deciding the route is over.
                         scanning, scan_first, scan_looks, searched = True, None, 0, 0
-                        self.emit("status", f"Nav-Ray: no dashes in view, sweeping all the way round ({'right' if last_side > 0 else 'left'} first).")
+                        scan_offset, scan_phase = 0, 0
+                        self.emit("status", f"Nav-Ray: no dashes in view; searching nearby from a stop ({'right' if last_side > 0 else 'left'} first).")
                     if scanning:
                         small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
                         scan_looks += 1
                         if scan_first is None:
                             scan_first = small
                         back_where_it_began = scan_looks > 15 and float(np.abs(small - scan_first).mean()) < SAME_VIEW
-                        if back_where_it_began or searched >= SEARCH_COUNTS:
-                            if seen_path:
-                                self.save_failure(Interrupted("The walk ended here."))
-                                self.finish_route(started)
-                                self.emit("done", "Nav-Ray: no more dashes all the way round. Arrived, or the route was lost.")
-                                return
+                        if not seen_path and (back_where_it_began or searched >= SEARCH_COUNTS):
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
-                        self.backend.move_relative(look*(last_side if seen_path else (self.route_hint or 1)), 0)
+                        if seen_path:
+                            limit = max(look, round(LOCAL_SCAN_WIDTH*frame.shape[1]/abs(self.px_per_count))) if self.px_per_count else 5*look
+                            target = (last_side if scan_phase == 0 else -last_side)*limit
+                            if scan_offset == target:
+                                if scan_phase == 0:
+                                    scan_phase = 1
+                                    target = -last_side*limit
+                                else:
+                                    self.save_failure(Interrupted("Path lost or ended."))
+                                    self.finish_route(started)
+                                    self.emit("done", "Nav-Ray: path lost or ended. Arrived, or the route was lost.")
+                                    return
+                            delta = target - scan_offset
+                            move = max(-look, min(look, delta))
+                            scan_offset += move
+                        else:
+                            move = look*(self.route_hint or 1)
+                        self.backend.move_relative(move, 0)
                         track = None                         # sweeping: look at the whole picture every time
-                        searched += look
+                        searched += abs(move)
                         if self.clock() - last_report >= REPORT_EVERY:
                             last_report = self.clock()
                             self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
@@ -815,13 +849,11 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
-                    # Back off and look for the dashes elsewhere: sweep the other way from where we were heading.
-                    self.backend.key("s", True)
-                    self.wait(.35)
-                    self.backend.key("s", False)
+                    # Look for the route from a stop; do not run away while searching.
                     last_side = -last_side
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
-                    self.emit("status", f"Nav-Ray: stuck ({stuck}); backed off, sweeping for the way round.")
+                    scan_offset, scan_phase = 0, 0
+                    self.emit("status", f"Nav-Ray: stuck ({stuck}); stopped, searching nearby for the way round.")
         finally:
             for key in ("shift", "w", "s"):
                 if key in self.backend.held_keys:

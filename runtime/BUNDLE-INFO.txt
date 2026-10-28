@@ -1,4 +1,4 @@
-Neocron Macro Suite portable runtime
+NeocronSharp portable runtime
 
 Windows x64. Python 3.12.14, NumPy 2.3.5, opencv-python-headless 5.0.0.93, Tcl/Tk 8.6.
 

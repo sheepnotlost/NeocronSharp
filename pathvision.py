@@ -321,6 +321,47 @@ def _curved(candidates, width, height):
     return chain if len(chain) >= 2 and max(areas) >= 2.5*big else []
 
 
+def _bend(candidates, width, height):
+    """Follow nearby oriented dashes through a change of direction.
+
+    Each step must be spaced like a dash, approach the horizon and point along
+    the preceding dash. Allow the next dash to turn at the junction. A real
+    change of orientation is required, so ordinary straight chains use best_chain.
+    """
+    unit = width/1920
+    anchor = (.5*width, .85*height)
+    picks = [(x, y, area, angle) for x, y, area, angle in candidates
+             if angle == angle and 200*unit*unit <= area <= 9000*unit*unit
+             and .35*height <= y <= .97*height]
+    if not picks:
+        return []
+    picks.sort(key=lambda p: np.hypot(p[0] - anchor[0], p[1] - anchor[1]))
+    if np.hypot(picks[0][0] - anchor[0], picks[0][1] - anchor[1]) > .35*width:
+        return []
+    chain = [picks.pop(0)]
+    while picks and len(chain) < 6:
+        x, y, _, angle = chain[-1]
+        options = []
+        for candidate in picks:
+            x2, y2, _, angle2 = candidate
+            distance = np.hypot(x2 - x, y2 - y)
+            if not .018*width <= distance <= .18*width or y2 > y + .02*height:
+                continue
+            direction = np.arctan2(y2 - y, x2 - x)
+            turn1 = abs((angle - direction + np.pi/2) % np.pi - np.pi/2)
+            turn2 = abs((angle2 - direction + np.pi/2) % np.pi - np.pi/2)
+            if turn1 <= .55 and turn2 <= 1.2:
+                options.append((distance, candidate))
+        if not options:
+            break
+        _, chosen = min(options, key=lambda item: item[0])
+        chain.append(chosen)
+        picks.remove(chosen)
+    angles = [candidate[3] for candidate in chain]
+    bent = any(abs((a - b + np.pi/2) % np.pi - np.pi/2) >= .5 for a in angles for b in angles)
+    return [(x, y) for x, y, _, _ in chain] if len(chain) >= 3 and bent else []
+
+
 def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
@@ -337,6 +378,11 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
     chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height), width=width)
+    bend = _bend(candidates, width, height)
+    anchor = (.5*width, .85*height)
+    if bend and (not chain or np.hypot(bend[0][0] - anchor[0], bend[0][1] - anchor[1]) + .06*width
+                 < min(np.hypot(x - anchor[0], y - anchor[1]) for x, y in chain)):
+        chain = bend  # do not skip the approach in favour of a long, distant leg beyond the corner
     if not chain:
         chain = _curved(candidates, width, height)           # a bending path: the next clear dashes, nearest first
         chain = sorted(chain, key=lambda point: -point[1]) if chain else chain    # nearest (lowest) first, like a straight chain

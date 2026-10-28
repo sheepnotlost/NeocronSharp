@@ -1,4 +1,4 @@
-# Neocron Macro Suite — specification sheet
+# NeocronSharp — specification sheet
 
 Revision: 27 October 2026. Platform: Windows x64. This is the current consolidated specification. SPEC.md retains earlier implementation notes; TASKS.md is the delivery checklist. Proposed ideas are separated in FEATURE-IDEAS.md.
 
@@ -6,7 +6,7 @@ Revision: 27 October 2026. Platform: Windows x64. This is the current consolidat
 
 A portable, foreground desktop macro for Neocron Evolution / Neocron 2 research, construction, prepared recycling and cabinet/inventory counting. It uses screenshots, local visual/text recognition, and normal game input. Correct item, quantity and current position take precedence over speed. Processing duration varies by item; elapsed time never declares a job complete.
 
-The application is named Neocron Macro Suite. The primary folder, local shortcut, portable ZIP and ZIP root use that name. The tool icon retains the screen-like green top requested earlier.
+The application is named NeocronSharp. The primary folder, local shortcut, portable ZIP and ZIP root use that name. The tool icon retains the screen-like green top requested earlier.
 
 ## Shared interface and controls
 

@@ -130,6 +130,28 @@ class WalkTests(unittest.TestCase):
                     scaled = cv2.resize(frame, (width, width*9//16))
                     self.assertTrue(navray_runner.door_target(scaled, 70))
         self.assertFalse(navray_runner.door_target(rgb("navray_blocked_pepper_44s.png"), 70))
+        self.assertTrue(navray_runner.door_target(rgb("navray_door_target_234452.png"), 70))
+
+    def test_copbot_at_door_is_a_competing_target(self):
+        self.assertFalse(navray_runner.actor_target(rgb("navray_door_target_234452.png"), 70))
+        self.assertTrue(navray_runner.actor_target(rgb("navray_door_copbot_234452.png"), 70))
+
+    def test_door_click_waits_for_a_competing_target_to_clear(self):
+        actor = rgb("navray_door_copbot_234452.png")
+        door = rgb("navray_door_target_234452.png")
+        runner, _ = make_runner(lambda i: actor if i < 3 else door)
+        runner.dash_color = 70
+        self.assertTrue(runner.try_open_door(runner.detector.text_reader()))
+        self.assertEqual([event for event in runner.backend.events if event[0] == "button"],
+                         [("button", "right", True), ("button", "right", False)])
+
+    def test_door_click_is_cancelled_if_target_changes_to_copbot(self):
+        actor = rgb("navray_door_copbot_234452.png")
+        door = rgb("navray_door_target_234452.png")
+        runner, _ = make_runner(lambda i: door if i == 1 else actor)
+        runner.dash_color = 70
+        self.assertFalse(runner.try_open_door(runner.detector.text_reader()))
+        self.assertFalse(any(event[0] == "button" for event in runner.backend.events))
 
     def test_blocked_door_gets_one_guarded_right_click_without_mouse_movement(self):
         runner, events = make_runner(lambda i: rgb("navray_blocked_door_50s.png"))
@@ -197,7 +219,7 @@ class WalkTests(unittest.TestCase):
             runner.walk()
         self.assertEqual([event for event in runner.backend.events if event[0] == "button"],
                          [("button", "right", True), ("button", "right", False)])
-        self.assertIn(("key", "s", True), runner.backend.events)
+        self.assertNotIn(("key", "s", True), runner.backend.events)
 
     def test_right_button_is_released_when_focus_is_lost_during_click(self):
         runner, _ = make_runner(lambda i: rgb("navray_blocked_door_50s.png"))
@@ -270,9 +292,9 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(len(done), 1)
         self.assertIn("arrived", done[0].lower())
         statuses = [p for k, p in events if k == "status"]
-        self.assertTrue(any("sweeping all the way round" in p for p in statuses))       # it looked before giving up
+        self.assertTrue(any("searching nearby from a stop" in p for p in statuses))
         turns = after_calibration(runner)
-        self.assertTrue(turns and all(t > 0 for t in turns))                             # a sweep, not a stop
+        self.assertTrue(any(t > 0 for t in turns) and any(t < 0 for t in turns))       # look to both sides
 
     def test_it_turns_to_line_the_dashes_up_before_it_walks(self):
         runner, _ = make_runner(lambda i: STAIRS)                        # the dashes lie far to the left
@@ -307,8 +329,7 @@ class WalkTests(unittest.TestCase):
         self.assertTrue(moves and all(m < 0 for m in moves), moves)        # left, towards the dashes
         self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/4.2 + 1 for m in moves), moves)
 
-    def test_it_keeps_walking_straight_for_a_moment_when_the_dashes_drop_out_of_view_while_lined_up(self):
-        # First person: the dashes at the feet pass under the camera, so a lined-up walk must not stop at once.
+    def test_it_stops_immediately_when_dashes_drop_out_of_view(self):
         seen = {"n": 0}
 
         def frames(i):
@@ -320,7 +341,8 @@ class WalkTests(unittest.TestCase):
         started = runner.clock()
         _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state)
         self.assertEqual(reason, "lost the dashes")
-        self.assertGreaterEqual(runner.clock() - started, navray_runner.COAST_SECONDS*.6)    # it coasted before stopping
+        self.assertLess(runner.clock() - started, 1.0)
+        self.assertNotIn("w", runner.backend.held_keys)
 
     def test_tethered_walking_is_one_continuous_run_that_keeps_steering(self):
         drifted = np.roll(AHEAD, -160, axis=1)            # the dashes lie a little to the left
@@ -405,7 +427,7 @@ class WalkTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Not moving"):
             runner.walk()
         recorded = runner.backend.events
-        self.assertIn(("key", "s", True), recorded)                                # it backed off from the wall
+        self.assertNotIn(("key", "s", True), recorded)                             # search without running backward
         self.assertTrue(any("stuck" in p for k, p in events if k == "status"))      # and said so
         self.assertFalse(runner.backend.held_keys)
 

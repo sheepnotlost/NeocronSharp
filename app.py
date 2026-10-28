@@ -39,7 +39,7 @@ class App:
         self.countdown = None
         self._stop_sound_played=False
         self.editable = []
-        self.root.title("Neocron Macro Suite")
+        self.root.title("NeocronSharp")
         self.root.iconbitmap(str(ROOT / "assets" / "research-tool.ico"))
         self.root.geometry("1040x840")
         self.root.minsize(960, 800)
@@ -78,7 +78,7 @@ class App:
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(3, weight=1)
-        self.heading=ttk.Label(outer, text="Neocron Macro Suite", font=("Segoe UI", 22, "bold"))
+        self.heading=ttk.Label(outer, text="NeocronSharp", font=("Segoe UI", 22, "bold"))
         self.heading.grid(row=0, column=0, sticky="w")
         self.bound = tk.StringVar(value="")
         ttk.Label(outer, textvariable=self.bound).grid(row=2, column=0, sticky="w", pady=(0, 12))
@@ -98,11 +98,13 @@ class App:
         self.recycling_tab = ttk.Frame(self.tabs)
         self.navray_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
+        self.sharp_tab = ttk.Frame(self.tabs)
         self.tabs.add(self.research_tab, text="Research")
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
         self.tabs.add(self.navray_tab, text="Nav-Ray")
         self.tabs.add(self.counter_tab, text="Tech Counter")
+        self.tabs.add(self.sharp_tab, text="Tracker & Map")
         scroll_host = ttk.Frame(self.research_tab)
         scroll_host.pack(fill="both", expand=True)
         canvas = tk.Canvas(scroll_host, background="#f3f5f5", highlightthickness=0, height=420)
@@ -195,6 +197,7 @@ class App:
         self.build_construction_tab()
         self.build_recycling_tab()
         self.build_navray_tab()
+        self.build_sharp_tab()
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
@@ -237,6 +240,37 @@ class App:
                 self.responsive_labels.append(widget)
             for child in widget.winfo_children():walk(child)
         walk(self.root)
+
+    def build_sharp_tab(self):
+        """NeocronSharp (C#): tracker, sector map, recorder, navigation, loot, environment, quests and plugins.
+        It runs in its own windows; this tab only opens them."""
+        import neocronsharp_link
+        host=ttk.Frame(self.sharp_tab,padding=12);host.pack(fill="both",expand=True)
+        host.columnconfigure(0,weight=1)
+        ttk.Label(host,text="NPC/player tracker, sector map, loot, quests, plugins.").grid(row=0,column=0,columnspan=2,sticky="w")
+        buttons=ttk.Frame(host);buttons.grid(row=1,column=0,columnspan=2,sticky="w",pady=(10,0))
+        for index,(label,arguments) in enumerate(neocronsharp_link.WINDOWS):
+            button=ttk.Button(buttons,text=label,command=lambda arguments=arguments:self.open_sharp(arguments))
+            button.grid(row=0,column=index,sticky="w",padx=(0,8))
+        ttk.Button(buttons,text="Build",command=self.build_sharp).grid(row=0,column=len(neocronsharp_link.WINDOWS),sticky="w")
+        self.sharp_status=tk.StringVar(value=neocronsharp_link.status())
+        ttk.Label(host,textvariable=self.sharp_status,wraplength=520).grid(row=2,column=0,columnspan=2,sticky="w",pady=(10,0))
+
+    def open_sharp(self,arguments=()):
+        import neocronsharp_link
+        try:
+            neocronsharp_link.open_window(arguments)
+            self.sharp_status.set("Opened NeocronSharp.")
+        except (RuntimeError,OSError) as exc:
+            self.sharp_status.set(str(exc))
+
+    def build_sharp(self):
+        import neocronsharp_link
+        self.sharp_status.set("Building NeocronSharp...");self.root.update_idletasks()
+        try:
+            self.sharp_status.set(neocronsharp_link.build())
+        except (RuntimeError,OSError) as exc:
+            self.sharp_status.set(str(exc))
 
     def build_navray_tab(self):
         host=ttk.Frame(self.navray_tab,padding=12);host.pack(fill="both",expand=True)
@@ -548,7 +582,8 @@ class App:
 
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
-        browser=self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
+        browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
+                 or self.tabs.select()==str(getattr(self,"sharp_tab","")))
         self.start_button.configure(state="disabled" if browser else "normal")
 
     def materials_for(self,key):
@@ -646,6 +681,8 @@ class App:
     def collect(self):
         if self.tabs.select()==str(self.counter_tab):
             raise ValueError("Tech Counter uses its own scan settings. Click Start in 3 seconds to scan.")
+        if self.tabs.select()==str(self.sharp_tab):
+            raise ValueError("Tracker & Map opens NeocronSharp in its own window.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
@@ -945,7 +982,7 @@ def main():
     except Exception as exc:
         logging.exception("Application startup failed")
         if not args.smoke_ui:
-            messagebox.showerror("Neocron Macro Suite", str(exc), parent=root)
+            messagebox.showerror("NeocronSharp", str(exc), parent=root)
         else:
             print(str(exc), file=sys.stderr)
         root.destroy()

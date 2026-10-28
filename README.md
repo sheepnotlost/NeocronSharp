@@ -1,4 +1,21 @@
-# Neocron Macro Suite
+# NeocronSharp
+
+One program, two engines, started from **Launch.cmd**:
+
+- **Screen automation (Python, this folder):** Research, Construction, Recycling, Nav-Ray auto-walk and Tech Counter
+  tabs. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
+- **Tracker & Map (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map, coordinate recorder, point
+  navigation, loot library, environment/BSP export, quest browser and plugins. Reads the game client's memory read-only
+  (only the fingerprinted build) and runs in its own windows. Open it from the **Tracker & Map** tab, or with
+  **Open NPC Tracker.cmd** / **Open Coordinate Recorder.cmd**. It needs the .NET 9 Desktop Runtime; **Build** in that tab
+  (or `dotnet build NeocronSharp\NeocronSharp.sln -c Release`) rebuilds it with the .NET 9 SDK. Its own docs:
+  [NeocronSharp/README.md](NeocronSharp/README.md), [NeocronSharp/SPEC.md](NeocronSharp/SPEC.md),
+  [NeocronSharp/PLUGINS.md](NeocronSharp/PLUGINS.md).
+
+Tests: `runtime\python.exe -m unittest discover -s tests` (Python) and
+`dotnet run --project NeocronSharp\tests\NeocronSharp.Tests -c Release` (C#).
+
+## Screen automation
 
 **Research**, **Construction**, **Recycling** and **Tech Counter** tabs. Browse a searchable construction catalog, build with the supplied **Weaponpart 7 / Weaponpart 9 / Holy Heal** examples, or add your own recipe names and shorthand. Count cabinet/inventory items and track rare sets with saved lists and exports. Optional slot counting, stop-at-slot rules, 15 skins including Basic, and a stop sound are included. **No coordinate calibration is required.** Processor/Start, Inventory and quantity dialogs are found from current screenshots, including after windows move.
 
@@ -127,7 +144,7 @@ All third-party Python libraries, including the new WinRT bindings, are inside r
 
 ## Research: start with tech parts
 
-1. Double-click **Launch.cmd**, then choose the **Research** tab. The local **Neocron Macro Suite.lnk** shortcut also works on this computer; use Launch.cmd when copying or extracting the portable folder elsewhere.
+1. Double-click **Launch.cmd**, then choose the **Research** tab. The local **NeocronSharp.lnk** shortcut also works on this computer; use Launch.cmd when copying or extracting the portable folder elsewhere.
 2. In Neocron, open Inventory and Processor. Cancel any quantity dialog left by a previous interrupted transfer, then check the stack counts. Put the research tool in the first Processor slot and leave the remaining inputs empty. Keep one visible source stack per requested type. A previous result can remain in the result area.
 3. Enter each stack's actual **Available** size and how many to **Research**. Set Research to zero to skip a type. Counts are entered manually; screen coordinates are detected automatically.
 4. Click **Start in 3 seconds**, then switch to Neocron before the countdown finishes. The game is bound automatically each time you start.
@@ -180,7 +197,7 @@ If a run stops, the last successfully captured game frame is saved to `diagnosti
 
 The folder now includes a self-contained 64-bit Windows runtime: **Python 3.12.14**, **NumPy 2.3.5**, **OpenCV 5.0.0.93**, and **Tcl/Tk 8.6**. No Python installation, pip command, Codex installation, or dependency download is needed to run the program.
 
-For another computer, extract **Neocron Macro Suite Portable.zip**, keep its complete folder together, and double-click **Launch.cmd** inside it. The runtime folder must remain next to app.py and assets. Launch.cmd uses only that local runtime and verifies its libraries/artwork before opening the app. The ZIP includes the app, artwork, runtime, license files, launchers, and saved profile; it excludes recordings, failure screenshots, logs, developer tests, and the computer-specific shortcut.
+For another computer, extract **NeocronSharp Portable.zip**, keep its complete folder together, and double-click **Launch.cmd** inside it. The runtime folder must remain next to app.py and assets. Launch.cmd uses only that local runtime and verifies its libraries/artwork before opening the app. The ZIP includes the app, artwork, runtime, license files, launchers, and saved profile; it excludes recordings, failure screenshots, logs, developer tests, and the computer-specific shortcut.
 
 **Check-Dependencies.cmd** verifies the bundled libraries without game input. The older Install-Dependencies.cmd now performs the same check for compatibility; it no longer downloads anything. The current local shortcut uses the same updated launcher.
 
@@ -200,4 +217,4 @@ The user has confirmed successful live tech-part operation. Blueprint mode was c
 
 ## Program icon
 
-`assets/research-tool.png` is the enhanced transparent tool image with the curved green display (1254 × 1254). `assets/research-tool.ico` contains Windows icon sizes from 16 to 256 pixels. The app title bar/taskbar and `Neocron Macro Suite.lnk` use this icon.
+`assets/research-tool.png` is the enhanced transparent tool image with the curved green display (1254 × 1254). `assets/research-tool.ico` contains Windows icon sizes from 16 to 256 pixels. The app title bar/taskbar and `NeocronSharp.lnk` use this icon.

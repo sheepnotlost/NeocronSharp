@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 $taskPython = Join-Path $PSScriptRoot 'runtime\python.exe'
 if (-not (Test-Path -LiteralPath $taskPython)) {
-    throw 'The bundled runtime is missing. Extract the complete Neocron Macro Suite folder, including runtime, then run Launch.cmd.'
+    throw 'The bundled runtime is missing. Extract the complete NeocronSharp folder, including runtime, then run Launch.cmd.'
 }
 $env:TCL_LIBRARY = Join-Path $PSScriptRoot 'runtime\tcl\tcl8.6'
 $env:TK_LIBRARY = Join-Path $PSScriptRoot 'runtime\tcl\tk8.6'
@@ -19,4 +19,4 @@ if ($InstallDependencies -or $CheckDependencies) {
         & $taskPython (Join-Path $PSScriptRoot 'app.py')
     }
 }
-if ($LASTEXITCODE -ne 0) { throw "Neocron Macro Suite exited with code $LASTEXITCODE." }
+if ($LASTEXITCODE -ne 0) { throw "NeocronSharp exited with code $LASTEXITCODE." }

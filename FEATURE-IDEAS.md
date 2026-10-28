@@ -1,4 +1,4 @@
-# Neocron Macro Suite — feature ideas
+# NeocronSharp — feature ideas
 
 Requested alongside implementation on 26 October 2026. This list is a roadmap, not a claim that every idea exists.
 

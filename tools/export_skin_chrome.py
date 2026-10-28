@@ -13,7 +13,7 @@ from skin_chrome import TREATMENTS
 
 def main():
     root=tk.Tk();root.withdraw();ttk.Style(root).theme_use("clam")
-    heading=ttk.Label(root,text="Neocron Macro Suite")
+    heading=ttk.Label(root,text="NeocronSharp")
     folder=ROOT/"styling/native-chrome";folder.mkdir(exist_ok=True)
     rules=["/* Exported from the native app's code-drawn skins. Basic and Dead Sector are untouched. */"]
     try:

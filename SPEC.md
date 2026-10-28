@@ -1,4 +1,4 @@
-# Neocron Macro Suite
+# NeocronSharp
 
 The current consolidated specification is **SPEC-SHEET.md**. This file retains earlier detailed implementation notes; where behavior changed, use the consolidated sheet and TASKS.md.
 

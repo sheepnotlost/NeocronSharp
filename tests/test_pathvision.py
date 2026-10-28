@@ -178,6 +178,22 @@ class PathVisionTests(unittest.TestCase):
     def test_a_big_green_poster_is_not_a_bending_path(self):
         self.assertIsNone(pathvision.find_path(load("navray_no_path_posters_2560.png")))
 
+    def test_bent_route_starts_with_near_dashes_before_the_corner(self):
+        # 23:44:52 video, 42s: a short diagonal meets a horizontal stretch.
+        view = pathvision.find_path(load("navray_bend_234452_42.png"), color=70)
+        self.assertIsNotNone(view)
+        self.assertGreaterEqual(len(view.points), 3)
+        self.assertTrue(850 < view.points[0][0] < 900, view.points)
+        self.assertTrue(765 < view.points[2][0] < 800, view.points)
+
+    def test_bend_keeps_the_approach_before_the_far_horizontal_stretch(self):
+        # 84s: the previous straight-chain selection skipped the approach and aimed
+        # across the junction, so the character veered toward the wall.
+        view = pathvision.find_path(load("navray_bend_234452_84.png"), color=70)
+        self.assertIsNotNone(view)
+        self.assertTrue(880 < view.points[0][0] < 920 and view.points[0][1] > 740, view.points)
+        self.assertTrue(920 < view.points[1][0] < 960 and view.points[1][1] > 600, view.points)
+
     def test_translucent_dashes_on_pale_tiles_survive_a_turn(self):
         # 22:24:13 video at 52.7s / 63.9s (22:25:05.7 / 22:25:16.9 in macro.log).
         # The turn exposed the near dashes on pale tiles (saturation 43-58), inside the

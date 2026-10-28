@@ -5,7 +5,7 @@ macro.log
 analysis/
 .deps/
 diagnostics/
-Neocron Macro Suite Portable.zip
+NeocronSharp Portable.zip
 tech-counter/
 *.lnk
 *.log
@@ -14,3 +14,12 @@ tech-counter/
 .env.*
 !.env.example
 routes.json
+Neocron Macro Suite Portable.zip
+# NeocronSharp (C#): personal settings/recordings and IDE/agent state stay local; build output is ignored by NeocronSharp/.gitignore
+NeocronSharp/settings/
+NeocronSharp/recordings/
+NeocronSharp/.vs/
+NeocronSharp/.codex/
+# research copies: the game install (GBs) and third-party source trees stay local; notes are kept
+Research/*
+!Research/*.md

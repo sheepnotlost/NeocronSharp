@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget><AssemblyName>NeocronSharp</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../NeocronSharp.Core/NeocronSharp.Core.csproj" /></ItemGroup>
+</Project>

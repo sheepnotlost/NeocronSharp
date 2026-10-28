@@ -1,0 +1,9 @@
+# Continuous coordinate recorder
+
+Objective: continuously log the local character while the user walks normally; no manual point marking and no movement input. Integrate a Recorder button in the tracker and a --recorder entry point/launcher for standalone use.
+
+Acceptance: live XYZ (Y is height), sector and heading; up to 10 samples/sec by default with selectable 100/250/500/1000 ms intervals. Every valid sample is retained, including stationary samples. Record UTC time, monotonic elapsed time, sector, XYZ, forward vector, heading and segment break reason. Append and flush CSV while recording; finalize full JSON on Stop or clean close. Mark gaps, session/sector changes and large discontinuities as separate segments; never connect them as traversed paths or include them in travelled distance. Invalid readings must not produce stale/zero samples. Recordings are stored below the project recordings directory with safe unique filenames. Display the trail on the native sector map, respecting segment breaks and retaining full 3D data in files. Export copies completed files. Bound memory to 100,000 samples and stop with a visible message at the limit.
+
+Implementation: Core CoordinateRecording model and file writer; dedicated read-only coordinate/sector sampler using validated existing PlayerReader; independent recorder window with 100 ms timer and bounded async reads, live labels/recent virtual table/native map; tracker button/standalone command. No new dependencies, route playback or follow actions.
+
+Validation: existing harness plus tests for exact coordinate/time serialization, locale/CSV quoting, gap/sector/session/discontinuity segmentation, no cross-gap distance, invalid/regressing data and bounded sessions. Release build, live passive capture, disk outputs and rendered own-window UI check. No keyboard/mouse input to Neocron during verification.

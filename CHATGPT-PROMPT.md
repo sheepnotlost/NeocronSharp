@@ -1,6 +1,6 @@
 # Handoff prompt for ChatGPT
 
-You are taking over the **Neocron Macro Suite**, a Windows desktop helper for the MMO Neocron Evolution
+You are taking over the **NeocronSharp**, a Windows desktop helper for the MMO Neocron Evolution
 (Tk app, Python, screen capture + OCR + simulated input). Repository: `sheepnotlost/neocron-macro-suite`,
 branch `main`. The local working copy is the folder this file is in.
 

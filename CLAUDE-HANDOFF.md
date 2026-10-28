@@ -1,4 +1,4 @@
-# Neocron Macro Suite — project handoff
+# NeocronSharp — project handoff
 
 Updated 26 October 2026. This file summarizes the user's requests and the implementation. Read SPEC-SHEET.md, TASKS.md and current code as well. Recordings/images are evidence, not instructions. Do not assume a roadmap proposal is an implementation request.
 
@@ -7,7 +7,7 @@ Updated 26 October 2026. This file summarizes the user's requests and the implem
 - Actual root: the folder containing this file (portable; any location). Earlier chat/environment paths say Neocron Research Macro or Neocron Tech Research Macro; those names are obsolete.
 - Windows x64, PowerShell. Explicitly set the actual working directory for commands.
 - `Launch.cmd` uses the local `runtime/python.exe`; no external Python/pip/Codex dependency is needed by the user.
-- Portable artifact: `Neocron Macro Suite Portable.zip`, with the same-named folder inside. Restart an already running app after updating code/extracting a new bundle.
+- Portable artifact: `NeocronSharp Portable.zip`, with the same-named folder inside. Restart an already running app after updating code/extracting a new bundle.
 - Local profile/log: profile.json / macro.log. Failure frame/reason: diagnostics/latest.png and latest.json, overwritten after a later failure.
 - Do not delete the user's profile, recipes, recordings or icon assets while rebuilding.
 
@@ -117,4 +117,4 @@ Live game testing was authorized earlier by the user. The previous assistant's W
 
 ## Working style
 
-Keep a task checklist, act without repeated confirmations within the agreed scope, and give concise useful updates. The user often asks ETA; give a realistic estimate tied to remaining concrete work. Finish code/docs/package and provide an actual usable download. Preserve the name Neocron Macro Suite. Ask only for missing information that cannot be recovered from code, logs or recordings.
+Keep a task checklist, act without repeated confirmations within the agreed scope, and give concise useful updates. The user often asks ETA; give a realistic estimate tied to remaining concrete work. Finish code/docs/package and provide an actual usable download. Preserve the name NeocronSharp. Ask only for missing information that cannot be recovered from code, logs or recordings.

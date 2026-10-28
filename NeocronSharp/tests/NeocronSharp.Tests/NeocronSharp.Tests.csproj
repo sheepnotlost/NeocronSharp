@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/NeocronSharp.Core/NeocronSharp.Core.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../examples/HelloPlugin/HelloPlugin.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../PluginTelemetryFixture/PluginTelemetryFixture.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
+  <Target Name="CopyPluginFixture" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)plugin-fixture" />
+    <Copy SourceFiles="../../examples/HelloPlugin/bin/$(Configuration)/net9.0/HelloPlugin.dll;../../examples/HelloPlugin/plugin.json" DestinationFolder="$(OutDir)plugin-fixture" />
+    <Copy SourceFiles="../PluginTelemetryFixture/bin/$(Configuration)/net9.0/PluginTelemetryFixture.dll" DestinationFolder="$(OutDir)plugin-fixture" />
+  </Target>
+</Project>

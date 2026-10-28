@@ -1,0 +1,5 @@
+**/bin/
+**/obj/
+tools/.deps/
+tools/__pycache__/
+logs/

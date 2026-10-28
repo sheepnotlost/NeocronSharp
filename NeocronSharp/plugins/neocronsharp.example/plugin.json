@@ -1,0 +1,8 @@
+{
+  "id": "neocronsharp.example",
+  "name": "Example: lifecycle and settings",
+  "version": "1.0.0",
+  "description": "Demonstrates plugin startup, shutdown, settings and a log. Does not control the game.",
+  "assembly": "HelloPlugin.dll",
+  "type": "HelloPlugin.ExamplePlugin"
+}

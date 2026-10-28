@@ -1,4 +1,4 @@
-# Neocron Macro Suite — active request tracker
+# NeocronSharp — active request tracker
 
 Updated 2026-10-27. Source: this chat. User additions extend the same task.
 

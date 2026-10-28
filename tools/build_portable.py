@@ -8,9 +8,9 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "Neocron Macro Suite Portable.zip"
+ARCHIVE = ROOT / "NeocronSharp Portable.zip"
 FILES = ("app.py", "tech_counter.py", "TECH-COUNTER-INTEGRATION.md", "macro_core.py", "windows_backend.py", "vision.py", "vision_runner.py",
-         "recipes.py", "gogo.py", "pathvision.py", "navray.py", "navray_runner.py", "construction_catalog.py", "inventory_tracking.py", "construction_runner.py", "recycling.py", "appearance.py", "skin_chrome.py", "text_reader.py", "verify_dependencies.py", "Launch.cmd", "Launch.ps1", "Install-Dependencies.cmd",
+         "recipes.py", "gogo.py", "neocronsharp_link.py", "routes.py", "pathvision.py", "navray.py", "navray_runner.py", "construction_catalog.py", "inventory_tracking.py", "construction_runner.py", "recycling.py", "appearance.py", "skin_chrome.py", "text_reader.py", "verify_dependencies.py", "Launch.cmd", "Launch.ps1", "Install-Dependencies.cmd",
          "Check-Dependencies.cmd", "requirements.txt", "README.md", "profile.json", "SPEC-SHEET.md", "SPEC.md", "TASKS.md", "FEATURE-IDEAS.md", "CLAUDE-HANDOFF.md", "CLAUDE-PROMPT.txt")
 
 
@@ -21,7 +21,7 @@ def create_archive():
                      if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc")
     with zipfile.ZipFile(ARCHIVE, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in files:
-            archive.write(path, "Neocron Macro Suite/" + path.relative_to(ROOT).as_posix())
+            archive.write(path, "NeocronSharp/" + path.relative_to(ROOT).as_posix())
     print(f"Archive created: {ARCHIVE} ({ARCHIVE.stat().st_size / 1024**2:.1f} MiB)", flush=True)
 
 
@@ -36,7 +36,7 @@ def main():
     try:
         with zipfile.ZipFile(ARCHIVE) as archive:
             archive.extractall(extracted)
-        bundle = extracted / "Neocron Macro Suite"
+        bundle = extracted / "NeocronSharp"
         environment = os.environ.copy()
         # Deliberately make installed Python/Codex paths unusable for the child.
         environment["PYTHONHOME"] = str(extracted / "no-external-python")
