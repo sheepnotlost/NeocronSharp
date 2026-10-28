@@ -535,8 +535,9 @@ class NavRayRunner(VisualRunner):
         started = self.clock()
         forward = True
         self.backend.key("w", True)
-        passed, last_y, lost, still_since, previous_thumb, reason = 0, None, 0, None, None, "time"
+        passed, last_y, lost, reason = 0, None, 0, "time"
         last_error, seen_at = None, started
+        state["still_mark"] = started                      # stuck time counts only while walking, but carries over from leg to leg
         try:
             while self.clock() - started < (TETHER_SECONDS if tether else LEG_SECONDS):
                 self.checkpoint()
@@ -575,14 +576,16 @@ class NavRayRunner(VisualRunner):
                             break
                         self.correct_while_walking(seen, frame)
                 thumb = self.thumbnail(frame)
-                if previous_thumb is not None and float(np.abs(thumb - previous_thumb).mean()) < 1.5:
-                    still_since = still_since if still_since is not None else now
-                    if now - still_since >= STUCK_SECONDS:
-                        reason = "stuck against something"
-                        break
+                previous = state.get("thumb")
+                if previous is not None and float(np.abs(thumb - previous).mean()) < 1.5:
+                    state["still_time"] = state.get("still_time", 0.0) + max(0.0, now - state["still_mark"])
                 else:
-                    still_since = None
-                previous_thumb = thumb
+                    state["still_time"] = 0.0
+                state["still_mark"], state["thumb"] = now, thumb
+                if state["still_time"] >= STUCK_SECONDS:
+                    state["still_time"] = 0.0
+                    reason = "stuck against something"
+                    break
                 self.sleep(.005)
         finally:
             self.backend.key("w", False)

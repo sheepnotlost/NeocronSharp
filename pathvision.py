@@ -152,7 +152,7 @@ def _orientation(labels, index, x, y, w, h, unit):
     return float(.5*np.arctan2(2*c, a - b))
 
 
-def _plausible(points, areas, angles, height):
+def _plausible(points, areas, angles, height, width=None):
     """Is this chain shaped like dashes on the floor receding into the distance?
 
     It must span some depth (a flat row of marks is text), and where the dashes have a measurable
@@ -166,6 +166,11 @@ def _plausible(points, areas, angles, height):
     big = 1200*(height/1440)**2
     if flat and int(np.sum((areas >= big) & ~np.isnan(angles))) < 2:
         return False                                       # a row of small marks is lettering, not a path
+    if np.ptp(ys) <= 4 and np.ptp(points[:, 0]) >= 60:
+        return False                                       # marks on exactly one screen row: text, never a path
+    if (flat and width and .47*height <= float(ys.mean()) <= .57*height and float(areas.max()) < 2.5*big
+            and .22*width <= float(points[:, 0].mean()) <= .78*width):
+        return False                                       # a flat row at the crosshair: on-screen messages and name labels
     if float(ys.max()) < .30*height:
         return False                                       # all of it high on the screen: on a wall or ceiling, not the floor
     if not flat and ys.max() - ys.min() < .04*height:
@@ -196,7 +201,7 @@ def _plausible(points, areas, angles, height):
 
 
 def best_chain(candidates, tolerance=7.0, minimum=2, samples=3000, max_turn=np.radians(30), height=1440, tries=25,
-               anchor=None):
+               anchor=None, width=None):
     """Largest plausible set of candidates on one line, nearest (lowest on screen) first; [] if none.
 
     Every pair is tried for small inputs; busy scenes (hundreds of candidates) try a fixed random
@@ -261,7 +266,7 @@ def best_chain(candidates, tolerance=7.0, minimum=2, samples=3000, max_turn=np.r
             break
     for _, members in sorted(ranked, key=lambda item: -item[0])[:tries]:
         index = list(members)
-        if _plausible(points[index], areas[index], angles[index], height):
+        if _plausible(points[index], areas[index], angles[index], height, width):
             chosen = points[index]
             return [tuple(p) for p in chosen[np.argsort(-chosen[:, 1])]]
     return []
@@ -300,7 +305,7 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     height, width = frame.shape[:2]
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
-    chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height))
+    chain = best_chain(candidates, height=height, anchor=(.5*width, .72*height), width=width)
     if not chain and prior is not None:
         chain = _continuation(candidates, prior, height, width)    # one or two dashes of the path already being followed
     if not chain:

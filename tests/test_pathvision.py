@@ -151,6 +151,12 @@ class PathVisionTests(unittest.TestCase):
         # find_path raised UnboundLocalError (no slope) for exactly this; seen as a path of two big dashes
         self.assertIsNotNone(pathvision.find_path(load("navray_sparse_big_dashes_2560.png")))
 
+    def test_a_red_text_label_at_the_crosshair_is_not_a_path(self):
+        # Live (video of a run, red HUD): a red on-screen message "Ignoring new discord..." drawn level with the crosshair
+        # made six blobs in one flat row. The macro took it for a path and ran into a wall for 18 seconds.
+        frame = load("navray_red_text_label_stuck_1280.jpg")
+        self.assertIsNone(pathvision.find_path(frame, color=5))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])
