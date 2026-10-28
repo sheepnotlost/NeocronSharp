@@ -202,6 +202,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] Every Nav-Ray run records itself (27 Oct): each status line is saved with the game frame at that moment and the macro's state (diagnostics/last_run/, replaced by the next run, git-ignored). tools/review_run.py summarises it (legs by outcome, colour, calibration) and builds failures.png of the scenes where the walk got stuck or lost the dashes. Purpose: turn every failed run, including the user's own from the app, into test cases and tuning data instead of discarding it. Nothing in the macro adapts by itself yet.
 
+- [x] First live success (27 Oct 22:10, video + log, default green skin): Trader Directory > Weapons walked from Plaza start into the Archer & Wesson shop in about 35 s, the HUD colour read as hue 70, three legs (one 10 s tether leg), then a full sweep found no more dashes and it reported arrival. This is ONE run. The fixes that preceded it, each found from videos of earlier failed runs: dash colour read from the HUD (not learned from signs), text/label rows rejected, stuck detection across legs, dashes no longer discarded after every turn, far dash rows accepted. Still to confirm: that it repeats, other destinations, the red skin after the latest changes, and arrival detection (it sweeps all round for ~6 s before stopping).
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.
