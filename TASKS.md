@@ -198,6 +198,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Route library (27 Oct): every finished Nav-Ray walk records its start area (HUD Location, read by OCR), end area, time and legs in routes.json (user data, git-ignored); the best walk of a route is kept, a known route is reported and its first turn sets which way the first sweep looks. tools/route_map.py lists the areas reached from each area. The game's own pak_worldroute.dat decompresses (zlib after a 16-byte header, 478 entries, mixed record types) but is not decoded. 281 tests pass.
 - [ ] Not verified live: Location reading during a real walk, saving the library, the sweep hint.
 
+- [x] Dash colour (27 Oct): the Nav-Ray dashes take the HUD colour scheme (`/set gfx_hudcolor <x>`, schemes in the game's ini/rposcolor.ini; the user switched to a red scheme and the dashes turned red). pathvision now finds green or red dashes and the macro locks onto whichever colour shows a path; red is far easier to tell from green walls and signs. Red detection is verified only on real green frames recoloured red (no real red frame is saved), so the red thresholds are untuned.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

@@ -21,6 +21,11 @@ HALL, STAIRS = rgb("navray_path_hall_2000.png"), rgb("navray_path_stairs_2000.pn
 DARK = np.full((1125, 2000, 3), 40, np.uint8)
 
 
+def moving_dark(i):
+    """An empty floor while walking: the picture changes a little from look to look (so it is not 'stuck')."""
+    return np.full((1125, 2000, 3), 40 + (i % 9)*4, np.uint8)
+
+
 def after_calibration(runner):
     """Mouse moves after the calibration nudges (each nudge is a move and a move back; a weak reading tries the next)."""
     moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
@@ -113,7 +118,7 @@ def turning_runner(sign, pixels_per_count=2.0, frame=STAIRS, stop_after=9):
 
 class WalkTests(unittest.TestCase):
     def test_it_walks_when_the_dashes_ahead_are_lined_up_and_looks_all_round_before_reporting_arrival(self):
-        runner, events = make_runner(lambda i: AHEAD if i <= 24 else DARK)
+        runner, events = make_runner(lambda i: AHEAD if i <= 24 else moving_dark(i))
         runner.walk()
         recorded = runner.backend.events
         self.assertIn(("key", "w", True), recorded)
@@ -160,6 +165,21 @@ class WalkTests(unittest.TestCase):
         moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
         self.assertTrue(moves and all(m < 0 for m in moves), moves)        # left, towards the dashes
         self.assertTrue(all(abs(m) <= navray_runner.CAL_MAX_PX/4.2 + 1 for m in moves), moves)
+
+    def test_it_keeps_walking_straight_for_a_moment_when_the_dashes_drop_out_of_view_while_lined_up(self):
+        # First person: the dashes at the feet pass under the camera, so a lined-up walk must not stop at once.
+        seen = {"n": 0}
+
+        def frames(i):
+            seen["n"] += 1
+            return np.roll(AHEAD, (i % 7)*5, axis=1) if i <= 4 else moving_dark(i)
+        runner, _ = make_runner(frames)
+        view = pathvision_find(AHEAD)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        started = runner.clock()
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state)
+        self.assertEqual(reason, "lost the dashes")
+        self.assertGreaterEqual(runner.clock() - started, navray_runner.COAST_SECONDS*.6)    # it coasted before stopping
 
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)

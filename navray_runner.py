@@ -28,6 +28,8 @@ AGREE = .05              # the three looks before a move must agree on the headi
 VEER = .22               # while walking, an error this big (after corrections) stops the leg and re-reads the path (a corner)
 WALK_DAMP = .5           # share of the measured error corrected on each look while walking
 LEG_SECONDS = 8.0        # longest a leg may last
+COAST_SECONDS = 1.6      # keep walking straight this long after the dashes drop out of view while lined up (first person: they pass under the camera)
+COAST_ALIGNED = .08      # ...if the last good heading was within this of straight ahead
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
 SEARCH_COUNTS = 7000     # most turning allowed to find the first path (a safety stop)
@@ -242,10 +244,24 @@ class NavRayRunner(VisualRunner):
         note = f" {unread} rows could not be read." if unread else ""
         self.emit("done", f"Nav-Ray: read {len(catalog)} categories and {total} destinations.{note}")
 
+    dash_color = None            # "green" or "red": the HUD colour scheme sets the dash colour; learned from the first path seen
+
+    def find_dashes(self, bgr, ignore=(), prior=None, tube=.18):
+        """pathvision.find_path in the dash colour. Until the colour is known both are tried (red first: it
+        is rare in the scene, so a red path is unmistakable); the colour that shows a path is then kept."""
+        for color in ([self.dash_color] if self.dash_color else list(reversed(pathvision.COLORS))):
+            view = pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=color)
+            if view is not None:
+                if self.dash_color != color:
+                    self.dash_color = color
+                    self.emit("status", f"Nav-Ray: the dashes are {color}.")
+                return view
+        return None
+
     def wait_for_path(self, window):
         started = self.clock()
         while self.clock() - started < 3:
-            view = pathvision.find_path(_bgr(self.frame()), ignore=[window.window_box()])
+            view = self.find_dashes(_bgr(self.frame()), ignore=[window.window_box()])
             if view is not None:
                 return
             self.wait(.25)
@@ -384,7 +400,7 @@ class NavRayRunner(VisualRunner):
         reading as (view, frame), or None if no dashes were seen. `quick` is a single look, for sweeping."""
         if quick:
             frame = self.frame()
-            view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
+            view = self.find_dashes(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
                                         tube=min(.18 + .03*lost, .4))
             return (view, frame) if view is not None else None
         readings, errors = [], []
@@ -392,7 +408,7 @@ class NavRayRunner(VisualRunner):
             readings = []
             for _ in range(3):
                 frame = self.frame()
-                view = pathvision.find_path(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
+                view = self.find_dashes(_bgr(frame), prior=track if lost < LOST_FRAMES else None,
                                             tube=min(.18 + .03*lost, .4))
                 if view is not None:
                     readings.append((view, frame))
@@ -456,20 +472,23 @@ class NavRayRunner(VisualRunner):
         started = self.clock()
         self.backend.key("w", True)
         passed, last_y, lost, still_since, previous_thumb, reason = 0, None, 0, None, None, "time"
+        last_error, seen_at = None, started
         try:
             while self.clock() - started < LEG_SECONDS:
                 self.checkpoint()
                 frame = self.frame()
                 self.vitals(reader, frame, state)
                 now = self.clock()
-                seen = pathvision.find_path(_bgr(frame), prior=track, tube=.25)
+                seen = self.find_dashes(_bgr(frame), prior=track, tube=.25)
                 if seen is None:
                     lost += 1
-                    if lost >= 2:
+                    coasting = (last_error is not None and abs(last_error) <= COAST_ALIGNED and now - seen_at < COAST_SECONDS)
+                    if lost >= 2 and not coasting:
                         reason = "lost the dashes"
                         break
                 else:
                     lost, track = 0, seen
+                    last_error, seen_at = self.steer_error(seen, frame), now
                     state["last_path"] = now
                     if last_y is not None and seen.aim[1] < last_y - .12*frame.shape[0]:
                         passed += 1                          # the dash we were heading for was reached: on to the next

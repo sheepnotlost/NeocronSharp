@@ -116,6 +116,22 @@ class PathVisionTests(unittest.TestCase):
         self.assertTrue(all(y > 800 for _, y in view.points), view.points)
         self.assertLess(view.error, 0)                                   # they lead to the left
 
+    def test_red_dashes_are_found_when_the_hud_colour_scheme_is_red(self):
+        # The dashes take the HUD colour (/set gfx_hudcolor). A real green path frame recoloured red must still be found,
+        # and a red search must not find a green path.
+        import cv2
+        frame = load("navray_straight_ahead_2000.png")
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hue, sat, val = cv2.split(hsv)
+        green = (hue >= 55) & (hue <= 88) & (sat >= 35)
+        hue[green] = 0
+        red = cv2.cvtColor(cv2.merge([hue, sat, val]), cv2.COLOR_HSV2BGR)
+        view = pathvision.find_path(red, color="red")
+        self.assertIsNotNone(view)
+        self.assertLess(abs(view.error), .05)
+        self.assertIsNone(pathvision.find_path(frame, color="red"))
+        self.assertIsNone(pathvision.find_path(red, color="green"))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

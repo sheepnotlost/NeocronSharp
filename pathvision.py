@@ -31,13 +31,21 @@ def _excluded(fx, fy):
             or (.43 < fx < .60 and fy > .50))
 
 
-def dash_candidates(frame, ignore=()):
-    """[(cx, cy, area)] of small, dash-shaped green blobs. `ignore` = pixel boxes (x0,y0,x1,y1)."""
+COLORS = ("green", "red")      # the dashes follow the HUD colour scheme (/set gfx_hudcolor): green by default
+
+
+def dash_candidates(frame, ignore=(), color="green"):
+    """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour. `ignore` = pixel boxes (x0,y0,x1,y1)."""
     height, width = frame.shape[:2]
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    mask = ((hue >= 55) & (hue <= 88) & (sat >= 35) & (val >= 62)).astype(np.uint8)
+    if color == "red":
+        # Red wraps round the hue circle (0 and 179 are neighbours): shift it so the dashes sit in one block.
+        hue = ((hue.astype(np.int16) + 90) % 180).astype(np.uint8)
+        mask = ((hue >= 80) & (hue <= 100) & (sat >= 90) & (val >= 70)).astype(np.uint8)   # 80..100 = original 170..10
+    else:
+        mask = ((hue >= 55) & (hue <= 88) & (sat >= 35) & (val >= 62)).astype(np.uint8)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
     for i in range(1, count):
@@ -53,7 +61,7 @@ def dash_candidates(frame, ignore=()):
             continue
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
-        if saturation < MIN_SATURATION:
+        if saturation < (MIN_SATURATION if color != "red" else 90):
             continue                                   # washed-out green: glass, walls, sign backing
         if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
             continue                                   # blotchy colour: a picture or sign, not a flat overlay
@@ -235,7 +243,7 @@ def _continuation(candidates, prior, height, width):
     return picks[:3]
 
 
-def find_path(frame, ignore=(), prior=None, tube=.18):
+def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
     The dashes ahead of the character are the way on. A chain lying wholly below the character's feet
@@ -246,7 +254,7 @@ def find_path(frame, ignore=(), prior=None, tube=.18):
     The character goes from one dash to the next: the target is the nearest dash ahead (above the
     character's feet), and as it is reached the next one becomes the target.
     """
-    candidates = dash_candidates(frame, ignore)
+    candidates = dash_candidates(frame, ignore, color)
     height, width = frame.shape[:2]
     if prior is not None:
         candidates = [c for c in candidates if abs(c[0] - (prior.slope*c[1] + prior.intercept)) <= tube*width]
