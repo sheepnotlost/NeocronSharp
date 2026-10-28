@@ -222,6 +222,24 @@ class WalkTests(unittest.TestCase):
         wrong = green_runner.find_dashes(frame)
         self.assertTrue(wrong is None or len(wrong.points) <= 3)                     # only the sign marks
 
+    def test_after_a_turn_the_old_path_line_is_not_used_to_filter_the_new_picture(self):
+        # Live (video): every turn was followed by "the turn lost the dashes; coming back" because the new frames were
+        # filtered against the path line of the picture before the turn, which had slid hundreds of pixels.
+        seen_priors = []
+        runner, _ = make_runner(lambda i: STAIRS)
+        original = runner.find_dashes
+
+        def find_dashes(bgr, ignore=(), prior=None, tube=.18):
+            seen_priors.append(prior)
+            return original(bgr, ignore=ignore, prior=prior, tube=tube)
+        runner.find_dashes = find_dashes
+        runner.turn = lambda error, width: -45                                       # a turn happens, the fake picture does not change
+        with self.assertRaises(Interrupted):
+            runner.walk()
+        first_turn_at = next(i for i, p in enumerate(seen_priors) if p is not None) if any(p is not None for p in seen_priors) else None
+        # the evaluation straight after a turn must be a clean look at the whole picture (no prior)
+        self.assertTrue(all(p is None for p in seen_priors[:6]), seen_priors[:6])
+
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)
         ahead = NavRayRunner.next_dashes(view, AHEAD.shape[0])

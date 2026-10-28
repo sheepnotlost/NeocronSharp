@@ -166,11 +166,12 @@ def _plausible(points, areas, angles, height, width=None):
     big = 1200*(height/1440)**2
     if flat and int(np.sum((areas >= big) & ~np.isnan(angles))) < 2:
         return False                                       # a row of small marks is lettering, not a path
-    if np.ptp(ys) <= 4 and np.ptp(points[:, 0]) >= 60:
-        return False                                       # marks on exactly one screen row: text, never a path
-    if (flat and width and .47*height <= float(ys.mean()) <= .57*height and float(areas.max()) < 2.5*big
-            and .22*width <= float(points[:, 0].mean()) <= .78*width):
-        return False                                       # a flat row at the crosshair: on-screen messages and name labels
+    tolerance = max(4.0, .006*height)
+    for centre in ys:                                       # three or more marks on exactly one screen row: text, never a path
+        on_row = np.abs(ys - centre) <= tolerance
+        if on_row.sum() >= 3 and on_row.sum() >= .6*len(ys) and np.ptp(points[on_row, 0]) >= 60:
+            return False
+    # (A real path seen across the view is a gently sloping row, and its dashes grow steadily towards the near end.)
     if float(ys.max()) < .30*height:
         return False                                       # all of it high on the screen: on a wall or ceiling, not the floor
     if not flat and ys.max() - ys.min() < .04*height:

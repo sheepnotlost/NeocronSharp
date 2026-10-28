@@ -668,6 +668,7 @@ class NavRayRunner(VisualRunner):
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
                         self.backend.move_relative(look*(last_side if seen_path else (self.route_hint or 1)), 0)
+                        track = None                         # sweeping: look at the whole picture every time
                         searched += look
                         if self.clock() - last_report >= REPORT_EVERY:
                             last_report = self.clock()
@@ -689,6 +690,7 @@ class NavRayRunner(VisualRunner):
                     if turns_in_row > MAX_TURNS:
                         raise Interrupted("Nav-Ray: turning does not line the dashes up. Check the mouse look and try again.")
                     turned += self.turn(error, frame.shape[1])
+                    track, lost = None, 0                    # the camera moved: the old path line no longer applies to the new picture
                     continue
                 turns_in_row = 0
                 legs += 1

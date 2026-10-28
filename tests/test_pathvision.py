@@ -151,6 +151,14 @@ class PathVisionTests(unittest.TestCase):
         # find_path raised UnboundLocalError (no slope) for exactly this; seen as a path of two big dashes
         self.assertIsNotNone(pathvision.find_path(load("navray_sparse_big_dashes_2560.png")))
 
+    def test_a_row_of_big_dashes_running_across_the_view_in_the_distance_is_found(self):
+        # Live (video, default green skin): the route runs left to right along the base of a shop front, so its dashes
+        # make a gently sloping, nearly flat row at about crosshair height. A rule meant for text rejected it.
+        view = pathvision.find_path(load("navray_green_far_dash_row_1920.jpg"), color=70)
+        self.assertIsNotNone(view)
+        self.assertGreaterEqual(len(view.points), 4)
+        self.assertTrue(all(.45*1080 <= y <= .56*1080 for _, y in view.points), view.points)
+
     def test_a_red_text_label_at_the_crosshair_is_not_a_path(self):
         # Live (video of a run, red HUD): a red on-screen message "Ignoring new discord..." drawn level with the crosshair
         # made six blobs in one flat row. The macro took it for a path and ran into a wall for 18 seconds.
