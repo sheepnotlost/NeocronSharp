@@ -40,6 +40,12 @@ CORNER_NEAR = .55        # a corner in the traced route lower on screen than thi
 CORNER_TURN_IN_PLACE = .10   # at a close corner, a heading error this big stops forward motion for a sharp pivot
 CORNER_RESUME = .05      # ...and forward motion resumes below this
 CORNER_DAMP = 1.0        # share of the error corrected on each look at a close corner (no gradual drift round it)
+BANNER_RECHECK = 1.5     # seconds a reading of the district banner is trusted before the row is read again
+ZONE_MEMORY = 20.0       # the district banner was read this recently: the zone line is close
+ZONE_PUSH_SECONDS = 10.0  # near the zone line the dashes stop: keep walking forward this long for the zone to change
+ZONE_CHECK_EVERY = 1.0   # how often the Location name is read while pushing through
+ZONE_LOAD_SECONDS = 90.0  # longest a loading screen may last
+ZONE_QUIET_SECONDS = 15.0  # after crossing, the new district's banner stays up a while: it is not a zone line ahead
 LOST_GRACE = .4          # seconds the dashes may drop out of view while walking a straight stretch before stopping
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
 SEARCH_STEP = 60         # mouse counts per look while turning to find the path (until calibrated)
@@ -394,7 +400,65 @@ class NavRayRunner(VisualRunner):
             self.dash_color = hue if hue is not None else "green"
             self.emit("status", f"Nav-Ray: the HUD colour is hue {hue}, so the dashes are "
                       f"{'that colour' if hue is not None else 'green (no clear HUD colour)'}.")
-        return pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=self.dash_color)
+        return pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=self.dash_color,
+                                    text=self.district_banner)
+
+    banner = None                # (when read, row height, was it the banner): the last reading of a banner-like row
+
+    def district_banner(self, bgr, box):
+        """Is the row of marks in `box` the game's "Entering new district: ..." line? Read with the OCR, and the
+        answer kept for a moment so the walk does not read it on every look."""
+        now = self.clock()
+        if self.banner is not None and now - self.banner[0] < BANNER_RECHECK and abs(self.banner[1] - box[1]) < .02*bgr.shape[0]:
+            return self.banner[2]
+        x0, y0, x1, y1 = (int(round(v)) for v in box)
+        crop = cv2.cvtColor(bgr[max(0, y0):y1, max(0, x0):x1], cv2.COLOR_BGR2GRAY)
+        try:
+            words = [w[0].lower() for w in self.detector.text_reader().read_words(crop)]
+        except Exception:                                  # OCR trouble must never stop a walk
+            words = []
+        found = "entering" in words or any(w.startswith("district") for w in words)
+        # Just after crossing, the new district's own banner is still shown: that is not a zone line ahead.
+        ahead = found and now >= self.zone_quiet_until
+        if ahead and not self.near_zone(now):
+            self.emit("status", "Nav-Ray: the zone line is close (\"Entering new district\" is shown); "
+                                "walking on through it when the dashes stop.")
+        if ahead:
+            self.zone_seen = now
+        self.banner = (now, box[1], found)
+        return found
+
+    zone_seen = None             # when the district banner was last read: the zone line is close
+    zone_quiet_until = float("-inf")   # a banner read before this is the zone just entered, not one ahead
+
+    def near_zone(self, now):
+        return self.zone_seen is not None and now - self.zone_seen < ZONE_MEMORY
+
+    def zone_changed(self, state, now):
+        """While pushing on to the zone line: has the Location name changed from the one the push started in?
+        Read once a second."""
+        if now - state.get("zone_checked", float("-inf")) < ZONE_CHECK_EVERY:
+            return False
+        state["zone_checked"] = now
+        area = self.area_name()
+        if "zone_from" not in state:
+            state["zone_from"] = area
+            return False
+        return bool(area) and bool(state["zone_from"]) and navray._norm(area) != navray._norm(state["zone_from"])
+
+    def wait_for_load(self, state):
+        """A black frame while walking is a loading screen between zones: let go of the keys and wait it out."""
+        for key in ("w", "s"):
+            if key in self.backend.held_keys:
+                self.backend.key(key, False)
+        self.emit("status", "Nav-Ray: loading screen; waiting for the next zone.")
+        started = self.clock()
+        while self.frame().mean() < 6:
+            if self.clock() - started > ZONE_LOAD_SECONDS:
+                raise Interrupted(f"Loading screen or black frame for {ZONE_LOAD_SECONDS:.0f} s. Stopped.")
+            self.wait(.25)
+        self.wait(.5)                                      # the new zone draws its first frames
+        state["zoned"] = True
 
     def wait_for_path(self, window):
         started = self.clock()
@@ -676,7 +740,8 @@ class NavRayRunner(VisualRunner):
 
     def vitals(self, reader, frame, state):
         if frame.mean() < 6:
-            raise Interrupted("Loading screen or black frame. Stopped; walking across zones is not supported yet.")
+            self.wait_for_load(state)
+            return
         now = self.clock()
         if now - state["health_checked"] >= HEALTH_EVERY:
             state["health_checked"] = now
@@ -707,15 +772,31 @@ class NavRayRunner(VisualRunner):
                 self.checkpoint()
                 frame = self.frame()
                 self.vitals(reader, frame, state)
+                if state.get("zoned"):
+                    reason = "entered a new zone"
+                    break
                 now = self.clock()
-                seen = self.find_dashes(_bgr(frame), prior=track, tube=.25)
+                bgr = _bgr(frame)
+                seen = self.find_dashes(bgr, prior=track, tube=.25)
                 if seen is None and track is not None:
-                    seen = self.find_dashes(_bgr(frame))   # a pivot at a corner moves the line out of the old tube
+                    seen = self.find_dashes(bgr)           # a pivot at a corner moves the line out of the old tube
                 if seen is None:
+                    missing_since = now if missing_since is None else missing_since
+                    if tether and self.near_zone(now):
+                        # The dashes stop at a zone line (live, 28 Oct): walk on through it until the Location
+                        # name changes.
+                        if not forward:
+                            self.backend.key("w", True)
+                            forward = True
+                        if self.zone_changed(state, now):
+                            reason = "entered a new zone"
+                            break
+                        if now - missing_since < ZONE_PUSH_SECONDS:
+                            self.sleep(.005)
+                            continue
                     # A straight stretch may blink out for a moment (stairs, a passer-by): keep going briefly. Never
                     # coast blind at a corner: release W at once and search from standing.
-                    missing_since = now if missing_since is None else missing_since
-                    if not at_corner and now - missing_since < LOST_GRACE:
+                    elif not at_corner and now - missing_since < LOST_GRACE:
                         self.sleep(.005)
                         continue
                     reason = "lost the dashes"
@@ -788,6 +869,19 @@ class NavRayRunner(VisualRunner):
         self.emit("navray_route", {"start": self.route_start, "destination": self.route_destination, "end": end,
                                    "legs": list(self.route_legs), "seconds": self.clock() - started})
 
+    def entered_zone(self, started):
+        """After crossing into a new zone: True (and the walk is over) when that zone is the destination."""
+        self.zone_seen, self.banner = None, None
+        self.zone_quiet_until = self.clock() + ZONE_QUIET_SECONDS
+        area = self.area_name()
+        wanted = (getattr(self, "route_destination", "") or "").split(">")[-1]
+        self.emit("status", f"Nav-Ray: entered {area or 'a new zone'}.")
+        if area and navray._norm(area) == navray._norm(wanted):
+            self.finish_route(started)
+            self.emit("done", f"Nav-Ray: arrived in {area}.")
+            return True
+        return False
+
     def area_name(self):
         try:
             return routes.read_area(self.detector.gray(self.frame()))
@@ -804,6 +898,7 @@ class NavRayRunner(VisualRunner):
             if known:
                 self.emit("status", f"Nav-Ray: this route is known ({known['walks']} walks, best {known['seconds']}s, "
                           f"{self.route_start} to {known.get('end')}).")
+        self.zone_seen, self.banner, self.zone_quiet_until = None, None, float("-inf")
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
@@ -831,6 +926,12 @@ class NavRayRunner(VisualRunner):
                     got = self.evaluate(track, lost)               # something showed while sweeping: confirm it standing still
                 frame = got[1] if got else self.frame()
                 self.vitals(reader, frame, state)
+                if state.pop("zoned", False):
+                    if self.entered_zone(started):
+                        return
+                    track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
+                    scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
+                    continue
                 if got is None:
                     lost += 1
                     if not scanning and self.last_turn and seen_path:
@@ -887,7 +988,9 @@ class NavRayRunner(VisualRunner):
                 state["last_path"] = self.clock()
                 error = self.aim_error(view, frame)
                 last_side = 1 if error >= 0 else -1
-                if abs(error) > TURN_FIRST:
+                # Once turning is calibrated, a moderate error is corrected on the move (the tethered walk steers
+                # every look): stopping to turn first cost a second or more each time (28 Oct run: 15 such turns).
+                if abs(error) > (TETHER_TURN_IN_PLACE if self.px_per_count else TURN_FIRST):
                     turns_in_row += 1
                     first = view.points[0] if view.points else view.aim
                     self.emit("status", f"Nav-Ray: turn {turns_in_row}, aim {error:+.3f}, {len(view.points)} marks, "
@@ -908,6 +1011,15 @@ class NavRayRunner(VisualRunner):
                 self.route_legs.append({"turn": int(turned - recorded_turn), "seconds": round(self.clock() - leg_started, 1),
                                         "dashes": passed, "reason": reason})
                 recorded_turn = turned
+                if reason == "entered a new zone":
+                    state.pop("zoned", None)
+                    state.pop("zone_from", None)
+                    if self.entered_zone(started):
+                        return
+                    # A new zone: its dashes may lie anywhere, so look all round for them.
+                    track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
+                    scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
+                    continue
                 if reason == "stuck against something":
                     if self.clock() - door_tried_at >= DOOR_RETRY_SECONDS and self.try_open_door(reader):
                         door_tried_at = self.clock()

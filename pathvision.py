@@ -4,7 +4,7 @@ The path is a chain of short, thin, green dashes lying on one line on the floor.
 not enough (green signs and tiles exist), so candidate dashes are filtered by size and shape and
 the longest chain of candidates on one straight line is taken as the path.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import cv2
 import numpy as np
@@ -75,44 +75,63 @@ def _hue_window(color):
     return (centre - 12) % 180, (centre + 12) % 180, True
 
 
+_LUTS = {}
+
+
+def _hue_luts(color):
+    """(shift, band, strict): lookup tables that shift the hue circle so the dash colour sits in one block at 90
+    (this also makes red, which wraps, simple), and that mark the hues inside the dash colour's window."""
+    if color not in _LUTS:
+        low, high, strict = _hue_window(color)
+        centre = ((low + high + (180 if low > high else 0))/2) % 180
+        half = ((high - low) % 180)/2
+        shift = ((np.arange(256) + 90 - int(round(centre))) % 180).astype(np.uint8)
+        band = (np.abs(shift.astype(np.int16) - 90) <= half).astype(np.uint8)
+        _LUTS[color] = (shift, band, strict)
+    return _LUTS[color]
+
+
 def _dash_mask(frame, color="green", parts=False):
-    """1 where a pixel has the dash colour. With `parts`: (mask, shifted hue, saturation, strict)."""
-    hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
-    low, high, strict = _hue_window(color)
-    centre = ((low + high + (180 if low > high else 0))/2) % 180
-    # Shift the hue circle so the dash colour sits in one block at 90 (this also makes red, which wraps, simple).
-    hue = ((hue.astype(np.int16) + 90 - int(round(centre))) % 180).astype(np.uint8)
-    half = ((high - low) % 180)/2
-    if not strict:
-        mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 35) & (val >= 62)).astype(np.uint8)
-    else:
-        mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 90) & (val >= 70)).astype(np.uint8)
-    return (mask, hue, sat, strict) if parts else mask
+    """1 where a pixel has the dash colour. With `parts`: (mask, shifted hue, saturation, strict).
+    Lookup tables and OpenCV keep this to a few milliseconds on a 2560-wide frame: the walk looks several
+    times a second."""
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    shift, band, strict = _hue_luts(color)
+    hue, sat, _ = cv2.split(hsv)
+    floor = (0, 90, 70) if strict else (0, 35, 62)
+    mask = cv2.bitwise_and(cv2.LUT(hue, band), cv2.inRange(hsv, floor, (255, 255, 255)))
+    return (mask, cv2.LUT(hue, shift), sat, strict) if parts else mask
 
 
-def dash_candidates(frame, ignore=(), color="green"):
+def dash_candidates(frame, ignore=(), color="green", parts=None):
     """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour (a name from COLOR_HUES or a numeric hue).
-    `ignore` = pixel boxes (x0,y0,x1,y1)."""
+    `ignore` = pixel boxes (x0,y0,x1,y1). `parts` = _dash_mask(frame, color, parts=True), when already made."""
     height, width = frame.shape[:2]
     unit = width/2000
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    mask, hue, sat, strict = _dash_mask(frame, color, parts=True)
+    mask, hue, sat, strict = parts if parts is not None else _dash_mask(frame, color, parts=True)
     count, labels, stats, centres = cv2.connectedComponentsWithStats(mask, connectivity=8)
     found = []
-    for i in range(1, count):
-        x, y, w, h, area = stats[i]
-        cx, cy = centres[i]
-        if not 6*unit*unit <= area <= 40000*unit*unit:
-            continue
+    # Most blobs are specks or large areas: drop them all at once, then look at the rest one by one.
+    sized = np.flatnonzero((stats[:, 4] >= 6*unit*unit) & (stats[:, 4] <= 40000*unit*unit))
+    rows, middles = stats.tolist(), centres.tolist()
+    for i in sized.tolist():
+        if i == 0:
+            continue                                   # the background
+        x, y, w, h, area = rows[i]
+        cx, cy = middles[i]
         if _excluded(cx/width, cy/height, "red" if strict else "green"):
             continue
         if abs(cx - width/2) < 28*unit and abs(cy - .504*height) < 28*unit:
             continue                                   # the reticle
         if any(x0 <= cx <= x1 and y0 <= cy <= y1 for x0, y0, x1, y1 in ignore):
             continue
+        long_side, short_side = max(w, h), max(1, min(w, h))
+        if long_side > 10*unit and long_side/short_side < 1.5 and area/(w*h) > .5:
+            continue                                   # a filled blob, not a dash (checked first: it costs nothing)
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
-        direction = _orientation(labels, i, x, y, w, h, unit)
+        direction = _orientation(labels, i, x, y, w, h, unit, inside)
         if not strict and .43 < cx/width < .60 and cy/height > .50:
             if direction != direction or area < 100*unit*unit:
                 continue                               # gear and tiny character markers, while retaining clear floor dashes
@@ -128,9 +147,6 @@ def dash_candidates(frame, ignore=(), color="green"):
         # anything else must stand out, which a flat green glow on a wall does not.
         if direction != direction and _contrast(gray, labels, i, x, y, w, h, unit) < MIN_CONTRAST:
             continue
-        long_side, short_side = max(w, h), max(1, min(w, h))
-        if long_side > 10*unit and long_side/short_side < 1.5 and area/(w*h) > .5:
-            continue                                   # a filled blob, not a dash
         found.append((float(cx), float(cy), int(area), direction))
     return found
 
@@ -143,11 +159,11 @@ CHAIN_BUSY = .08     # ...and a chain whose typical mark is this crowded is lett
                      # .12-.29 for the middle mark of their chains, real routes .01-.03)
 
 
-def crowding(frame, candidates, color="green"):
+def crowding(frame, candidates, color="green", mask=None):
     """For each candidate, the share of the dash colour in a box around it (not counting the mark itself), with the
-    HUD blanked out so a dash beside a panel is not counted as crowded."""
+    HUD blanked out so a dash beside a panel is not counted as crowded. `mask` = _dash_mask(frame, color), when made."""
     height, width = frame.shape[:2]
-    mask = _dash_mask(frame, color)
+    mask = _dash_mask(frame, color) if mask is None else mask.copy()
     mask[int(.78*height):] = 0
     mask[:int(.06*height)] = 0
     mask[:int(.20*height), :int(.20*width)] = 0
@@ -182,11 +198,13 @@ def _contrast(gray, labels, index, x, y, w, h, unit):
     return float(crop[inside].mean() - crop[ring].mean())
 
 
-def _orientation(labels, index, x, y, w, h, unit):
-    """Direction (radians, image axes) a dash-shaped blob points in; nan for small or roundish blobs."""
+def _orientation(labels, index, x, y, w, h, unit, inside=None):
+    """Direction (radians, image axes) a dash-shaped blob points in; nan for small or roundish blobs.
+    `inside` = labels[y:y+h, x:x+w] == index, when already made."""
     if max(w, h) < 9*unit:
         return float("nan")
-    moments = cv2.moments((labels[y:y+h, x:x+w] == index).astype(np.uint8), binaryImage=True)
+    inside = labels[y:y+h, x:x+w] == index if inside is None else inside
+    moments = cv2.moments(inside.astype(np.uint8), binaryImage=True)
     a, b, c = moments["mu20"], moments["mu02"], moments["mu11"]
     spread = float(np.hypot(a - b, 2*c))
     major, minor = (a + b + spread)/2, (a + b - spread)/2
@@ -470,7 +488,70 @@ def first_corner(route):
     return -1
 
 
-def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
+WORK_WIDTH = 1920   # frames wider than this are looked at shrunk to it: four times quicker at 2560, and the dashes are
+                    # still many pixels across (every recording checked by hand was 1920 wide)
+_LAST = {}
+_SHRUNK = {}
+
+
+def _working(frame):
+    """(frame shrunk to WORK_WIDTH, scale), the last one kept: the walk looks at the same frame twice."""
+    width = frame.shape[1]
+    if width <= WORK_WIDTH:
+        return frame, 1.0
+    if _SHRUNK.get("frame") is not frame:
+        scale = WORK_WIDTH/width
+        small = cv2.resize(frame, (WORK_WIDTH, round(frame.shape[0]*scale)), interpolation=cv2.INTER_AREA)
+        _SHRUNK.update(frame=frame, small=small, scale=scale)   # holds the frame, so its identity cannot be reused
+    return _SHRUNK["small"], _SHRUNK["scale"]
+
+
+def _scaled(view, scale):
+    """A PathView in pixels of a picture `scale` times the size (fractions and the slope stay as they are)."""
+    if view is None or scale == 1.0:
+        return view
+
+    def points(seq):
+        return tuple((x*scale, y*scale) for x, y in seq)
+    return replace(view, points=points(view.points), aim=(view.aim[0]*scale, view.aim[1]*scale),
+                   intercept=view.intercept*scale, forward_point=(view.forward_point[0]*scale, view.forward_point[1]*scale),
+                   route=points(view.route))
+
+
+def _marks(frame, ignore, color):
+    """(candidates, crowding) of a frame, made from one colour mask. The last frame's are kept: the walk looks at
+    the same frame twice when the followed line is not in its tube (once along it, once at the whole view)."""
+    key = (tuple(tuple(box) for box in ignore), color)
+    if _LAST.get("frame") is frame and _LAST.get("key") == key:
+        return _LAST["marks"]
+    parts = _dash_mask(frame, color, parts=True)
+    candidates = dash_candidates(frame, ignore, color, parts=parts)
+    marks = (candidates, crowding(frame, candidates, color, mask=parts[0]))
+    _LAST.update(frame=frame, key=key, marks=marks)          # holds the frame, so its identity cannot be reused
+    return marks
+
+
+def banner_row(candidates, width, height):
+    """Box (x0, y0, x1, y1) round a flat row of marks across the middle of the view, at the height where the game
+    writes "Entering new district: ..." in the dash colour; None when there is no such row. Real dashes can lie
+    like this too (a path running across the view, 28 Oct run at 60 s), so the caller reads the text first."""
+    band = [c for c in candidates if .505*height <= c[1] <= .56*height and .25*width <= c[0] <= .75*width]
+    best = []
+    for c in band:
+        row = [d for d in band if abs(d[1] - c[1]) <= .008*height]
+        if len(row) > len(best):
+            best = row
+    if len(best) < 3:
+        return None
+    xs, ys = [d[0] for d in best], [d[1] for d in best]
+    if max(xs) - min(xs) < .08*width or abs((max(xs) + min(xs))/2 - width/2) > .1*width:
+        return None
+    middle = sum(ys)/len(ys)
+    return (max(0.0, min(xs) - .03*width), middle - .012*height, min(float(width), max(xs) + .03*width),
+            middle + .012*height)
+
+
+def find_path(frame, ignore=(), prior=None, tube=.18, color="green", text=None):
     """PathView for a BGR frame, or None when no path is visible in front of the character.
 
     The dashes ahead of the character are the way on. A chain lying wholly below the character's feet
@@ -480,10 +561,21 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
 
     The character goes from one dash to the next: the target is the nearest dash ahead (above the
     character's feet), and as it is reached the next one becomes the target.
+
+    `text(frame, box)` says whether a row of marks across the middle of the view is the game's district banner
+    (live, 28 Oct: the walk steered for the letters of "Entering new district: PLAZA SEC-3" for 20 seconds).
     """
-    candidates = dash_candidates(frame, ignore, color)
+    small, scale = _working(frame)
+    if scale != 1.0:
+        shrunk = [tuple(v*scale for v in box) for box in ignore]
+        return _scaled(find_path(small, shrunk, _scaled(prior, scale), tube, color, text), 1/scale)
+    candidates, crowded = _marks(frame, ignore, color)
+    if text is not None:
+        box = banner_row(candidates, frame.shape[1], frame.shape[0])
+        if box is not None and text(frame, box):
+            keep = [i for i, c in enumerate(candidates) if not (box[0] <= c[0] <= box[2] and box[1] <= c[1] <= box[3])]
+            candidates, crowded = [candidates[i] for i in keep], [crowded[i] for i in keep]
     everything = candidates                                 # the line ahead may leave the prior's tube at a corner
-    crowded = crowding(frame, everything, color)
     busy_at = {(round(c[0]), round(c[1])): b for c, b in zip(everything, crowded)}
     height, width = frame.shape[:2]
     if prior is not None:

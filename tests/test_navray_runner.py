@@ -304,6 +304,27 @@ class WalkTests(unittest.TestCase):
         self.assertTrue(turns and all(t < 0 for t in turns), turns)                # left, and in one bold move each
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked unaligned
 
+    def test_a_moderate_heading_error_is_corrected_on_the_move_once_turning_is_calibrated(self):
+        frame = np.roll(AHEAD, -300, axis=1)                      # the dashes lie to the left, not far
+        runner, _ = make_runner(lambda i: frame)
+        runner.area_name = lambda: ""
+        runner.calibrate_turn = lambda: -4.2
+        runner.vitals = lambda *args: None
+        view = pathvision_find(frame)
+        error = runner.aim_error(view, frame)
+        self.assertTrue(navray_runner.TURN_FIRST < abs(error) < navray_runner.TETHER_TURN_IN_PLACE, error)
+        runner.evaluate = lambda *args, **kwargs: (view, frame)
+        legs = []
+
+        def leg(view, track, reader, state, tether=False):
+            legs.append(tether)
+            raise Interrupted("test complete")
+        runner.walk_leg = leg
+        with self.assertRaisesRegex(Interrupted, "test complete"):
+            runner.walk()
+        self.assertEqual(legs, [True])                            # straight into the tethered walk
+        self.assertFalse([e for e in runner.backend.events if e[0] == "rel"])     # no stop-and-turn first
+
     def test_three_looks_must_agree_before_a_move_and_disagreeing_ones_are_repeated(self):
         runner, _ = make_runner(lambda i: AHEAD)
         looks = {"n": 0}
@@ -343,6 +364,38 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(reason, "lost the dashes")
         self.assertLess(runner.clock() - started, 1.0)
         self.assertNotIn("w", runner.backend.held_keys)
+
+    def test_near_a_zone_line_it_walks_on_when_the_dashes_stop_until_the_zone_changes(self):
+        # Live (28 Oct): "Entering new district: PLAZA SEC-3" showed, the dashes stopped, and the walk stood searching.
+        runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))
+        runner.px_per_count = -4.2
+        runner.zone_seen = 0.0
+        runner.area_name = lambda: "PLAZA SEC-2" if runner.clock() < 3 else "PLAZA SEC-3"
+        view = pathvision_find(AHEAD)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "entered a new zone")
+        self.assertGreater(runner.clock(), 3)
+        w = [e[2] for e in runner.backend.events if e[:2] == ("key", "w")]
+        self.assertEqual(w, [True, False])                         # held all the way through, let go at the end
+
+    def test_away_from_a_zone_line_losing_the_dashes_still_stops_at_once(self):
+        runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))
+        runner.px_per_count = -4.2
+        view = pathvision_find(AHEAD)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "lost the dashes")
+        self.assertLess(runner.clock(), 2.0)
+
+    def test_the_banner_of_the_zone_just_entered_is_not_a_zone_line_ahead(self):
+        runner, _ = make_runner(lambda i: DARK)
+        runner.area_name = lambda: "PLAZA SEC-3"
+        runner.entered_zone(runner.clock())
+        runner.detector.text_reader = lambda: type("R", (), {"read_words": lambda self, g: [("Entering", 0, 0, 1, 1)]})()
+        box = (10, 10, 50, 20)
+        self.assertTrue(runner.district_banner(DARK, box))         # its letters are still ignored...
+        self.assertFalse(runner.near_zone(runner.clock()))         # ...but it does not mean a zone line is ahead
 
     def test_tethered_walking_is_one_continuous_run_that_keeps_steering(self):
         drifted = np.roll(AHEAD, -160, axis=1)            # the dashes lie a little to the left
@@ -417,10 +470,31 @@ class WalkTests(unittest.TestCase):
         self.assertTrue(turns and all(t > 0 for t in turns))                       # sweeping round in one direction
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked blind
 
-    def test_a_black_frame_is_a_loading_screen(self):
+    def test_a_loading_screen_that_never_ends_stops_the_walk(self):
         runner, _ = make_runner(lambda i: AHEAD if i < 4 else np.zeros((1125, 2000, 3), np.uint8))
         with self.assertRaisesRegex(Interrupted, "Loading screen"):
             runner.walk()
+        self.assertGreaterEqual(runner.clock(), navray_runner.ZONE_LOAD_SECONDS)     # waited it out first
+
+    def test_a_loading_screen_is_waited_out_and_the_walk_goes_on_in_the_new_zone(self):
+        black = np.zeros((1125, 2000, 3), np.uint8)
+        runner, events = make_runner(lambda i: AHEAD if i < 4 else black if i < 40 else DARK)
+        runner.area_name = lambda: ""
+        with self.assertRaisesRegex(Interrupted, "turning all the way round"):     # the new zone shows no dashes here
+            runner.walk()
+        statuses = [p for k, p in events if k == "status"]
+        self.assertTrue(any("loading screen" in p for p in statuses), statuses)
+        self.assertTrue(any("entered a new zone" in p for p in statuses), statuses)
+
+    def test_arriving_in_the_destination_zone_ends_the_walk(self):
+        black = np.zeros((1125, 2000, 3), np.uint8)
+        runner, events = make_runner(lambda i: AHEAD if i < 4 else black if i < 40 else DARK)
+        runner.route_destination = "NEOCRON CITY SECTORS > PEPPER PARK SEC-1"
+        runner.area_name = lambda: "PEPPER PARK SEC-1"
+        runner.walk()
+        done = [p for k, p in events if k == "done"]
+        self.assertEqual(done, ["Nav-Ray: arrived in PEPPER PARK SEC-1."])
+        self.assertFalse(runner.backend.held_keys)
 
     def test_an_unchanging_view_while_walking_backs_off_and_looks_elsewhere_before_giving_up(self):
         runner, events = make_runner(lambda i: AHEAD)

@@ -4,6 +4,13 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Nav-Ray speed and zone lines — 28 October 2026
+
+- [x] 17:17 run (Plaza 2 towards Pepper Park 1): of 138 s walking, about 85 s went on stopping, turning and searching. Each look took about 0.5 s: the dash finder 280 ms at 2560 wide (it built its colour mask twice and flipped colours in slow numpy) and the screen capture 120 ms. Now: the mask is built once with lookup tables, specks are dropped in one step, frames wider than 1920 are looked at shrunk to 1920 (all hand-checked recordings are 1920), and the capture converts colours with OpenCV. Same results on 96 real frames (at 1920 and below); a look now takes about a third of the time.
+- [x] Once turning is calibrated, a heading error up to 0.22 is corrected on the move instead of stopping to turn first (15 such stops in the 17:17 run).
+- [x] The district banner ("Entering new district: PLAZA SEC-3", in the HUD colour across the middle of the view) was taken for dashes for 20 s at the zone line. A flat row of marks there is read with the OCR and ignored when it is the banner (a real row of dashes there, as at 60 s, is kept).
+- [x] Zone lines: the dashes stop there. With the banner read, the walk keeps going forward when the dashes stop until the Location name changes (up to 10 s), then counts as arrived if that zone is the destination, else looks all round for the new zone's dashes. A loading screen is waited out (up to 90 s) instead of stopping the walk. Not yet checked live.
+
 ### Nav-Ray Select list over a lit wall — 28 October 2026
 
 - [x] 17:04 runs: PEPPER PARK SEC-1 was worked out from its neighbours to be row 7 of the Destination list, the row hidden under Start/Stop. The click selected nothing, the game said "No valid destination selected." and the walk set off with no route. Rows are now only worked out on the visible part of a list (the list scrolls on otherwise), and every click is checked: the row must show the selection bar (seen on the clips: the clicked rows in the 02:29 and 02:51 runs, none in the 17:04 run), else it is clicked once more and the run stops before Start.
