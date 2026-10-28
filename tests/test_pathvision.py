@@ -132,6 +132,25 @@ class PathVisionTests(unittest.TestCase):
         self.assertIsNone(pathvision.find_path(frame, color="red"))
         self.assertIsNone(pathvision.find_path(red, color="green"))
 
+    def test_the_hud_colour_scheme_tells_which_colour_the_dashes_are(self):
+        import cv2
+        self.assertLessEqual(pathvision.hud_hue(load("navray_red_corridor_2000.png")), 12)        # red scheme
+        self.assertLessEqual(pathvision.hud_hue(load("navray_red_hud_green_signs_1920.jpg")), 12)
+        for name in ("navray_straight_ahead_2000.png", "navray_sparse_big_dashes_2560.png"):      # default green scheme
+            self.assertTrue(55 <= pathvision.hud_hue(load(name)) <= 88, name)
+        self.assertIsNone(pathvision.hud_hue(np.full((1080, 1920, 3), 60, np.uint8)))             # no HUD colour
+
+    def test_a_numeric_hud_hue_finds_at_least_the_dashes_the_colour_name_finds(self):
+        frame = load("navray_red_hud_green_signs_1920.jpg")
+        by_hue = pathvision.find_path(frame, color=pathvision.hud_hue(frame))
+        by_name = pathvision.find_path(frame, color="red")
+        self.assertIsNotNone(by_hue)
+        self.assertGreaterEqual(len(by_hue.points), len(by_name.points))
+
+    def test_a_two_dash_chain_without_a_prior_path_no_longer_crashes(self):
+        # find_path raised UnboundLocalError (no slope) for exactly this; seen as a path of two big dashes
+        self.assertIsNotNone(pathvision.find_path(load("navray_sparse_big_dashes_2560.png")))
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

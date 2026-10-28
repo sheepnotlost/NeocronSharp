@@ -302,19 +302,19 @@ class NavRayRunner(VisualRunner):
         note = f" {unread} rows could not be read." if unread else ""
         self.emit("done", f"Nav-Ray: read {len(catalog)} categories and {total} destinations.{note}")
 
-    dash_color = None            # "green" or "red": the HUD colour scheme sets the dash colour; learned from the first path seen
+    dash_color = None            # a hue (0-179) read from the HUD colour scheme, or "green" when it has no clear colour
 
     def find_dashes(self, bgr, ignore=(), prior=None, tube=.18):
-        """pathvision.find_path in the dash colour. Until the colour is known both are tried (red first: it
-        is rare in the scene, so a red path is unmistakable); the colour that shows a path is then kept."""
-        for color in ([self.dash_color] if self.dash_color else list(reversed(pathvision.COLORS))):
-            view = pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=color)
-            if view is not None:
-                if self.dash_color != color:
-                    self.dash_color = color
-                    self.emit("status", f"Nav-Ray: the dashes are {color}.")
-                return view
-        return None
+        """pathvision.find_path in the dash colour. The dashes are drawn in the HUD colour scheme, so the colour is
+        read from the HUD (top-left panel) at the start of every walk and nothing else is searched for: a chain of
+        green signs in a red-scheme game is never mistaken for a path. (Learning the colour from whatever first
+        looked like a path locked a live run onto green signs while the dashes were red.)"""
+        if self.dash_color is None:
+            hue = pathvision.hud_hue(bgr)
+            self.dash_color = hue if hue is not None else "green"
+            self.emit("status", f"Nav-Ray: the HUD colour is hue {hue}, so the dashes are "
+                      f"{'that colour' if hue is not None else 'green (no clear HUD colour)'}.")
+        return pathvision.find_path(bgr, ignore=ignore, prior=prior, tube=tube, color=self.dash_color)
 
     def wait_for_path(self, window):
         started = self.clock()

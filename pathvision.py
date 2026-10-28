@@ -40,18 +40,51 @@ COLOR_HUES = {"green": (55, 88), "red": (170, 10), "magenta": (135, 168), "blue"
 COLORS = tuple(COLOR_HUES)
 
 
+HUD_BOX = (0.0, 0.0, .20, .20)      # the Location / Time panel: its frame is drawn in the HUD colour scheme
+
+
+def hud_hue(frame):
+    """The HUD colour scheme's hue (OpenCV 0-179), read from the frame of the Location panel in the top left,
+    or None when it has no clear colour (the grey scheme). The Nav-Ray dashes are drawn in this colour, so it
+    says which colour to look for and which green things in the scene to ignore."""
+    height, width = frame.shape[:2]
+    left, top, right, bottom = HUD_BOX
+    hsv = cv2.cvtColor(frame[int(top*height):int(bottom*height), int(left*width):int(right*width)], cv2.COLOR_BGR2HSV)
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    chosen = hue[(sat >= 120) & (val >= 140)]
+    if chosen.size < 120:
+        return None
+    # Hue is circular (red wraps): vote on a circle shifted so that the commonest hue sits in the middle.
+    counts = np.bincount(chosen, minlength=180).astype(float)
+    smooth = sum(np.roll(counts, shift) for shift in range(-4, 5))
+    return int(np.argmax(smooth))
+
+
+def _hue_window(color):
+    """(low, high, strict) for a colour name or a numeric hue. `strict` = a colour other than the default green,
+    which gets the stricter saturation rule (red and the like are rarer in the scene, so easier to trust)."""
+    if isinstance(color, str):
+        low, high = COLOR_HUES[color]
+        return low, high, color != "green"
+    centre = int(color) % 180
+    if 55 <= centre <= 88:
+        return COLOR_HUES["green"][0], COLOR_HUES["green"][1], False
+    return (centre - 12) % 180, (centre + 12) % 180, True
+
+
 def dash_candidates(frame, ignore=(), color="green"):
-    """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour. `ignore` = pixel boxes (x0,y0,x1,y1)."""
+    """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour (a name from COLOR_HUES or a numeric hue).
+    `ignore` = pixel boxes (x0,y0,x1,y1)."""
     height, width = frame.shape[:2]
     unit = width/2000
     hue, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    low, high = COLOR_HUES[color]
+    low, high, strict = _hue_window(color)
     centre = ((low + high + (180 if low > high else 0))/2) % 180
     # Shift the hue circle so the dash colour sits in one block at 90 (this also makes red, which wraps, simple).
     hue = ((hue.astype(np.int16) + 90 - int(round(centre))) % 180).astype(np.uint8)
     half = ((high - low) % 180)/2
-    if color == "green":
+    if not strict:
         mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 35) & (val >= 62)).astype(np.uint8)
     else:
         mask = ((np.abs(hue.astype(np.int16) - 90) <= half) & (sat >= 90) & (val >= 70)).astype(np.uint8)
@@ -62,7 +95,7 @@ def dash_candidates(frame, ignore=(), color="green"):
         cx, cy = centres[i]
         if not 6*unit*unit <= area <= 40000*unit*unit:
             continue
-        if _excluded(cx/width, cy/height, color):
+        if _excluded(cx/width, cy/height, "red" if strict else "green"):
             continue
         if abs(cx - width/2) < 28*unit and abs(cy - .504*height) < 28*unit:
             continue                                   # the reticle
@@ -70,7 +103,7 @@ def dash_candidates(frame, ignore=(), color="green"):
             continue
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
-        if saturation < (MIN_SATURATION if color == "green" else 90):
+        if saturation < (90 if strict else MIN_SATURATION):
             continue                                   # washed-out green: glass, walls, sign backing
         if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
             continue                                   # blotchy colour: a picture or sign, not a flat overlay
@@ -279,10 +312,12 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green"):
     if ys.max() - ys.min() < .25*(xs.max() - xs.min()):
         # A path running across the view lies in a flat row: its near end is the one by the character, not the lowest.
         chain = sorted(chain, key=lambda p: np.hypot(p[0] - .5*width, p[1] - .80*height))
-    if len(chain) >= 3 and np.ptp(ys) > 0:
+    if len(chain) >= 2 and np.ptp(ys) > 0:
         slope, intercept = np.polyfit(ys, xs, 1)           # kept for tracking: where the line runs
     elif prior is not None:
         slope, intercept = prior.slope, prior.intercept    # too few marks to fit: the path keeps its line
+    else:
+        slope, intercept = 0.0, float(xs.mean())           # a single mark: a vertical line through it
     centre = width/2
     ahead = [p for p in chain if p[1] <= REACH_Y*height]    # chain is nearest first
     target = ahead[0] if ahead else chain[-1]

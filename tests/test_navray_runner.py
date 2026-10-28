@@ -205,13 +205,22 @@ class WalkTests(unittest.TestCase):
         self.assertIn(False, w[:-1])                      # it stopped to turn in place...
         self.assertTrue(w.count(True) >= 2)               # ...and went on again
 
-    def test_the_dash_colour_is_learned_from_the_first_path_seen(self):
+    def test_the_dash_colour_comes_from_the_hud_not_from_whatever_looks_like_a_path(self):
+        # Live (video of a run): red HUD scheme, red dashes on the floor, and a wall of GREEN signs in view.
+        # Learning the colour from the first path-like thing locked the macro onto the green signs; it walked into them.
         import cv2 as cv
-        red = cv.cvtColor(cv.imread(str(FIXTURES / "navray_red_corridor_2000.png")), cv.COLOR_BGR2RGB)
-        runner, events = make_runner(lambda i: red)
-        self.assertIsNotNone(runner.find_dashes(cv.cvtColor(red, cv.COLOR_RGB2BGR)))
-        self.assertEqual(runner.dash_color, "red")
-        self.assertTrue(any("dashes are red" in p for k, p in events if k == "status"))
+        frame = cv.imread(str(FIXTURES / "navray_red_hud_green_signs_1920.jpg"))
+        runner, events = make_runner(lambda i: frame)
+        view = runner.find_dashes(frame)
+        self.assertIsNotNone(view)
+        self.assertLessEqual(runner.dash_color, 12)                                 # a red hue (it wraps round 0)
+        self.assertGreaterEqual(len(view.points), 4)
+        self.assertTrue(all(y > 300 for _, y in view.points))                        # the floor dashes, not the signs above
+        self.assertTrue(any("HUD colour" in p for k, p in events if k == "status"))
+        green_runner, _ = make_runner(lambda i: frame)
+        green_runner.dash_color = "green"                                            # what the old logic had locked onto
+        wrong = green_runner.find_dashes(frame)
+        self.assertTrue(wrong is None or len(wrong.points) <= 3)                     # only the sign marks
 
     def test_it_reads_the_next_four_dashes(self):
         view = pathvision_find(AHEAD)
