@@ -17,7 +17,7 @@ GAIN = .16               # mouse counts per pixel of steering error at 2560 wide
 MAX_STEP = 45            # largest single mouse move (before the turn is calibrated)
 CAL_NUDGES = (40, 20, 80, 10)    # mouse counts tried, in turn, to measure how far the view slides per count
 SCENE_BOX = (.22, .10, .82, .52)   # the part of the screen that is only scene: no HUD, not the character
-CAL_DAMP = .85           # share of a measured correction applied in one turn
+CAL_DAMP = .5            # share of a measured correction applied in one turn (the next look corrects the rest)
 CAL_MAX_PX = 260         # largest single mouse move, in screen pixels
 LOST_FRAMES = 10         # looks without the followed path before the macro searches the whole screen again
 DASHES_PER_LEG = 4       # dashes read in front of the character, then walked, before reading the next four
@@ -236,12 +236,14 @@ class NavRayRunner(VisualRunner):
 
     def wait_for_path(self, window):
         started = self.clock()
-        while self.clock() - started < 10:
+        while self.clock() - started < 3:
             view = pathvision.find_path(_bgr(self.frame()), ignore=[window.window_box()])
             if view is not None:
                 return
             self.wait(.25)
-        raise Interrupted("Nav-Ray: no path appeared after Start. Check the route in the Nav-Ray window.")
+        # The route starts at the character and may lead out of the camera's view: carry on, the walk sweeps
+        # all the way round for the dashes.
+        self.emit("status", "Nav-Ray: no dashes in view yet; the walk will look all round for them.")
 
     def press(self, name):
         self.backend.key(name, True)
@@ -297,17 +299,36 @@ class NavRayRunner(VisualRunner):
             return round(-(error*width)*CAL_DAMP/self.px_per_count)
         return steer_step(error)*3                                # uncalibrated: a bolder version of the old gain
 
+    def scene_picture(self):
+        frame = self.frame()
+        height, width = frame.shape[:2]
+        left, top, right, bottom = SCENE_BOX
+        scene = cv2.cvtColor(frame[int(top*height):int(bottom*height), int(left*width):int(right*width)], cv2.COLOR_RGB2GRAY)
+        return cv2.resize(scene, (480, 240), interpolation=cv2.INTER_AREA), scene.shape[1]
+
     def turn(self, error, width):
-        """Turn the camera by `error` of the screen width in one go, in moves the game can follow, then let it settle."""
+        """Turn the camera by (part of) `error`, in moves the game can follow, then let it settle. The view's
+        real rotation is measured and the pixels-per-count figure adapted, because large quick moves can
+        turn further than the small calibration nudge did (mouse acceleration)."""
         remaining = self.counts(error, width)
         limit = max(10, round(CAL_MAX_PX/abs(self.px_per_count))) if self.px_per_count else MAX_STEP*3
         total = remaining
+        before = self.scene_picture() if self.px_per_count and abs(total) >= 20 else None
         while remaining:
             chunk = max(-limit, min(limit, remaining))
             self.backend.move_relative(chunk, 0)
             remaining -= chunk
             self.wait(.02)
-        self.wait(.12)
+        self.wait(.15)
+        if before is not None:
+            after, scene_width = self.scene_picture()
+            dx, response = slide_pixels(before[0], after)
+            if response >= .15 and abs(dx) >= 2:
+                measured = dx*(scene_width/480)/total
+                if measured*self.px_per_count > 0:                    # same direction as calibrated
+                    self.px_per_count = .5*self.px_per_count + .5*measured
+                    self.emit("status", f"Nav-Ray: turn of {total:+d} counts slid the view {dx*(scene_width/480):+.0f}px; now {self.px_per_count:+.2f} px per count.")
+        self.last_turn = total
         return total
 
     def evaluate(self, track, lost, quick=False):
@@ -439,6 +460,7 @@ class NavRayRunner(VisualRunner):
         started = self.clock()
         state = {"health": None, "health_checked": started, "last_path": started}
         track, lost, legs, turned, turns_in_row, stuck = None, 0, 0, 0, 0, 0
+        self.last_turn = 0
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
         scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
@@ -455,6 +477,13 @@ class NavRayRunner(VisualRunner):
                 self.vitals(reader, frame, state)
                 if got is None:
                     lost += 1
+                    if not scanning and self.last_turn and seen_path:
+                        back = -self.last_turn//2
+                        self.last_turn = 0
+                        self.emit("status", f"Nav-Ray: the turn lost the dashes; coming back {back:+d} counts.")
+                        self.backend.move_relative(back, 0)
+                        self.wait(.15)
+                        continue
                     if not scanning:
                         # The dashes went out of view (a corner, a pillar): look all the way round before
                         # deciding the route is over.
@@ -481,6 +510,7 @@ class NavRayRunner(VisualRunner):
                     continue
                 scanning = False
                 view, frame = got
+                self.last_turn = 0 if abs(self.aim_error(view, frame)) <= TURN_FIRST else self.last_turn
                 track, lost = view, 0
                 seen_path = True
                 state["last_path"] = self.clock()

@@ -66,10 +66,14 @@ def main():
             if text.upper().startswith("NAV"):
                 return (x + w//2, y + h//2)
         return None
-    if navray.find_navray(reader, runner.detector.gray(runner.frame())) is None:
+    def window_open():
+        return navray.find_navray(reader, runner.detector.gray(runner.frame())) is not None
+    for attempt in range(4):
+        if window_open():
+            break
         point = menu_item()
         if point is None:
-            emit("status", "Nav-Ray window not showing: pressing Tab for the interactive UI.")
+            emit("status", "Pressing Tab for the interactive UI.")
             backend.key("tab", True)
             time.sleep(.08)
             backend.key("tab", False)
@@ -78,7 +82,7 @@ def main():
         if point is not None:
             emit("status", f"Clicking NAV-RAY in the top menu at {point}.")
             runner.click(point)
-            time.sleep(1.0)
+            time.sleep(1.2)
     runner.run()
 
 
