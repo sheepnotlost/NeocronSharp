@@ -195,6 +195,9 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Nav-Ray lists now scroll by dragging their own scroll thumb (the wheel jumped too far in the small window and skipped rows): the thumb is found by pixels, drag distance = rows x thumb length / visible rows, the distance actually moved is measured from the thumb, pages overlap by two rows. Thumb detection checked on four real captures at two scales; the drag itself is unverified live.
 - [ ] Not verified live: Start, Tab returning to mouse-look, steering direction/gain, arrival, stuck and health detection, speed. Tuning constants are at the top of navray_runner.py. Doors, subway, loading screens and combat are out of scope (the walk stops).
 
+- [x] Route library (27 Oct): every finished Nav-Ray walk records its start area (HUD Location, read by OCR), end area, time and legs in routes.json (user data, git-ignored); the best walk of a route is kept, a known route is reported and its first turn sets which way the first sweep looks. tools/route_map.py lists the areas reached from each area. The game's own pak_worldroute.dat decompresses (zlib after a 16-byte header, 478 entries, mixed record types) but is not decoded. 281 tests pass.
+- [ ] Not verified live: Location reading during a real walk, saving the library, the sweep hint.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

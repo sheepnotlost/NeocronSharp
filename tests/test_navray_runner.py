@@ -190,7 +190,7 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(recorded[-1], ("key", "w", False))
 
     def test_a_health_drop_stops_the_walk(self):
-        runner, _ = make_runner(lambda i: AHEAD if i % 2 else HALL, health=(972, 972, 800))
+        runner, _ = make_runner(lambda i: np.roll(AHEAD, (i % 5)*4, axis=1), health=(972, 972, 800))   # a moving picture, dashes ahead
         with self.assertRaisesRegex(Interrupted, "Health dropped"):
             runner.walk()
         self.assertEqual(runner.backend.events[-1], ("key", "w", False))

@@ -54,7 +54,17 @@ def main():
         if frame is not None:
             cv2.imwrite(str(folder / f"{count['n']:03d}.jpg"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 93])
 
-    runner = holder["runner"] = NavRayRunner(profile, backend, Control(), emit)
+    import routes
+    book = routes.RouteBook()
+
+    def emit_and_keep(kind, payload=None):
+        if kind == "navray_route":
+            book.record(payload["start"], payload["destination"], payload["end"], payload["legs"], payload["seconds"])
+            book.save()
+            print("route saved:", payload["start"], "->", payload["end"], flush=True)
+        emit(kind, payload)
+    runner = holder["runner"] = NavRayRunner(profile, backend, Control(), emit_and_keep)
+    runner.route_book = book
     # Open Nav-Ray ourselves if it is not showing: Tab for the interactive UI, then click NAV-RAY in the top menu.
     import navray
     reader = runner.detector.text_reader()

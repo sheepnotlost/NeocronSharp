@@ -791,6 +791,9 @@ class App:
                             "recycling":RecyclingRunner,"navray":NavRayRunner}[self.profile["operation"]]
             runner = runner_class(self.profile, self.backend, self.control,
                                   lambda kind, payload: self.events.put((kind, payload)))
+            if self.profile["operation"] == "navray":
+                import routes
+                self.route_book = runner.route_book = routes.RouteBook()
             self.worker = threading.Thread(target=runner.run, daemon=False, name="macro-sequence")
             self.worker.start()
         except (ValueError, RuntimeError) as exc:
@@ -843,6 +846,14 @@ class App:
                 except ValueError:pass
                 try:save_profile(self.profile_path,self.profile)
                 except (ValueError,OSError) as exc:self.report("Could not save material labels: "+str(exc))
+            elif kind == "navray_route":
+                try:
+                    entry = self.route_book.record(payload["start"], payload["destination"], payload["end"],
+                                                   payload["legs"], payload["seconds"])
+                    self.route_book.save()
+                    self.report(f"Route saved: {payload['start'] or '?'} to {payload['end'] or '?'} ({entry['walks']} walks).")
+                except (OSError, AttributeError) as exc:
+                    self.report("Could not save the route: "+str(exc))
             elif kind == "detected":
                 self.show_detected(payload)
             elif kind == "blueprint_cycle":

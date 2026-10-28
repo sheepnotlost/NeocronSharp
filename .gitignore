@@ -13,3 +13,4 @@ tech-counter/
 .env
 .env.*
 !.env.example
+routes.json

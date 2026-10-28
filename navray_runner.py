@@ -10,6 +10,7 @@ import numpy as np
 
 import navray
 import pathvision
+import routes
 from macro_core import Interrupted
 from vision_runner import VisualRunner
 
@@ -302,6 +303,11 @@ class NavRayRunner(VisualRunner):
         return cv2.resize(centre, (64, 36), interpolation=cv2.INTER_AREA).astype(np.int16)
 
     px_per_count = None
+    route_book = None            # a routes.RouteBook, set by the app/tool; None in tests
+    route_destination = ""
+    route_legs = ()
+    route_start = ""
+    route_hint = 0
 
     def calibrate_turn(self):
         """Measure how far the view slides per mouse count (negative = turning right slides the scene left).
@@ -483,8 +489,28 @@ class NavRayRunner(VisualRunner):
         self.wait(.05)
         return track, passed, reason
 
+    def finish_route(self, started):
+        """Hand the finished walk to whoever keeps the route library (a single event; no file access here)."""
+        end = self.area_name()
+        self.emit("navray_route", {"start": self.route_start, "destination": self.route_destination, "end": end,
+                                   "legs": list(self.route_legs), "seconds": self.clock() - started})
+
+    def area_name(self):
+        try:
+            return routes.read_area(self.detector.gray(self.frame()))
+        except Exception:                                  # OCR trouble must never stop a walk
+            return ""
+
     def walk(self):
         reader = self.detector.text_reader()
+        self.route_legs, self.route_start = [], self.area_name()
+        self.route_hint = 0
+        if self.route_book is not None:
+            self.route_hint = self.route_book.first_turn(self.route_start, self.route_destination)
+            known = self.route_book.best(self.route_start, self.route_destination)
+            if known:
+                self.emit("status", f"Nav-Ray: this route is known ({known['walks']} walks, best {known['seconds']}s, "
+                          f"{self.route_start} to {known.get('end')}).")
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
@@ -495,6 +521,7 @@ class NavRayRunner(VisualRunner):
         state = {"health": None, "health_checked": started, "last_path": started}
         track, lost, legs, turned, turns_in_row, stuck = None, 0, 0, 0, 0, 0
         self.last_turn = 0
+        recorded_turn = 0
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
         scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
@@ -532,11 +559,12 @@ class NavRayRunner(VisualRunner):
                         if back_where_it_began or searched >= SEARCH_COUNTS:
                             if seen_path:
                                 self.save_failure(Interrupted("The walk ended here."))
+                                self.finish_route(started)
                                 self.emit("done", "Nav-Ray: no more dashes all the way round. Arrived, or the route was lost.")
                                 return
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
-                        self.backend.move_relative(look*(last_side if seen_path else 1), 0)
+                        self.backend.move_relative(look*(last_side if seen_path else (self.route_hint or 1)), 0)
                         searched += look
                         if self.clock() - last_report >= REPORT_EVERY:
                             last_report = self.clock()
@@ -566,6 +594,9 @@ class NavRayRunner(VisualRunner):
                 leg_started = self.clock()
                 track, passed, reason = self.walk_leg(view, track, reader, state)
                 self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
+                self.route_legs.append({"turn": int(turned - recorded_turn), "seconds": round(self.clock() - leg_started, 1),
+                                        "dashes": passed, "reason": reason})
+                recorded_turn = turned
                 if reason == "stuck against something":
                     stuck += 1
                     if stuck > MAX_STUCK:
@@ -586,6 +617,7 @@ class NavRayRunner(VisualRunner):
         if self.profile["navray"].get("scan"):
             return self.scan()
         category, destination = navray.parse_destination(self.profile["navray"]["destination"])
+        self.route_destination = f"{category} > {destination}"
         reader = self.detector.text_reader()
         self.open_navray(reader)
         self.emit("status", f"Nav-Ray: choosing {category}.")
