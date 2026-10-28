@@ -212,6 +212,15 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] All 70 focused tests pass: `runtime\python.exe -m unittest tests.test_pathvision tests.test_navray tests.test_navray_runner tests.test_routes`. OCR checks needed access outside the sandbox; no Tk windows or game input. Full suite and portable ZIP were not run.
 - [ ] The revised detector has not been tested in a new live walk. Arrival remains ambiguous; zone changes/doors remain unsupported.
 
+## Nav-Ray obstacle and door recovery — 27 Oct, 23:07 and 23:11 recordings
+
+- [x] Matched the two recordings to macro.log. The Pepper Park walk ran against an obstacle for about 30 seconds; the Viarosso walk repeatedly swept for the path and then ran against a closed TECH DOOR. Both were stopped by focus loss, not successful arrivals.
+- [x] Detect lack of progress from background scenes over several seconds, aligning modest camera movement and ignoring the player and floor overlays. Do not count an intentional in-place turn as walking. Keep the existing short-term stillness check and bounded back-off recovery.
+- [x] When blocked, identify a targeted door using the real TECH DOOR label or OCR of a DOOR label, then send a guarded right-click in mouse-look, release it even on interruption, and look for the route again. A retry cooldown avoids immediately toggling a door. If no door is identified, use the existing back-off recovery.
+- [x] Add real recorded moving and blocked frames from both runs, and tests for recovery, door recognition at multiple scales, right-click, focus-loss release, and cooldown.
+- [x] All 80 focused tests pass: `runtime\python.exe -m unittest tests.test_pathvision tests.test_navray tests.test_navray_runner tests.test_routes`. No Tk windows or game input; full suite and ZIP were not run.
+- [ ] Live verification is still needed for obstacle recovery, right-click interaction, other door labels/colours and following the path through an opened door. Unlabeled doors and sector transitions are not established.
+
 ## Validation truth
 
 Saved game frames, OCR, simulated backend sequences, and UI/config tests have been used. No assistant-driven live game run is verified for these new changes. The Windows Computer Use helper currently returns `Transport closed`, including after reset/retry. Do not describe replayed tests or concept images as live game verification.

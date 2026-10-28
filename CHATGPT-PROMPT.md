@@ -62,10 +62,14 @@ Status (27 Oct 2026):
   52.7s and 63.9s show near-centre translucent dashes rejected by the character exclusion box and saturation
   cutoff. The detector now keeps clear dash shapes there and permits faint floor dashes with contrast >=16.
   Both frames are regression fixtures at 1280/1920/2560 widths; the revised detector still needs a live walk.
+- Two later recordings at 23:07:58 and 23:11:35 show running in place against an obstacle and a closed
+  TECH DOOR. The walk now compares background scenes over time to detect lack of progress despite animation,
+  and on a recognized door attempts a guarded right-click before the usual back-off. Tests use real frames;
+  opening doors and following through them are not yet verified live. Other labels and unlabeled doors remain uncertain.
 - Known weak spots:
   - "Arrived" is only a guess (no dashes after a full sweep), so any lost path ends the walk as "arrived".
   - Turning is jerky and can overshoot.
-  - Zone changes, doors, the subway and combat are not handled.
+  - Zone changes, the subway and combat are not handled. Labeled-door right-click recovery needs a live test.
   - The red HUD skin has not been tested since the latest changes.
   - The route library does not steer anything yet.
   - The game's own route data (`worlds\pak_worldroute.dat` in the game folder; zlib after a 16-byte header) is

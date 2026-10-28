@@ -39,7 +39,12 @@ def pathvision_find(frame):
 class FakeBackend:
     def __init__(self):
         self.events = []
-    def key(self, name, down):self.events.append(("key", name, down))
+        self.held_keys = set()
+    def key(self, name, down):
+        self.events.append(("key", name, down))
+        if down:self.held_keys.add(name)
+        else:self.held_keys.discard(name)
+    def button(self, name, down):self.events.append(("button", name, down))
     def move_relative(self, dx, dy):self.events.append(("rel", dx, dy))
     def scroll(self, notches):self.events.append(("scroll", notches))
     def release_all(self):self.events.append(("release",))
@@ -117,6 +122,131 @@ def turning_runner(sign, pixels_per_count=2.0, frame=STAIRS, stop_after=9):
 
 
 class WalkTests(unittest.TestCase):
+    def test_door_target_detected_on_real_blocked_frames(self):
+        for name in ("navray_blocked_door_47s.png", "navray_blocked_door_50s.png"):
+            frame = rgb(name)
+            for width in (1280, 1920, 2560):
+                with self.subTest(frame=name, width=width):
+                    scaled = cv2.resize(frame, (width, width*9//16))
+                    self.assertTrue(navray_runner.door_target(scaled, 70))
+        self.assertFalse(navray_runner.door_target(rgb("navray_blocked_pepper_44s.png"), 70))
+
+    def test_blocked_door_gets_one_guarded_right_click_without_mouse_movement(self):
+        runner, events = make_runner(lambda i: rgb("navray_blocked_door_50s.png"))
+        runner.dash_color = 70
+        self.assertTrue(runner.try_open_door(runner.detector.text_reader()))
+        self.assertEqual(runner.backend.events, [("button", "right", True), ("button", "right", False)])
+        self.assertTrue(any("door" in payload.lower() for kind, payload in events if kind == "status"))
+
+    def test_blockage_without_a_door_never_right_clicks(self):
+        runner, _ = make_runner(lambda i: rgb("navray_blocked_pepper_44s.png"))
+        runner.dash_color = 70
+        self.assertFalse(runner.try_open_door(runner.detector.text_reader()))
+        self.assertFalse(any(event[0] == "button" for event in runner.backend.events))
+
+    def test_ocr_can_recognise_another_door_label(self):
+        class DoorReader:
+            def read_words(self, gray, up=3):
+                return [("Security", 20, 20, 60, 10), ("Door", 90, 20, 40, 10)]
+        self.assertTrue(navray_runner.door_target(rgb("navray_blocked_pepper_44s.png"), 70, DoorReader()))
+
+    def test_walk_tries_a_door_before_backing_away(self):
+        frame = rgb("navray_blocked_door_50s.png")
+        runner, _ = make_runner(lambda i: frame)
+        runner.dash_color = 70
+        runner.area_name = lambda: ""
+        runner.calibrate_turn = lambda: -4.2
+        runner.vitals = lambda *args: None
+        view = pathvision_find(AHEAD)
+        runner.evaluate = lambda *args, **kwargs: (view, frame)
+        calls = []
+        def leg(view, track, reader, state, tether=False):
+            calls.append(1)
+            if len(calls) == 1:
+                return view, 0, "stuck against something"
+            raise Interrupted("test complete")
+        runner.walk_leg = leg
+        with self.assertRaisesRegex(Interrupted, "test complete"):
+            runner.walk()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([event for event in runner.backend.events if event[0] == "button"],
+                         [("button", "right", True), ("button", "right", False)])
+        events = runner.backend.events
+        click = events.index(("button", "right", True))
+        self.assertEqual(events[click - 1], ("key", "shift", False))
+        self.assertEqual(events[click + 2], ("key", "shift", True))
+        self.assertNotIn(("key", "s", True), runner.backend.events)
+
+    def test_a_failed_door_attempt_is_not_immediately_repeated(self):
+        frame = rgb("navray_blocked_door_50s.png")
+        runner, _ = make_runner(lambda i: frame)
+        runner.dash_color = 70
+        runner.area_name = lambda: ""
+        runner.calibrate_turn = lambda: -4.2
+        runner.vitals = lambda *args: None
+        view = pathvision_find(AHEAD)
+        runner.evaluate = lambda *args, **kwargs: (view, frame)
+        calls = []
+        def leg(view, track, reader, state, tether=False):
+            calls.append(1)
+            if len(calls) <= 2:
+                return view, 0, "stuck against something"
+            raise Interrupted("test complete")
+        runner.walk_leg = leg
+        with self.assertRaisesRegex(Interrupted, "test complete"):
+            runner.walk()
+        self.assertEqual([event for event in runner.backend.events if event[0] == "button"],
+                         [("button", "right", True), ("button", "right", False)])
+        self.assertIn(("key", "s", True), runner.backend.events)
+
+    def test_right_button_is_released_when_focus_is_lost_during_click(self):
+        runner, _ = make_runner(lambda i: rgb("navray_blocked_door_50s.png"))
+        runner.dash_color = 70
+        runner.backend.key("shift", True)
+        runner.wait = lambda seconds: (_ for _ in ()).throw(Interrupted("focus lost"))
+        with self.assertRaisesRegex(Interrupted, "focus lost"):
+            runner.try_open_door(runner.detector.text_reader())
+        self.assertEqual(runner.backend.events[-2:], [("button", "right", True), ("button", "right", False)])
+        self.assertNotIn("shift", runner.backend.held_keys)
+
+    def test_scene_comparison_finds_real_obstacles_but_not_forward_progress(self):
+        # 23:07:58: moving at 35-38s, then stuck running in place at 44-47s.
+        # 23:11:35: running against a closed door at 47-50s, with an animated vehicle.
+        pairs = (("navray_progress_pepper_35s.png", "navray_progress_pepper_38s.png", False),
+                 ("navray_blocked_pepper_44s.png", "navray_blocked_pepper_47s.png", True),
+                 ("navray_blocked_door_47s.png", "navray_blocked_door_50s.png", True))
+        for first, second, same in pairs:
+            with self.subTest(first=first, second=second):
+                a = NavRayRunner.scene_thumbnail(rgb(first))
+                b = NavRayRunner.scene_thumbnail(rgb(second))
+                self.assertEqual(NavRayRunner.same_scene(a, b), same)
+
+    def test_moving_animation_does_not_prevent_stuck_recovery(self):
+        # Alternate two real frames of the 23:07:58 obstacle. The animated player
+        # and swaying view defeat the old consecutive-frame difference check.
+        frames = (rgb("navray_blocked_pepper_44s.png"), rgb("navray_blocked_pepper_47s.png"))
+        runner, _ = make_runner(lambda i: frames[i % 2])
+        runner.px_per_count = -4.2
+        view = pathvision_find(AHEAD)
+        runner.find_dashes = lambda *args, **kwargs: view
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "stuck against something")
+        self.assertLess(runner.clock(), 6.0)
+        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+
+    def test_deliberate_turn_in_place_does_not_count_as_stuck_walking(self):
+        from unittest.mock import patch
+        view = pathvision_find(STAIRS)
+        runner, _ = make_runner(lambda i: STAIRS)
+        runner.px_per_count = -4.2
+        runner.find_dashes = lambda *args, **kwargs: view
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        with patch.object(navray_runner, "TETHER_SECONDS", 2.0):
+            _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "tether time limit")
+        self.assertIn(("key", "w", False), runner.backend.events)
+
     def test_a_real_turn_onto_pale_tiles_keeps_the_path_lined_up(self):
         # 22:24:13 video at 52.7s: the old detector lost these near-centre dashes
         # after turning and the walk backed out of an already aligned heading.
@@ -133,9 +263,9 @@ class WalkTests(unittest.TestCase):
         runner.walk()
         recorded = runner.backend.events
         self.assertIn(("key", "w", True), recorded)
-        self.assertEqual(recorded[-1], ("key", "w", False))
+        self.assertIn(("key", "w", False), recorded)
         self.assertIn(("key", "shift", True), recorded)                                    # running
-        self.assertEqual(recorded[-2:], [("key", "shift", False), ("key", "w", False)])    # and everything released
+        self.assertFalse(runner.backend.held_keys)                                            # everything released
         done = [p for k, p in events if k == "done"]
         self.assertEqual(len(done), 1)
         self.assertIn("arrived", done[0].lower())
@@ -277,13 +407,13 @@ class WalkTests(unittest.TestCase):
         recorded = runner.backend.events
         self.assertIn(("key", "s", True), recorded)                                # it backed off from the wall
         self.assertTrue(any("stuck" in p for k, p in events if k == "status"))      # and said so
-        self.assertEqual(recorded[-1], ("key", "w", False))
+        self.assertFalse(runner.backend.held_keys)
 
     def test_a_health_drop_stops_the_walk(self):
         runner, _ = make_runner(lambda i: np.roll(AHEAD, (i % 5)*4, axis=1), health=(972, 972, 800))   # a moving picture, dashes ahead
         with self.assertRaisesRegex(Interrupted, "Health dropped"):
             runner.walk()
-        self.assertEqual(runner.backend.events[-1], ("key", "w", False))
+        self.assertFalse(runner.backend.held_keys)
 
 
 class FocusTests(unittest.TestCase):

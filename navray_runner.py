@@ -44,6 +44,10 @@ SCAN_PX = 220            # how far the view sweeps per look while scanning all r
 SAME_VIEW = 9            # mean picture difference below which the view is back where the scan began
 END_SECONDS = 4.0        # no path for this long after seeing one = arrived (or the route ended)
 STUCK_SECONDS = 1.2       # the view not changing this long while walking means a wall: back off and look for the way round
+SCENE_SAMPLE_SECONDS = 1.0  # compare the background over several seconds, not only adjacent frames
+SCENE_STUCK_SECONDS = 3.0
+SCENE_HISTORY_SECONDS = 6.0
+DOOR_RETRY_SECONDS = 10.0  # do not immediately toggle a door again if the first interaction did not clear the obstruction
 MAX_STUCK = 6            # wall recoveries in one walk before giving up
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
@@ -60,6 +64,40 @@ def steer_step(error):
 
 def _bgr(frame):
     return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+
+def door_target(frame, color="green", reader=None):
+    """Is a door label near the crosshair? Called only after forward progress stops.
+
+    The in-game TECH DOOR label is often drawn across bright scenery where OCR misses
+    letters; its real-frame mask is a fallback. OCR also accepts other labels with
+    the complete word DOOR. Neither a route dash nor a generic obstacle is enough.
+    """
+    height, width = frame.shape[:2]
+    roi = frame[int(.12*height):int(.48*height), int(.30*width):int(.70*width)]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
+    low, high, _ = pathvision._hue_window(color)
+    hue, saturation, value = cv2.split(hsv)
+    match_hue = (hue >= low) & (hue <= high) if low <= high else ((hue >= low) | (hue <= high))
+    mask = (match_hue & (saturation >= 45) & (value >= 60)).astype(np.uint8)*255
+    template = cv2.imread(str(Path(__file__).parent / "assets" / "navray_tech_door.png"), cv2.IMREAD_GRAYSCALE)
+    if template is not None:
+        for adjustment in (.8, .9, 1.0, 1.1, 1.2):
+            scale = width/1920*adjustment
+            sample = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+            if sample.shape[0] <= mask.shape[0] and sample.shape[1] <= mask.shape[1]:
+                score = cv2.minMaxLoc(cv2.matchTemplate(mask, sample, cv2.TM_CCOEFF_NORMED))[1]
+                if score >= .56:
+                    return True
+    if reader is not None:
+        for image in (cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY), mask):
+            try:
+                words = reader.read_words(image, up=3)
+            except Exception:
+                continue
+            if any(re.sub(r"[^A-Z]", "", str(word[0]).upper()) == "DOOR" for word in words):
+                return True
+    return False
 
 
 def slide_pixels(first_gray, second_gray):
@@ -368,6 +406,28 @@ class NavRayRunner(VisualRunner):
         finally:
             self.backend.key(name, False)
 
+    def try_open_door(self, reader):
+        """Try the currently targeted door once, keeping mouse-look and focus guards."""
+        frame = self.frame()
+        if not door_target(frame, getattr(self, "dash_color", None) or "green", reader):
+            return False
+        self.emit("status", "Nav-Ray: door ahead; trying right-click.")
+        self.checkpoint()
+        running = "shift" in getattr(self.backend, "held_keys", ())
+        if running:
+            self.backend.key("shift", False)    # send an unmodified right-click; only release our own key
+        self.checkpoint()
+        self.backend.button("right", True)
+        try:
+            self.wait(.06)
+        finally:
+            self.backend.button("right", False)
+        self.wait(.8)  # allow the door animation to begin before looking for the route again
+        if running:
+            self.checkpoint()
+            self.backend.key("shift", True)
+        return True
+
     # ---- the walk ----
     def health(self, reader, frame):
         height, width = frame.shape[:2]
@@ -382,6 +442,32 @@ class NavRayRunner(VisualRunner):
         height, width = frame.shape[:2]
         centre = cv2.cvtColor(frame[int(.3*height):int(.75*height), int(.3*width):int(.7*width)], cv2.COLOR_RGB2GRAY)
         return cv2.resize(centre, (64, 36), interpolation=cv2.INTER_AREA).astype(np.int16)
+
+    @staticmethod
+    def scene_thumbnail(frame):
+        """Background above the character and floor overlays, for longer-term progress checks."""
+        height, width = frame.shape[:2]
+        scene = frame[int(.15*height):int(.48*height), int(.23*width):int(.82*width)]
+        gray = cv2.cvtColor(scene, cv2.COLOR_RGB2GRAY)
+        return cv2.resize(gray, (300, 120), interpolation=cv2.INTER_AREA).astype(np.float32)
+
+    @staticmethod
+    def same_scene(first, second):
+        """Match a previous scene after compensating for modest camera movement.
+
+        A mostly unchanged background over several seconds of forward input indicates
+        no progress even when the character animates and the camera sways. Unclear
+        alignments are not evidence of a blockage.
+        """
+        if first.std() < 4 or second.std() < 4:
+            return False
+        (dx, dy), response = cv2.phaseCorrelate(first, second)
+        if response < .35 or abs(dx) > 80 or abs(dy) > 30:
+            return False
+        aligned = cv2.warpAffine(second, np.float32([[1, 0, -dx], [0, 1, -dy]]),
+                                 (300, 120), borderMode=cv2.BORDER_REPLICATE)
+        difference = np.abs(first[10:-10, 20:-20] - aligned[10:-10, 20:-20])
+        return bool(np.median(difference) < 3 and np.mean(difference > 10) < .18)
 
     px_per_count = None
     route_book = None            # a routes.RouteBook, set by the app/tool; None in tests
@@ -537,6 +623,7 @@ class NavRayRunner(VisualRunner):
         self.backend.key("w", True)
         passed, last_y, lost, reason = 0, None, 0, "time"
         last_error, seen_at = None, started
+        scene_history, next_scene = [], started
         state["still_mark"] = started                      # stuck time counts only while walking, but carries over from leg to leg
         try:
             while self.clock() - started < (TETHER_SECONDS if tether else LEG_SECONDS):
@@ -577,7 +664,9 @@ class NavRayRunner(VisualRunner):
                         self.correct_while_walking(seen, frame)
                 thumb = self.thumbnail(frame)
                 previous = state.get("thumb")
-                if previous is not None and float(np.abs(thumb - previous).mean()) < 1.5:
+                if not forward:
+                    state["still_time"] = 0.0
+                elif previous is not None and float(np.abs(thumb - previous).mean()) < 1.5:
                     state["still_time"] = state.get("still_time", 0.0) + max(0.0, now - state["still_mark"])
                 else:
                     state["still_time"] = 0.0
@@ -586,9 +675,24 @@ class NavRayRunner(VisualRunner):
                     state["still_time"] = 0.0
                     reason = "stuck against something"
                     break
+                if not forward:
+                    # Turning in place is intentional and cannot establish lack of walking progress.
+                    scene_history, next_scene = [], now
+                elif now >= next_scene:
+                    scene = self.scene_thumbnail(frame)
+                    scene_history = [(when, old) for when, old in scene_history
+                                     if now - when <= SCENE_HISTORY_SECONDS]
+                    if any(now - when >= SCENE_STUCK_SECONDS and self.same_scene(old, scene)
+                           for when, old in scene_history):
+                        state["still_time"] = 0.0
+                        reason = "stuck against something"
+                        break
+                    scene_history.append((now, scene))
+                    next_scene = now + SCENE_SAMPLE_SECONDS
                 self.sleep(.005)
         finally:
-            self.backend.key("w", False)
+            if "w" in self.backend.held_keys:
+                self.backend.key("w", False)
         self.wait(.05)
         return track, passed, reason if reason != "time" or not tether else "tether time limit"
 
@@ -625,6 +729,7 @@ class NavRayRunner(VisualRunner):
         track, lost, legs, turned, turns_in_row, stuck = None, 0, 0, 0, 0, 0
         self.last_turn = 0
         recorded_turn = 0
+        door_tried_at = float("-inf")
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
         scanning = True                                 # until the first dashes are found, look all round for them
         last_report = started
@@ -703,6 +808,10 @@ class NavRayRunner(VisualRunner):
                                         "dashes": passed, "reason": reason})
                 recorded_turn = turned
                 if reason == "stuck against something":
+                    if self.clock() - door_tried_at >= DOOR_RETRY_SECONDS and self.try_open_door(reader):
+                        door_tried_at = self.clock()
+                        track, lost, scanning, self.last_turn = None, 0, False, 0
+                        continue
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
@@ -714,8 +823,9 @@ class NavRayRunner(VisualRunner):
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     self.emit("status", f"Nav-Ray: stuck ({stuck}); backed off, sweeping for the way round.")
         finally:
-            self.backend.key("shift", False)
-            self.backend.key("w", False)
+            for key in ("shift", "w", "s"):
+                if key in self.backend.held_keys:
+                    self.backend.key(key, False)
 
     # ---- sequence ----
     def execute(self):

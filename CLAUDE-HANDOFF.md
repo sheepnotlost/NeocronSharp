@@ -85,7 +85,7 @@ gogo.py + construction_runner.refill_from_gogo/enter_quantity/inventory_destinat
 
 ## Nav-Ray auto-walk (27 Oct)
 
-navray.py (window/list reading), pathvision.py (dashed path detection), navray_runner.py (setup + steering loop), windows_backend.move_relative, Nav-Ray tab in app.py. One verified live success: Trader Directory > Weapons (22:10 video + log). The Viarosso SEC-3 walk in `2026-10-27 22-24-13.mp4` reached a tiled bend, then lost visible dashes after turns and stopped at 22:25:19. Its 52.7s/63.9s frames exposed the character exclusion and saturation cutoff rejecting translucent floor dashes. The revised detector keeps clear dash shapes near the character and accepts faint floor dashes only with contrast >=16; real-frame regressions cover 1280/1920/2560 widths. This latest fix is offline-verified only; route completion, reliable arrival and red HUD behaviour need further live evidence. Spec and plan: docs/superpowers/; current takeover notes: CHATGPT-PROMPT.md.
+navray.py (window/list reading), pathvision.py (dashed path detection), navray_runner.py (setup + steering loop), windows_backend.move_relative, Nav-Ray tab in app.py. One verified live success: Trader Directory > Weapons (22:10 video + log). The 23:07:58 and 23:11:35 recordings show running in place at an obstacle and a closed TECH DOOR. The runner now checks background scene similarity over several seconds to detect blocked motion despite animation, and tries a guarded right-click on a recognized door before backing off. Both changes use real-frame regressions and have not been live-verified; unlabeled doors, sector transitions, reliable arrival and red HUD behaviour remain uncertain. See TASKS.md and CHATGPT-PROMPT.md for prior pale-tile fixes and current status.
 
 ## Code map
 
