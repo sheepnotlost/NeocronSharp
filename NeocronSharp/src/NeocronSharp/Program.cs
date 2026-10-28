@@ -102,6 +102,7 @@ internal static class Program
         }
         using Form form = args.Contains("--recorder") ? new CoordinateRecorderForm(args.Contains("--smoke-ui") ? Path.Combine(ProjectPaths.Root,"logs","recorder-test") : null) :
             args.Contains("--navigation") ? new MainForm() : new TrackerForm();
+        if (args.Contains("--embedded") && form is TrackerForm embedded) EmbeddedHost.Attach(embedded, Console.In);
         int smokeExitCode = 0;
         if (args.Contains("--smoke-ui"))
         {

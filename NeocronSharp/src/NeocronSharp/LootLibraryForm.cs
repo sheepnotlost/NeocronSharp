@@ -37,16 +37,15 @@ internal sealed class LootLibraryForm : Form
         export.Click += (_, _) => Export();
         FormClosed += (_, _) => _debounce.Dispose();
         Filter();
-        if (template is { } id)
-        {
-            _onlyLoot.Checked = false; Filter();
-            Shown += (_, _) =>
-            {
-                foreach (DataGridViewRow row in _npcs.Rows) if (row.Tag is LootNpc npc && npc.TemplateId == id)
-                { _npcs.ClearSelection(); _npcs.CurrentCell = row.Cells[0]; row.Selected = true; _npcs.FirstDisplayedScrollingRowIndex = row.Index; Select(npc); break; }
-            };
-        }
+        if (template is { } id) { _onlyLoot.Checked = false; Shown += (_, _) => SelectTemplate(id); }
         AppTheme.Bind(this);
+    }
+    /// <summary>Show every template (not only assigned loot tables) and select <paramref name="id"/>.</summary>
+    internal void SelectTemplate(int id)
+    {
+        if (_onlyLoot.Checked || _search.TextLength > 0) { _search.Text = ""; _debounce.Stop(); _onlyLoot.Checked = false; Filter(); }
+        foreach (DataGridViewRow row in _npcs.Rows) if (row.Tag is LootNpc npc && npc.TemplateId == id)
+        { _npcs.ClearSelection(); _npcs.CurrentCell = row.Cells[0]; row.Selected = true; _npcs.FirstDisplayedScrollingRowIndex = row.Index; Select(npc); break; }
     }
     private static DataGridView Grid() => new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
         AllowUserToResizeRows = false, RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, RowTemplate = { Height = 28 }, EnableHeadersVisualStyles = false };

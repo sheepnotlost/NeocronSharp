@@ -181,7 +181,7 @@ class CounterUiTests(unittest.TestCase):
     def test_embedded_tab_has_shared_root_and_no_registered_hotkeys(self):
         app = self.app
         self.assertEqual([app.tabs.tab(t, "text") for t in app.tabs.tabs()],
-                         ["Research", "Construction", "Recycling", "Nav-Ray", "Tech Counter", "Tracker & Map"])
+                         ["Research", "Construction", "Recycling", "Nav-Ray", "Tech Counter", "Tracker", "Quests", "Loot library", "Plugins"])
         self.assertIs(app.counter.root, self.root)
         self.assertFalse(hasattr(app.counter, "hotkeys"))
         self.assertEqual(app.counter.scan_btn.winfo_manager(), "")

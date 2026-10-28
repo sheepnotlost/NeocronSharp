@@ -28,9 +28,10 @@ SEARCH_LABELS={"fast":"Fast — datacube icons","all_cells":"Thorough — every 
 
 
 class App:
-    def __init__(self, root, profile_path=PROFILE_PATH, backend=None):
+    def __init__(self, root, profile_path=PROFILE_PATH, backend=None, tracker=None):
         self.root = root
         self.backend = backend if backend is not None else WindowsBackend()
+        self.tracker = tracker  # neocronsharp_link.EmbeddedTracker; None leaves the NeocronSharp tabs empty (tests).
         self.profile_path = Path(profile_path)
         self.profile = default_profile()
         self.events = queue.Queue()
@@ -98,13 +99,14 @@ class App:
         self.recycling_tab = ttk.Frame(self.tabs)
         self.navray_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
-        self.sharp_tab = ttk.Frame(self.tabs)
+        self.sharp_tabs = {page: ttk.Frame(self.tabs) for page in ("Tracker", "Quests", "Loot library", "Plugins")}
         self.tabs.add(self.research_tab, text="Research")
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
         self.tabs.add(self.navray_tab, text="Nav-Ray")
         self.tabs.add(self.counter_tab, text="Tech Counter")
-        self.tabs.add(self.sharp_tab, text="Tracker & Map")
+        for page, tab in self.sharp_tabs.items():
+            self.tabs.add(tab, text=page)
         scroll_host = ttk.Frame(self.research_tab)
         scroll_host.pack(fill="both", expand=True)
         canvas = tk.Canvas(scroll_host, background="#f3f5f5", highlightthickness=0, height=420)
@@ -201,7 +203,7 @@ class App:
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
-        self.tabs.bind("<<NotebookTabChanged>>",lambda e:self.sync_start_button())
+        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.sync_start_button(),self.show_sharp_page()))
 
     def install_responsive_text(self):
         """Wrap paragraphs to their allocated width, including after skin changes.
@@ -242,19 +244,45 @@ class App:
         walk(self.root)
 
     def build_sharp_tab(self):
-        """NeocronSharp (C#): tracker, sector map, recorder, navigation, loot, environment, quests and plugins.
-        It runs in its own windows; this tab only opens them."""
+        """NeocronSharp (C#) pages inside the suite: Tracker (NPC/player list, sector map, loot), Quests and Plugins.
+        One embedded tracker process moves between these tabs; the coordinate recorder and point navigation open in
+        their own windows from the Tracker tab's bar."""
         import neocronsharp_link
-        host=ttk.Frame(self.sharp_tab,padding=12);host.pack(fill="both",expand=True)
-        host.columnconfigure(0,weight=1)
-        ttk.Label(host,text="NPC/player tracker, sector map, loot, quests, plugins.").grid(row=0,column=0,columnspan=2,sticky="w")
-        buttons=ttk.Frame(host);buttons.grid(row=1,column=0,columnspan=2,sticky="w",pady=(10,0))
-        for index,(label,arguments) in enumerate(neocronsharp_link.WINDOWS):
-            button=ttk.Button(buttons,text=label,command=lambda arguments=arguments:self.open_sharp(arguments))
-            button.grid(row=0,column=index,sticky="w",padx=(0,8))
-        ttk.Button(buttons,text="Build",command=self.build_sharp).grid(row=0,column=len(neocronsharp_link.WINDOWS),sticky="w")
         self.sharp_status=tk.StringVar(value=neocronsharp_link.status())
-        ttk.Label(host,textvariable=self.sharp_status,wraplength=520).grid(row=2,column=0,columnspan=2,sticky="w",pady=(10,0))
+        self.sharp_hosts={}
+        for page,tab in self.sharp_tabs.items():
+            bar=ttk.Frame(tab,padding=(0,6));bar.pack(fill="x")
+            if page=="Tracker":
+                for label,arguments in neocronsharp_link.WINDOWS[1:]:
+                    ttk.Button(bar,text=label,command=lambda arguments=arguments:self.open_sharp(arguments)).pack(side="left",padx=(0,8))
+                ttk.Button(bar,text="Build",command=self.build_sharp).pack(side="left",padx=(0,8))
+            ttk.Label(bar,textvariable=self.sharp_status,wraplength=400).pack(side="left",fill="x",expand=True)
+            # An empty native window for NeocronSharp to sit in; it follows this frame's size.
+            host=tk.Frame(tab,background="#202325",highlightthickness=0,borderwidth=0);host.pack(fill="both",expand=True)
+            self.sharp_hosts[page]=host
+
+    def selected_sharp_page(self):
+        return next((page for page,tab in getattr(self,"sharp_tabs",{}).items() if self.tabs.select()==str(tab)),None)
+
+    def show_sharp_page(self):
+        page=self.selected_sharp_page()
+        if page is None or self.tracker is None:return
+        if not self.tracker.running():self.fit_sharp_pages()
+        self.root.update_idletasks()
+        try:
+            self.tracker.show(self.sharp_hosts[page].winfo_id(),page)
+        except (RuntimeError,OSError) as exc:
+            self.sharp_status.set(str(exc))
+
+    def fit_sharp_pages(self):
+        """Grow (never shrink) the window so the tracker's list and sector map have room, within the screen."""
+        if self.root.state()!="normal":return
+        width=min(max(self.root.winfo_width(),1500),self.root.winfo_screenwidth()-40)
+        height=min(max(self.root.winfo_height(),1180),self.root.winfo_screenheight()-80)
+        if (width,height)!=(self.root.winfo_width(),self.root.winfo_height()):
+            x=max(0,min(self.root.winfo_x(),self.root.winfo_screenwidth()-width-20))
+            y=max(0,min(self.root.winfo_y(),self.root.winfo_screenheight()-height-60))
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
 
     def open_sharp(self,arguments=()):
         import neocronsharp_link
@@ -267,10 +295,12 @@ class App:
     def build_sharp(self):
         import neocronsharp_link
         self.sharp_status.set("Building NeocronSharp...");self.root.update_idletasks()
+        if self.tracker is not None:self.tracker.close()  # Its running files would block the copy into dist.
         try:
             self.sharp_status.set(neocronsharp_link.build())
         except (RuntimeError,OSError) as exc:
             self.sharp_status.set(str(exc))
+        self.show_sharp_page()
 
     def build_navray_tab(self):
         host=ttk.Frame(self.navray_tab,padding=12);host.pack(fill="both",expand=True)
@@ -583,7 +613,7 @@ class App:
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
         browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
-                 or self.tabs.select()==str(getattr(self,"sharp_tab","")))
+                 or self.selected_sharp_page() is not None)
         self.start_button.configure(state="disabled" if browser else "normal")
 
     def materials_for(self,key):
@@ -681,8 +711,8 @@ class App:
     def collect(self):
         if self.tabs.select()==str(self.counter_tab):
             raise ValueError("Tech Counter uses its own scan settings. Click Start in 3 seconds to scan.")
-        if self.tabs.select()==str(self.sharp_tab):
-            raise ValueError("Tracker & Map opens NeocronSharp in its own window.")
+        if self.selected_sharp_page() is not None:
+            raise ValueError(f"{self.selected_sharp_page()} shows NeocronSharp; Start is for the macro tabs.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
@@ -859,6 +889,9 @@ class App:
         self.log.configure(state="disabled")
 
     def poll(self):
+        page=self.tracker.take_page() if self.tracker is not None else None
+        if page in getattr(self,"sharp_tabs",{}) and not self.locked():
+            self.tabs.select(self.sharp_tabs[page])  # NeocronSharp switched pages itself, e.g. NPC quests.
         while True:
             try:
                 kind, payload = self.events.get_nowait()
@@ -932,6 +965,8 @@ class App:
             return
         self.backend.release_all()
         self.notify_stop()
+        if self.tracker is not None:
+            self.tracker.close()  # Leaves the suite's window before Tk destroys it.
         self.root.destroy()
 
 
@@ -970,7 +1005,8 @@ def main():
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Neocron.MacroSuite")
     root = tk.Tk()
     try:
-        app = App(root, backend=backend)
+        from neocronsharp_link import EmbeddedTracker
+        app = App(root, backend=backend, tracker=EmbeddedTracker())
         if args.smoke_ui:
             root.withdraw()
             root.update_idletasks()

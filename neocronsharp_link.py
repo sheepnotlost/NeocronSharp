@@ -8,6 +8,7 @@ plugins. It runs as its own process; the suite only starts it. Nothing here send
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -21,6 +22,8 @@ WINDOWS = (
     ("Coordinate recorder", ("--recorder",)),
     ("Point navigation", ("--navigation",)),
 )
+# The tracker window's pages, each shown in its own suite tab.
+PAGES = ("Tracker", "Quests", "Loot library", "Plugins")
 
 
 def status():
@@ -29,7 +32,7 @@ def status():
         return "NeocronSharp is not built yet. Use Build."
     if not dotnet_desktop_ready():
         return "Install the .NET 9 Desktop Runtime to open NeocronSharp."
-    return "Ready. Opens in its own window."
+    return "Ready."
 
 
 def dotnet_desktop_ready():
@@ -49,6 +52,65 @@ def open_window(arguments=(), popen=subprocess.Popen):
     if not EXECUTABLE.exists():
         raise RuntimeError("NeocronSharp is not built yet. Use Build (needs the .NET 9 SDK).")
     return popen(command(arguments), cwd=str(EXECUTABLE.parent))
+
+
+class EmbeddedTracker:
+    """One NeocronSharp tracker process shown inside the suite's Tracker, Quests and Plugins tabs.
+
+    It starts on first use with --embedded and takes one command per line on stdin (see EmbeddedHost.cs):
+    the window handle of the tab to sit in, and the page to show.
+    """
+
+    def __init__(self, popen=subprocess.Popen):
+        self.popen = popen
+        self.process = None
+        self.page = None  # A page NeocronSharp switched to itself, for the suite to follow.
+
+    def running(self):
+        return self.process is not None and self.process.poll() is None
+
+    def take_page(self):
+        page, self.page = self.page, None
+        return page
+
+    def listen(self, stdout):
+        """NeocronSharp writes "page <name>" when it changes page itself (e.g. its NPC quests button)."""
+        for line in stdout:
+            if line.startswith("page "):
+                self.page = line[5:].strip()
+
+    def show(self, parent, page):
+        """Put the tracker into window handle `parent` on `page`, starting it if needed. Raises RuntimeError."""
+        if not self.running():
+            if not EXECUTABLE.exists():
+                raise RuntimeError("NeocronSharp is not built yet. Use Build (needs the .NET 9 SDK).")
+            self.process = self.popen(command(("--embedded",)), cwd=str(EXECUTABLE.parent), stdin=subprocess.PIPE,
+                                      stdout=subprocess.PIPE, text=True)
+            if self.process.stdout is not None:
+                threading.Thread(target=self.listen, args=(self.process.stdout,), daemon=True).start()
+        self.send(f"parent {int(parent)}")
+        self.send(f"page {page}")
+
+    def send(self, line):
+        try:
+            self.process.stdin.write(line + "\n")
+            self.process.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("NeocronSharp closed. Open the tab again to restart it.") from exc
+
+    def close(self, wait=2.0):
+        """Ask the tracker to leave the suite's window and exit; stop it if it does not."""
+        if not self.running():
+            return
+        try:
+            self.send("quit")
+            self.process.stdin.close()
+        except (RuntimeError, OSError, ValueError):
+            pass
+        try:
+            self.process.wait(timeout=wait)
+        except subprocess.TimeoutExpired:
+            self.process.terminate()
 
 
 def build(run=subprocess.run):

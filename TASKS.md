@@ -9,6 +9,8 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Merge the C# NeocronSharp app (tracker/sector map, coordinate recorder, point navigation, loot, environment, quests, plugins) into `NeocronSharp/`, unchanged in features; open it from a new Tracker & Map tab, Open NPC Tracker.cmd or Open Coordinate Recorder.cmd.
 - [x] Fix its game-client lookup for the merged folder; build the example plugins from the solution. 100 C# tests, 318 Python tests and the UI smoke check pass.
 - [x] Rename the project, docs and GitHub repository to NeocronSharp (https://github.com/sheepnotlost/NeocronSharp).
+- [x] Show NeocronSharp's Tracker, Quests and Plugins pages inside the suite as its own tabs (replacing Tracker & Map): one `--embedded` process re-parented into the selected tab, following its size; the suite's tab follows NeocronSharp's own page changes (NPC quests); the window grows to fit; recorder, point navigation and Build sit in the Tracker tab's bar. Verified live with screenshots of all three pages (52 NPCs read in Plaza 1).
+- [x] Loot library is its own page and suite tab, next to Quests (loads the game's loot definitions the first time it opens); the tracker's Loot library button opens that tab on the tracked NPC. Not yet checked live.
 
 ### Research text wrapping and resizable activity log — 27 October 2026
 

@@ -4,10 +4,11 @@ One program, two engines, started from **Launch.cmd**:
 
 - **Screen automation (Python, this folder):** Research, Construction, Recycling, Nav-Ray auto-walk and Tech Counter
   tabs. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
-- **Tracker & Map (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map, coordinate recorder, point
-  navigation, loot library, environment/BSP export, quest browser and plugins. Reads the game client's memory read-only
-  (only the fingerprinted build) and runs in its own windows. Open it from the **Tracker & Map** tab, or with
-  **Open NPC Tracker.cmd** / **Open Coordinate Recorder.cmd**. It needs the .NET 9 Desktop Runtime; **Build** in that tab
+- **Tracker, Quests, Loot library and Plugins (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map,
+  environment/BSP export, quest browser, loot library and plugins, shown inside the suite's **Tracker**, **Quests**, **Loot library** and **Plugins**
+  tabs (one embedded NeocronSharp process; the window grows to fit it). The coordinate recorder and point navigation open
+  in their own windows from the Tracker tab's bar, or with **Open NPC Tracker.cmd** / **Open Coordinate Recorder.cmd**.
+  Reads the game client's memory read-only (only the fingerprinted build). It needs the .NET 9 Desktop Runtime; **Build** in the Tracker tab
   (or `dotnet build NeocronSharp\NeocronSharp.sln -c Release`) rebuilds it with the .NET 9 SDK. Its own docs:
   [NeocronSharp/README.md](NeocronSharp/README.md), [NeocronSharp/SPEC.md](NeocronSharp/SPEC.md),
   [NeocronSharp/PLUGINS.md](NeocronSharp/PLUGINS.md).

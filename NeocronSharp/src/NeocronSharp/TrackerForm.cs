@@ -36,6 +36,8 @@ internal sealed class TrackerForm : Form
     private readonly QuestBrowser _questBrowser = new();
     private readonly PluginHost _pluginHost;
     private PluginBrowser? _pluginBrowser;
+    private readonly TabPage _lootTab = new("Loot library");
+    private LootLibraryForm? _lootPage;
     private readonly ComboBox _skins = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private bool _skinEvidence;
     private LootCatalog? _loot;
@@ -175,7 +177,9 @@ internal sealed class TrackerForm : Form
         _pluginHost.Discover(); _pluginHost.StartEnabled();
         _pluginBrowser = new PluginBrowser(_pluginHost);
         var pluginsTab = new TabPage("Plugins"); pluginsTab.Controls.Add(_pluginBrowser);
-        _mainTabs.TabPages.Add(trackerTab); _mainTabs.TabPages.Add(questsTab); _mainTabs.TabPages.Add(pluginsTab); Controls.Add(_mainTabs);
+        _mainTabs.TabPages.Add(trackerTab); _mainTabs.TabPages.Add(questsTab); _mainTabs.TabPages.Add(_lootTab); _mainTabs.TabPages.Add(pluginsTab); Controls.Add(_mainTabs);
+        // The loot catalog reads the game's files, so the Loot library page loads the first time it is opened.
+        _mainTabs.SelectedIndexChanged += (_, _) => { if (_mainTabs.SelectedTab == _lootTab) LootPage(); };
         AddColumn("Name", 230, fill: true); AddColumn("Rank", 95); AddColumn("HP (client)", 160); AddColumn("Weapon", 300);
         AddColumn("Health %", 80); AddColumn("Distance", 85); AddColumn("Faction", 175); AddColumn("Direction", 90); AddColumn("Type", 80);
         _grid.Columns[0].DefaultCellStyle.Font = _nameFont;
@@ -229,6 +233,24 @@ internal sealed class TrackerForm : Form
         AppTheme.Bind(this);
     }
 
+    /// <summary>Inside the suite (see <see cref="EmbeddedHost"/>): no frame or tab strip, since the suite's own
+    /// Tracker/Quests/Plugins tabs choose the page. Starts off-screen until the suite gives it a parent window.</summary>
+    public void UseEmbeddedLayout()
+    {
+        FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; MinimumSize = Size.Empty;
+        StartPosition = FormStartPosition.Manual; Location = new Point(-32000, -32000);
+        _mainTabs.Appearance = TabAppearance.FlatButtons; _mainTabs.ItemSize = new Size(0, 1); _mainTabs.SizeMode = TabSizeMode.Fixed;
+        if (_mainTabs.TabPages[0].Controls[0] is TableLayoutPanel trackerLayout) trackerLayout.Padding = new Padding(8);
+        // Tell the suite when a page opens from inside (NPC quests), so its tab row follows.
+        _mainTabs.SelectedIndexChanged += (_, _) => { Console.Out.WriteLine($"page {_mainTabs.SelectedTab?.Text}"); Console.Out.Flush(); };
+    }
+
+    public void ShowPage(string name)
+    {
+        foreach (TabPage page in _mainTabs.TabPages)
+            if (string.Equals(page.Text, name, StringComparison.OrdinalIgnoreCase)) _mainTabs.SelectedTab = page;
+    }
+
     private void InspectPlayer()
     {
         if (_snapshot == null || _tracking.Lost || _tracking.Tracked is not { Player: not null } entity)
@@ -246,7 +268,7 @@ internal sealed class TrackerForm : Form
     }
     internal void VerifyPluginView()
     {
-        _mainTabs.SelectedIndex = 2;
+        ShowPage("Plugins");
         _pluginBrowser!.VerifyEvidence();
         if (_mainTabs.SelectedTab?.Text != "Plugins" || !_pluginBrowser.Visible)
             throw new InvalidOperationException("Plugins tab did not open.");
@@ -266,11 +288,29 @@ internal sealed class TrackerForm : Form
         try { return _loot = new LootCatalog(string.IsNullOrEmpty(_mapInstall) ? Path.GetDirectoryName(ProjectPaths.Client)! : _mapInstall); }
         catch (Exception error) { _lootError = error.Message; return null; }
     }
+    /// <summary>The Loot library tab's page, created on first use. Null (with the reason shown on the tab) when the
+    /// game's loot definitions cannot be read.</summary>
+    private LootLibraryForm? LootPage()
+    {
+        if (_lootPage is { IsDisposed: false }) return _lootPage;
+        _lootTab.Controls.Clear();
+        var catalog = Loot();
+        if (catalog == null)
+        {
+            _lootTab.Controls.Add(new Label { Text = "Loot definitions could not be loaded: " + _lootError, Dock = DockStyle.Fill, Padding = new Padding(12) });
+            return null;
+        }
+        _lootPage = new LootLibraryForm(catalog) { TopLevel = false, FormBorderStyle = FormBorderStyle.None, Dock = DockStyle.Fill, MinimumSize = Size.Empty };
+        _lootTab.Controls.Add(_lootPage); _lootPage.Show();
+        return _lootPage;
+    }
+    /// <summary>Loot library button: open the Loot library tab on the tracked NPC's template.</summary>
     private void OpenLoot()
     {
-        var catalog = Loot();
-        if (catalog == null) { MessageBox.Show(this, "Loot definitions could not be loaded: " + _lootError); return; }
-        new LootLibraryForm(catalog, _tracking.Tracked?.Stats?.TemplateId).Show(this);
+        _mainTabs.SelectedTab = _lootTab;
+        var page = LootPage();
+        if (page == null) { MessageBox.Show(this, "Loot definitions could not be loaded: " + _lootError); return; }
+        if (_tracking.Tracked?.Stats?.TemplateId is int template) page.SelectTemplate(template);
     }
     private void OpenEnvironment()
     {
