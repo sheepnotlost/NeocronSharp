@@ -379,6 +379,29 @@ class WalkTests(unittest.TestCase):
         w = [e[2] for e in runner.backend.events if e[:2] == ("key", "w")]
         self.assertEqual(w, [True, False])                         # held all the way through, let go at the end
 
+    def test_one_misread_location_name_is_not_a_new_zone(self):
+        # Live (28 Oct, 18:08): a garbled reading of the Location ended the push towards the zone line early.
+        readings = iter(["PLAZA SEC-2", "PLAZA SEC-2", "_PLAC-2_J", "PLAZA SEC-2", "", "PLAZA SEC-2", "PLAZA SEC-3",
+                         "PLAZA SEC-3"])
+        runner, _ = make_runner(lambda i: DARK)
+        runner.area_name = lambda: next(readings)
+        state, results = {}, []
+        for second in range(8):
+            results.append(runner.zone_changed(state, float(second)))
+        self.assertEqual(results, [False]*7 + [True])             # only the second reading of PLAZA SEC-3 counts
+
+    def test_a_wall_ends_the_push_towards_a_zone_line(self):
+        # Live (28 Oct, 18:08): the corridor bent before the zone line and the push ran into the corner.
+        runner, _ = make_runner(lambda i: AHEAD if i <= 3 else DARK)        # an unchanging view: a wall
+        runner.px_per_count = -4.2
+        runner.zone_seen = 0.0
+        runner.area_name = lambda: "PLAZA SEC-2"
+        view = pathvision_find(AHEAD)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "stuck against something")
+        self.assertLess(runner.clock(), navray_runner.ZONE_PUSH_SECONDS)
+
     def test_away_from_a_zone_line_losing_the_dashes_still_stops_at_once(self):
         runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))
         runner.px_per_count = -4.2
