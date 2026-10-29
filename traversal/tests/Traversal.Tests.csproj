@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Traversal engine tests: run with `dotnet run -c Release` (needs the local Neocron install for the world tests). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DotRecast.Recast.Toolset" Version="2025.2.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\NeocronSharp\src\NeocronSharp.Core\NeocronSharp.Core.csproj" />
+  </ItemGroup>
+  <!-- The engine's types are internal: compile its sources (all but its Program.cs) into the tests. -->
+  <ItemGroup>
+    <Compile Include="..\*.cs" Exclude="..\Program.cs" LinkBase="Engine" />
+    <Compile Include="..\..\NeocronSharp\src\NeocronSharp\PlayerReader.cs" Link="Linked\PlayerReader.cs" />
+    <Compile Include="..\..\NeocronSharp\src\NeocronSharp\Native.cs" Link="Linked\Native.cs" />
+    <Compile Include="..\..\NeocronSharp\src\NeocronSharp\EntityReader.cs" Link="Linked\EntityReader.cs" />
+  </ItemGroup>
+</Project>

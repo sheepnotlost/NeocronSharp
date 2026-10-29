@@ -57,13 +57,22 @@ internal sealed class EnvironmentForm : Form
         _status.Text = $"{_catalog.Areas.Count:N0} area definitions available. Load an area or scan the full installation.\nThe macro-suite mapping layer keeps 3D height and transition metadata; map-image pixels are never assumed walkable.";
         FormClosing += async (_, e) =>
         {
-            if (_closing) return; _closing = true; _cancel.Cancel();
-            if (_running is { IsCompleted: false }) { e.Cancel = true; await _running; Close(); }
+            var done = Shutdown();
+            if (done.IsCompleted) return;
+            e.Cancel = true; await done; Close();
         };
         FormClosed += (_, _) => _cancel.Dispose(); AppTheme.Bind(this);
         Shown += (_, _) => SelectArea(_currentSector);
     }
-    private void SelectArea(int worldId)
+    /// <summary>Cancels a scan and waits for the running load or scan. The tracker calls this before it closes,
+    /// since an environment page inside it is not closed on its own.</summary>
+    internal Task Shutdown()
+    {
+        if (!_closing) { _closing = true; _cancel.Cancel(); }
+        return _running is { IsCompleted: false } running ? running : Task.CompletedTask;
+    }
+    /// <summary>Selects the current sector's row, e.g. when the tracker opens this page from another sector.</summary>
+    internal void SelectArea(int worldId)
     {
         foreach (DataGridViewRow row in _areas.Rows) if (row.Tag is EnvironmentArea area && area.WorldId == worldId)
         { _areas.ClearSelection(); _areas.CurrentCell = row.Cells[0]; row.Selected = true; _areas.FirstDisplayedScrollingRowIndex = row.Index; break; }

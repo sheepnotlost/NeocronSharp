@@ -1,0 +1,82 @@
+{
+ "1": {
+  "rotation": 270,
+  "score": 200,
+  "runnerUp": 0,
+  "margin": 2300,
+  "exits": 4,
+  "name": "PLAZA SEC-1"
+ },
+ "2": {
+  "rotation": 270,
+  "score": 731,
+  "runnerUp": 180,
+  "margin": 1136,
+  "exits": 3,
+  "name": "PLAZA SEC-2"
+ },
+ "3": {
+  "rotation": 90,
+  "score": 551,
+  "runnerUp": 0,
+  "margin": 574,
+  "exits": 5,
+  "name": "VIAROSSO SEC-1"
+ },
+ "4": {
+  "rotation": 90,
+  "score": 786,
+  "runnerUp": 0,
+  "margin": 681,
+  "exits": 5,
+  "name": "VIAROSSO SEC-2"
+ },
+ "5": {
+  "rotation": 0,
+  "score": 337,
+  "runnerUp": 90,
+  "margin": 1667,
+  "exits": 3,
+  "name": "PEPPER PARK SEC-1"
+ },
+ "6": {
+  "rotation": 0,
+  "score": 1126,
+  "runnerUp": 270,
+  "margin": 295,
+  "exits": 2,
+  "name": "PEPPER PARK SEC-2"
+ },
+ "7": {
+  "rotation": 270,
+  "score": 585,
+  "runnerUp": 0,
+  "margin": 1403,
+  "exits": 2,
+  "name": "PEPPER PARK SEC-3"
+ },
+ "101": {
+  "rotation": 270,
+  "score": 176,
+  "runnerUp": 0,
+  "margin": 1402,
+  "exits": 4,
+  "name": "PLAZA SEC-3"
+ },
+ "102": {
+  "rotation": 270,
+  "score": 116,
+  "runnerUp": 180,
+  "margin": 1312,
+  "exits": 2,
+  "name": "PLAZA SEC-4"
+ },
+ "401": {
+  "rotation": 90,
+  "score": 555,
+  "runnerUp": 180,
+  "margin": 968,
+  "exits": 5,
+  "name": "VIAROSSO SEC-3"
+ }
+}

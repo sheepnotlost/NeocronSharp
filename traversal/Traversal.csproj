@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Traversal engine for the Traversal tab: navmesh routes, live steering, zone crossing. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>traversal</AssemblyName>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DotRecast.Recast.Toolset" Version="2025.2.1" />
+  </ItemGroup>
+  <!-- tests/ is its own project (it compiles these sources itself). -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NeocronSharp\src\NeocronSharp.Core\NeocronSharp.Core.csproj" />
+  </ItemGroup>
+  <!-- The read-only live reader is internal to the NeocronSharp app; link its source. -->
+  <ItemGroup>
+    <Compile Include="..\NeocronSharp\src\NeocronSharp\PlayerReader.cs" Link="Linked\PlayerReader.cs" />
+    <Compile Include="..\NeocronSharp\src\NeocronSharp\Native.cs" Link="Linked\Native.cs" />
+    <Compile Include="..\NeocronSharp\src\NeocronSharp\EntityReader.cs" Link="Linked\EntityReader.cs" />
+  </ItemGroup>
+</Project>

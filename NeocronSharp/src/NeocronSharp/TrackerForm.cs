@@ -8,7 +8,6 @@ internal sealed class TrackerForm : Form
     private readonly NumericUpDown _radius = new() { Minimum = 0, Maximum = 100000, Increment = 100, ThousandsSeparator = true, Width = 95 };
     private readonly CheckBox _unknown = new() { Text = "Unnamed actors", Dock = DockStyle.Fill };
     private readonly CheckBox _showPlayers = new() { Text = "Players", Checked = true, Dock = DockStyle.Fill };
-    private readonly List<PlayerInspectorForm> _inspectors = new();
     private readonly Font _nameFont;
     private readonly CheckBox _pause = new() { Text = "Pause", Dock = DockStyle.Fill };
     private readonly Label _status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -29,8 +28,6 @@ internal sealed class TrackerForm : Form
     private Task? _refresh;
     private bool _rendering, _closing;
     private int _processId;
-    private MainForm? _navigation;
-    private CoordinateRecorderForm? _recorder;
     private readonly SkinHeader _chrome = new();
     private readonly TabControl _mainTabs = new() { Dock = DockStyle.Fill };
     private readonly QuestBrowser _questBrowser = new();
@@ -38,6 +35,12 @@ internal sealed class TrackerForm : Form
     private PluginBrowser? _pluginBrowser;
     private readonly TabPage _lootTab = new("Loot library");
     private LootLibraryForm? _lootPage;
+    // The former separate windows, each now a page of this form (and a tab of the suite when embedded).
+    private readonly TabPage _playerTab = new("Player"), _recorderTab = new("Recorder"), _navigationTab = new("Navigation"), _environmentTab = new("Environment");
+    private PlayerInspectorForm? _inspector;
+    private CoordinateRecorderForm? _recorderPage;
+    private MainForm? _navigationPage;
+    private EnvironmentForm? _environmentPage;
     private readonly ComboBox _skins = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private bool _skinEvidence;
     private LootCatalog? _loot;
@@ -112,18 +115,14 @@ internal sealed class TrackerForm : Form
         foreach (int width in new[] { 150, 115, 135, 120, 120, 125, 130 }) statusRow.ColumnStyles.Add(new(SizeType.Absolute, width));
         statusRow.Controls.Add(_status, 0, 0);
         var export = new SkinButton { Text = "Export snapshot", Dock = DockStyle.Fill };
-        var navigation = new SkinButton { Text = "Navigation…", Dock = DockStyle.Fill };
+        var navigation = new SkinButton { Text = "Navigation", Dock = DockStyle.Fill };
         var loot = new SkinButton { Text = "Loot library", Dock = DockStyle.Fill };
-        var mapping = new SkinButton { Text = "Environment…", Dock = DockStyle.Fill };
+        var mapping = new SkinButton { Text = "Environment", Dock = DockStyle.Fill };
         var inspect = new SkinButton { Text = "Inspect player", Dock = DockStyle.Fill };
         inspect.Click += (_, _) => InspectPlayer();
         statusRow.Controls.Add(inspect, 1, 0); statusRow.Controls.Add(loot, 2, 0); statusRow.Controls.Add(mapping, 3, 0); statusRow.Controls.Add(export, 4, 0); statusRow.Controls.Add(navigation, 5, 0);
-        var recorder = new SkinButton { Text = "Recorder…", Dock = DockStyle.Fill };
-        recorder.Click += (_, _) =>
-        {
-            if (_recorder == null || _recorder.IsDisposed) { _recorder = new CoordinateRecorderForm(); _recorder.Show(this); }
-            else _recorder.Activate();
-        };
+        var recorder = new SkinButton { Text = "Recorder", Dock = DockStyle.Fill };
+        recorder.Click += (_, _) => _mainTabs.SelectedTab = _recorderTab;
         statusRow.Controls.Add(recorder, 6, 0);
         var npcQuests = new SkinButton { Text = "NPC quests", Dock = DockStyle.Fill };
         npcQuests.Click += (_, _) =>
@@ -177,9 +176,19 @@ internal sealed class TrackerForm : Form
         _pluginHost.Discover(); _pluginHost.StartEnabled();
         _pluginBrowser = new PluginBrowser(_pluginHost);
         var pluginsTab = new TabPage("Plugins"); pluginsTab.Controls.Add(_pluginBrowser);
-        _mainTabs.TabPages.Add(trackerTab); _mainTabs.TabPages.Add(questsTab); _mainTabs.TabPages.Add(_lootTab); _mainTabs.TabPages.Add(pluginsTab); Controls.Add(_mainTabs);
-        // The loot catalog reads the game's files, so the Loot library page loads the first time it is opened.
-        _mainTabs.SelectedIndexChanged += (_, _) => { if (_mainTabs.SelectedTab == _lootTab) LootPage(); };
+        _playerTab.Controls.Add(new Label { Text = "Select a player in the Tracker list or on the map, then choose Inspect player (or double-click the row).", Dock = DockStyle.Fill, Padding = new Padding(12) });
+        foreach (var tab in new[] { trackerTab, questsTab, _lootTab, _playerTab, _recorderTab, _navigationTab, _environmentTab, pluginsTab }) _mainTabs.TabPages.Add(tab);
+        Controls.Add(_mainTabs);
+        // Each page is built the first time it is opened: the loot and environment pages read the game's files, and the
+        // recorder starts reading coordinates once it exists.
+        _mainTabs.SelectedIndexChanged += (_, _) =>
+        {
+            if (_closing) return;
+            if (_mainTabs.SelectedTab == _lootTab) LootPage();
+            else if (_mainTabs.SelectedTab == _recorderTab && _recorderPage is not { IsDisposed: false }) _recorderPage = Embed(_recorderTab, new CoordinateRecorderForm());
+            else if (_mainTabs.SelectedTab == _navigationTab && _navigationPage is not { IsDisposed: false }) _navigationPage = Embed(_navigationTab, new MainForm());
+            else if (_mainTabs.SelectedTab == _environmentTab) EnvironmentPage();
+        };
         AddColumn("Name", 230, fill: true); AddColumn("Rank", 95); AddColumn("HP (client)", 160); AddColumn("Weapon", 300);
         AddColumn("Health %", 80); AddColumn("Distance", 85); AddColumn("Faction", 175); AddColumn("Direction", 90); AddColumn("Type", 80);
         _grid.Columns[0].DefaultCellStyle.Font = _nameFont;
@@ -215,18 +224,21 @@ internal sealed class TrackerForm : Form
         };
         _map.Picked += entity => { _tracking.Track(entity); Render(); };
         export.Click += (_, _) => ExportSnapshot();
-        navigation.Click += (_, _) =>
-        {
-            if (_navigation == null || _navigation.IsDisposed) { _navigation = new MainForm(); _navigation.Show(this); }
-            else _navigation.Activate();
-        };
+        navigation.Click += (_, _) => _mainTabs.SelectedTab = _navigationTab;
         _timer.Tick += (_, _) => Tick();
         Shown += (_, _) => { _timer.Start(); Tick(); };
         FormClosing += async (_, e) =>
         {
             if (_closing) return;
             _closing = true; _timer.Stop();
-            if (_refresh is { IsCompleted: false }) { e.Cancel = true; await _refresh; Close(); }
+            // Pages inside this form are not closed for it: let the recorder save and a running walk release its keys first.
+            var pending = Task.WhenAll(new[] { _refresh, _recorderPage?.Shutdown(), _navigationPage?.Shutdown(), _environmentPage?.Shutdown() }.OfType<Task>());
+            if (!pending.IsCompleted) { e.Cancel = true; await pending; Close(); }
+        };
+        FormClosed += (_, _) =>
+        {
+            foreach (Form? page in new Form?[] { _recorderPage, _navigationPage, _environmentPage, _lootPage, _inspector })
+                if (page is { IsDisposed: false }) page.Close();
         };
         FormClosed += (_, _) => { _timer.Dispose(); _reader?.Dispose(); _nameFont.Dispose(); _pluginHost.Dispose(); };
         FormClosed += (_, _) => _mapAssets?.Dispose();
@@ -234,7 +246,7 @@ internal sealed class TrackerForm : Form
     }
 
     /// <summary>Inside the suite (see <see cref="EmbeddedHost"/>): no frame or tab strip, since the suite's own
-    /// Tracker/Quests/Plugins tabs choose the page. Starts off-screen until the suite gives it a parent window.</summary>
+    /// tabs choose the page (Tracker, Quests, Loot library, Player, Recorder, Navigation, Environment or Plugins). Starts off-screen until the suite gives it a parent window.</summary>
     public void UseEmbeddedLayout()
     {
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; MinimumSize = Size.Empty;
@@ -255,8 +267,22 @@ internal sealed class TrackerForm : Form
     {
         if (_snapshot == null || _tracking.Lost || _tracking.Tracked is not { Player: not null } entity)
         { MessageBox.Show(this, "Select a loaded player row or map marker first.", "Player inspection"); return; }
-        _inspectors.RemoveAll(f => f.IsDisposed);
-        var inspector = new PlayerInspectorForm(entity, _snapshot); _inspectors.Add(inspector); inspector.Show(this);
+        Inspect(entity);
+    }
+    /// <summary>Shows <paramref name="entity"/> on the Player page, replacing the player inspected before.</summary>
+    private PlayerInspectorForm Inspect(WorldEntity entity)
+    {
+        _inspector?.Close();
+        _inspector = Embed(_playerTab, new PlayerInspectorForm(entity, _snapshot!));
+        _mainTabs.SelectedTab = _playerTab;
+        return _inspector;
+    }
+    /// <summary>Puts a page form into its tab, the way the Loot library is shown: no frame, filling the tab.</summary>
+    private static T Embed<T>(TabPage tab, T page) where T : Form
+    {
+        page.TopLevel = false; page.FormBorderStyle = FormBorderStyle.None; page.Dock = DockStyle.Fill; page.MinimumSize = Size.Empty;
+        tab.Controls.Clear(); tab.Controls.Add(page); page.Show();
+        return page;
     }
 
     internal void VerifyQuestView()
@@ -265,6 +291,28 @@ internal sealed class TrackerForm : Form
         _questBrowser.VerifyEvidence();
         if (_mainTabs.SelectedTab?.Text != "Quests" || !_questBrowser.Visible)
             throw new InvalidOperationException("Quest tab did not open.");
+    }
+    /// <summary>Opens each former window's page (Player, Recorder, Navigation, Environment) and checks it sits inside
+    /// this form, with no separate top-level window. Needs no game; saves logs/page-*.png and logs/pages-ui-check.json.</summary>
+    internal async Task VerifyPages()
+    {
+        string folder = Path.Combine(ProjectPaths.Root, "logs"); Directory.CreateDirectory(folder);
+        var pages = new List<object>();
+        foreach (var tab in new[] { _playerTab, _recorderTab, _navigationTab, _environmentTab })
+        {
+            _mainTabs.SelectedTab = tab; await Task.Delay(400);
+            if (_mainTabs.SelectedTab != tab || tab.Controls.Count != 1 || !tab.Controls[0].Visible)
+                throw new InvalidOperationException($"{tab.Text} page did not open.");
+            if (tab != _playerTab && tab.Controls[0] is not Form { TopLevel: false } && tab.Controls[0] is not Label)
+                throw new InvalidOperationException($"{tab.Text} page is not shown inside the tracker.");
+            var windows = Application.OpenForms.Cast<Form>().Where(f => f != this && f.TopLevel).Select(f => f.Text).ToArray();
+            if (windows.Length > 0) throw new InvalidOperationException("A separate window opened: " + string.Join(", ", windows));
+            using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            bitmap.Save(Path.Combine(folder, $"page-{tab.Text.ToLowerInvariant()}.png"));
+            pages.Add(new { page = tab.Text, content = tab.Controls[0].GetType().Name });
+        }
+        _mainTabs.SelectedIndex = 0;
+        File.WriteAllText(Path.Combine(folder, "pages-ui-check.json"), System.Text.Json.JsonSerializer.Serialize(new { status = "passed", pages, separateWindows = 0 }));
     }
     internal void VerifyPluginView()
     {
@@ -300,9 +348,7 @@ internal sealed class TrackerForm : Form
             _lootTab.Controls.Add(new Label { Text = "Loot definitions could not be loaded: " + _lootError, Dock = DockStyle.Fill, Padding = new Padding(12) });
             return null;
         }
-        _lootPage = new LootLibraryForm(catalog) { TopLevel = false, FormBorderStyle = FormBorderStyle.None, Dock = DockStyle.Fill, MinimumSize = Size.Empty };
-        _lootTab.Controls.Add(_lootPage); _lootPage.Show();
-        return _lootPage;
+        return _lootPage = Embed(_lootTab, new LootLibraryForm(catalog));
     }
     /// <summary>Loot library button: open the Loot library tab on the tracked NPC's template.</summary>
     private void OpenLoot()
@@ -312,15 +358,31 @@ internal sealed class TrackerForm : Form
         if (page == null) { MessageBox.Show(this, "Loot definitions could not be loaded: " + _lootError); return; }
         if (_tracking.Tracked?.Stats?.TemplateId is int template) page.SelectTemplate(template);
     }
-    private void OpenEnvironment()
+    /// <summary>The Environment tab's page, created on first use. Null (with the reason shown on the tab) when the
+    /// game's area definitions cannot be read.</summary>
+    private EnvironmentForm? EnvironmentPage()
     {
+        if (_environmentPage is { IsDisposed: false }) return _environmentPage;
+        _environmentTab.Controls.Clear();
         try
         {
-            var form = new EnvironmentForm(string.IsNullOrEmpty(_mapInstall) ? Path.GetDirectoryName(ProjectPaths.Client)! : _mapInstall, _snapshot?.Sector?.WorldId ?? 1);
-            form.OverlayRequested += summary => { _map.Environment = summary; _map.Invalidate(); };
-            form.Show(this);
+            var page = new EnvironmentForm(string.IsNullOrEmpty(_mapInstall) ? Path.GetDirectoryName(ProjectPaths.Client)! : _mapInstall, _snapshot?.Sector?.WorldId ?? 1);
+            // The overlay draws on the tracker's sector map, so show it there.
+            page.OverlayRequested += summary => { _map.Environment = summary; _map.Invalidate(); _mainTabs.SelectedIndex = 0; };
+            return _environmentPage = Embed(_environmentTab, page);
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "Environment data unavailable"); }
+        catch (Exception error)
+        {
+            _environmentTab.Controls.Add(new Label { Text = "Environment data unavailable: " + error.Message, Dock = DockStyle.Fill, Padding = new Padding(12) });
+            return null;
+        }
+    }
+    /// <summary>Environment button: open the Environment tab on the current sector.</summary>
+    private void OpenEnvironment()
+    {
+        bool existed = _environmentPage is { IsDisposed: false };
+        _mainTabs.SelectedTab = _environmentTab;
+        if (existed && _snapshot?.Sector?.WorldId is int sector) _environmentPage!.SelectArea(sector);
     }
     internal void SaveSkinEvidence()
     {
@@ -340,10 +402,12 @@ internal sealed class TrackerForm : Form
 
     internal async Task SaveExpansionEvidence()
     {
-        using (var loot = new LootLibraryForm(Loot() ?? throw new InvalidOperationException(_lootError), 440))
-        { loot.Show(this); await Task.Delay(100); loot.VerifyEvidence(); loot.Close(); }
-        using var environment = new EnvironmentForm(Path.GetDirectoryName(ProjectPaths.Client)!, _snapshot?.Sector?.WorldId ?? 1);
-        environment.Show(this); await Task.Delay(100); await environment.VerifyEvidence(); environment.Close();
+        _mainTabs.SelectedTab = _lootTab;
+        var loot = LootPage() ?? throw new InvalidOperationException(_lootError);
+        loot.SelectTemplate(440); await Task.Delay(100); loot.VerifyEvidence();
+        _mainTabs.SelectedTab = _environmentTab;
+        var environment = EnvironmentPage() ?? throw new InvalidOperationException("Environment page did not open.");
+        await Task.Delay(100); await environment.VerifyEvidence();
     }
 
     private void AddColumn(string title, int width, bool fill = false) => _grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -460,8 +524,7 @@ internal sealed class TrackerForm : Form
                 _chrome.Readout = $"SECTOR {_snapshot.Sector?.WorldId} · NPC {npcs} · PLAYERS {players}"; _chrome.Invalidate();
             }
             UpdateDetails();
-            _inspectors.RemoveAll(f => f.IsDisposed);
-            foreach (var inspector in _inspectors) inspector.UpdateSnapshot(_snapshot);
+            if (_inspector is { IsDisposed: false }) _inspector.UpdateSnapshot(_snapshot);
         }
         finally { _rendering = false; }
     }
@@ -596,8 +659,7 @@ internal sealed class TrackerForm : Form
         _showPlayers.Checked = false;
         if (_grid.RowCount != 0) throw new InvalidOperationException("Players toggle did not filter players.");
         _showPlayers.Checked = true; _search.Clear();
-        using var inspector = new PlayerInspectorForm(player, _snapshot);
-        inspector.Show(this); await Task.Delay(100); inspector.VerifyEvidence(_snapshot); inspector.Close();
+        var inspector = Inspect(player); await Task.Delay(100); inspector.VerifyEvidence(_snapshot);
         File.WriteAllText(Path.Combine(ProjectPaths.Root, "logs", "player-ui-check.json"),
             System.Text.Json.JsonSerializer.Serialize(new { status = "passed", player.Name, players = _snapshot.Entities.Count(e => e.Player != null),
                 checks = new[] { "bold names", "players enabled by default", "player search", "player selection", "player toggle", "live gear inspector", "gear cleared on unload", "no silent rebind" } }));

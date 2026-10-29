@@ -1,0 +1,5 @@
+5	WorldChange2	Steering exceeded its time limit.
+5	WorldChange13	Steering exceeded its time limit.
+1	WorldChange3	ok
+101	WorldChange6	ok
+5	WorldChange9	Walked through the exit point but the game did not change sector.

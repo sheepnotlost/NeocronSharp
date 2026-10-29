@@ -70,7 +70,7 @@ internal sealed class CoordinateRecorderForm : Form
         heightFilter.CheckedChanged += (_, _) => { _map.NearHeight = heightFilter.Checked; _map.Invalidate(); };
         mapTools.Controls.AddRange(new Control[] { fit, center, heightFilter }); mapSide.Controls.Add(mapTools, 0, 0); mapSide.Controls.Add(_map, 0, 1);
         split.Panel2.Controls.Add(mapSide); layout.Controls.Add(split, 0, 7);
-        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "CSV is appended live; JSON is saved when you stop or close this window. Sector changes and missing telemetry start new segments.\nThe trail shows where you travelled; it does not establish walls or walkability in unvisited areas. Heading: 0° = −Z, 90° = +X.\nWalk all floors, stairs, doorways and alternate paths for useful coverage. Sampling is best effort, not a guaranteed frame rate." }, 0, 8);
+        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "CSV is appended live; JSON is saved when you stop or when NeocronSharp closes. Sector changes and missing telemetry start new segments.\nThe trail shows where you travelled; it does not establish walls or walkability in unvisited areas. Heading: 0° = −Z, 90° = +X.\nWalk all floors, stairs, doorways and alternate paths for useful coverage. Sampling is best effort, not a guaranteed frame rate." }, 0, 8);
         Controls.Add(layout); _live.Text = "X —     Y —     Z —"; _connection.Text = "Connecting to the supported Neocron client…";
         _recordStatus.Text = "Ready. Start recording when your character is in-world."; _files.Text = _directory;
         _start.Click += (_, _) => StartRecording(); _stop.Click += (_, _) => StopRecording(); _export.Click += (_, _) => ExportCopy();
@@ -83,12 +83,22 @@ internal sealed class CoordinateRecorderForm : Form
         Shown += (_, _) => _timer.Start();
         FormClosing += async (_, e) =>
         {
-            if (_closing) return; _closing = true; _timer.Stop();
-            if (_poll is { IsCompleted: false }) { e.Cancel = true; await _poll; StopRecording(); Close(); }
-            else StopRecording();
+            var done = Shutdown();
+            if (done.IsCompleted) return;
+            e.Cancel = true; await done; Close();
         };
         FormClosed += (_, _) => { _writer?.Dispose(); _reader?.Dispose(); _assets?.Dispose(); _timer.Dispose(); };
         AppTheme.Bind(this);
+    }
+    /// <summary>Stops sampling and saves an active recording (CSV and JSON). The tracker calls this before it closes,
+    /// since a recorder page inside it is not closed on its own.</summary>
+    internal Task Shutdown() => _shutdown ??= Finish();
+    private Task? _shutdown;
+    private async Task Finish()
+    {
+        _closing = true; _timer.Stop();
+        if (_poll is { IsCompleted: false }) await _poll;
+        StopRecording();
     }
     private int SelectedInterval => new[] { 100, 250, 500, 1000 }[Math.Max(0, _interval.SelectedIndex)];
     private string SectorName(int sector) => _assets?.Catalog.Name(sector) ?? $"Sector {sector}";

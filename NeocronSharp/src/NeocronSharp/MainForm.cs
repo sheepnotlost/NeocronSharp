@@ -38,14 +38,21 @@ internal sealed class MainForm : Form
         _stop.Click += (_, _) => _cancel?.Cancel();
         FormClosing += async (_, eventArgs) =>
         {
-            if (_running is { IsCompleted: false })
-            {
-                eventArgs.Cancel = true;
-                _cancel?.Cancel();
-                await _running;
-                Close();
-            }
+            var done = Shutdown();
+            if (done.IsCompleted) return;
+            eventArgs.Cancel = true;
+            await done;
+            Close();
         };
+    }
+
+    /// <summary>Stops a running walk (its keys are released) and waits for it. The tracker calls this before it
+    /// closes, since a navigation page inside it is not closed on its own.</summary>
+    internal Task Shutdown()
+    {
+        if (_running is not { IsCompleted: false } running) return Task.CompletedTask;
+        _cancel?.Cancel();
+        return running;
     }
 
     private void SaveSpot()
@@ -122,8 +129,7 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             Status($"Stopped: {error.Message}");
-            WindowState = FormWindowState.Normal;
-            Activate();
+            if (TopLevel) { WindowState = FormWindowState.Normal; Activate(); }
         }
         finally
         {

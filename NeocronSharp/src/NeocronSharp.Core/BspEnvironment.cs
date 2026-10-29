@@ -51,7 +51,7 @@ public static class BspEnvironment
                 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 for (int j = 0; j < props; j++) { string key = Text(); values[key] = Text(); }
                 string kind = values.GetValueOrDefault("classname", "");
-                if (!new[] { "GroundPathPoint", "AirPathPoint", "WorldChange", "ModelController", "DeathMatchStart" }.Contains(kind)) continue;
+                if (!new[] { "GroundPathPoint", "AirPathPoint", "WorldChange", "ModelController", "DeathMatchStart", "AntiGravParticle" }.Contains(kind)) continue;
                 if (!values.TryGetValue("Origin", out var origin)) continue;
                 string[] parts = origin.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length != 3 || !parts.All(v => float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float f) && float.IsFinite(f))) continue;

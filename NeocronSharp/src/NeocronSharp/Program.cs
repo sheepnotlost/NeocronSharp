@@ -139,7 +139,8 @@ internal static class Program
                     try
                     {
                         if (form is CoordinateRecorderForm recorder) await recorder.VerifyEvidence();
-                        if (form is TrackerForm tracker && !args.Contains("--quest-evidence") && !args.Contains("--plugin-evidence")) tracker.VerifyLiveView();
+                        if (form is TrackerForm tracker && !args.Contains("--quest-evidence") && !args.Contains("--plugin-evidence") && !args.Contains("--page-evidence")) tracker.VerifyLiveView();
+                        if (form is TrackerForm pageTracker && args.Contains("--page-evidence")) await pageTracker.VerifyPages();
                         if (form is TrackerForm questTracker && args.Contains("--quest-evidence")) questTracker.VerifyQuestView();
                         if (form is TrackerForm pluginTracker && args.Contains("--plugin-evidence")) pluginTracker.VerifyPluginView();
                         if (form is TrackerForm skinTracker && args.Contains("--skin-evidence")) skinTracker.SaveSkinEvidence();

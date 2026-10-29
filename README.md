@@ -1,20 +1,26 @@
 # NeocronSharp
 
-One program, two engines, started from **Launch.cmd**:
+One program, three engines, started from **Launch.cmd**:
 
 - **Screen automation (Python, this folder):** Research, Construction, Recycling, Nav-Ray auto-walk and Tech Counter
   tabs. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
-- **Tracker, Quests, Loot library and Plugins (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map,
-  environment/BSP export, quest browser, loot library and plugins, shown inside the suite's **Tracker**, **Quests**, **Loot library** and **Plugins**
-  tabs (one embedded NeocronSharp process; the window grows to fit it). The coordinate recorder and point navigation open
-  in their own windows from the Tracker tab's bar, or with **Open NPC Tracker.cmd** / **Open Coordinate Recorder.cmd**.
+- **NeocronSharp pages (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map, quest browser, loot
+  library, player inspector, coordinate recorder, point navigation, environment/BSP export and plugins, shown inside the
+  suite's **Tracker**, **Quests**, **Loot library**, **Tools** and **Plugins** tabs (one embedded NeocronSharp process;
+  the window grows to fit it). **Tools** holds the Player inspector, Recorder, Navigation and Environment pages, picked
+  with its buttons. NeocronSharp opens no windows of its own; only its Save/folder pickers pop up.
   Reads the game client's memory read-only (only the fingerprinted build). It needs the .NET 9 Desktop Runtime; **Build** in the Tracker tab
   (or `dotnet build NeocronSharp\NeocronSharp.sln -c Release`) rebuilds it with the .NET 9 SDK. Its own docs:
   [NeocronSharp/README.md](NeocronSharp/README.md), [NeocronSharp/SPEC.md](NeocronSharp/SPEC.md),
   [NeocronSharp/PLUGINS.md](NeocronSharp/PLUGINS.md).
+- **Traversal engine (C#, `traversal/`):** `traversal.exe` walks the character to a chosen zone on a navmesh baked
+  from the game's own level files, crossing zone lines, riding lifts and the subway, and learning from each trip. The
+  suite's **Traversal** tab runs it and builds it automatically if `traversal\bin\Release\net9.0\traversal.exe` is
+  missing; by hand: `dotnet build traversal -c Release`. Docs: [traversal/README.md](traversal/README.md).
 
-Tests: `runtime\python.exe -m unittest discover -s tests` (Python) and
-`dotnet run --project NeocronSharp\tests\NeocronSharp.Tests -c Release` (C#).
+Tests: `runtime\python.exe -m unittest discover -s tests` (Python),
+`dotnet run --project NeocronSharp\tests\NeocronSharp.Tests -c Release` (C#), and **traversal\Run checks.cmd**
+(Traversal engine tests plus the simulated city routes; no game input).
 
 ## Screen automation
 

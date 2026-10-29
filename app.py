@@ -20,7 +20,6 @@ from appearance import SKINS, apply_skin, stop_sound
 from construction_catalog import load_construction_catalog, filter_construction
 from item_images import ItemImages, PictureLoader
 import gogo
-import navray
 
 ROOT = Path(__file__).resolve().parent
 PROFILE_PATH = ROOT / "profile.json"
@@ -109,13 +108,14 @@ class App:
         self.research_tab = ttk.Frame(self.tabs)
         self.construction_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
-        self.navray_tab = ttk.Frame(self.tabs)
+        self.traversal_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
-        self.sharp_tabs = {page: ttk.Frame(self.tabs) for page in ("Tracker", "Quests", "Loot library", "Plugins")}
+        from neocronsharp_link import TABS as SHARP_TABS
+        self.sharp_tabs = {name: ttk.Frame(self.tabs) for name, _ in SHARP_TABS}
         self.tabs.add(self.research_tab, text="Research")
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
-        self.tabs.add(self.navray_tab, text="Nav-Ray")
+        self.tabs.add(self.traversal_tab, text="Traversal")
         self.tabs.add(self.counter_tab, text="Tech Counter")
         for page, tab in self.sharp_tabs.items():
             self.tabs.add(tab, text=page)
@@ -210,7 +210,7 @@ class App:
         self.log.configure(yscrollcommand=self.log_scrollbar.set)
         self.build_construction_tab()
         self.build_recycling_tab()
-        self.build_navray_tab()
+        self.build_traversal_tab()
         self.build_sharp_tab()
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
@@ -256,33 +256,48 @@ class App:
         walk(self.root)
 
     def build_sharp_tab(self):
-        """NeocronSharp (C#) pages inside the suite: Tracker (NPC/player list, sector map, loot), Quests and Plugins.
-        One embedded tracker process moves between these tabs; the coordinate recorder and point navigation open in
-        their own windows from the Tracker tab's bar."""
+        """NeocronSharp (C#) pages inside the suite (neocronsharp_link.TABS): Tracker (NPC/player list, sector map),
+        Quests, Loot library, Tools (player inspector, coordinate recorder, point navigation, environment viewer, picked
+        with buttons) and Plugins. One embedded tracker process moves between these tabs; it opens no windows of its own."""
         import neocronsharp_link
         self.sharp_status=tk.StringVar(value=neocronsharp_link.status())
         self.sharp_hosts={}
-        for page,tab in self.sharp_tabs.items():
+        self.sharp_pages={}  # Suite tab -> the NeocronSharp page it shows.
+        for (name,pages),tab in zip(neocronsharp_link.TABS,self.sharp_tabs.values()):
             bar=ttk.Frame(tab,padding=(0,6));bar.pack(fill="x")
-            if page=="Tracker":
-                for label,arguments in neocronsharp_link.WINDOWS[1:]:
-                    ttk.Button(bar,text=label,command=lambda arguments=arguments:self.open_sharp(arguments)).pack(side="left",padx=(0,8))
+            self.sharp_pages[name]=tk.StringVar(value=pages[0])
+            if len(pages)>1:
+                for page in pages:
+                    ttk.Radiobutton(bar,text=page,value=page,variable=self.sharp_pages[name],style="Toolbutton",
+                                    command=self.show_sharp_page).pack(side="left",padx=(0,4))
+            if name=="Tracker":
                 ttk.Button(bar,text="Build",command=self.build_sharp).pack(side="left",padx=(0,8))
-            ttk.Label(bar,textvariable=self.sharp_status,wraplength=400).pack(side="left",fill="x",expand=True)
+            ttk.Label(bar,textvariable=self.sharp_status,wraplength=400).pack(side="left",fill="x",expand=True,padx=(8,0))
             # An empty native window for NeocronSharp to sit in; it follows this frame's size.
             host=tk.Frame(tab,background="#202325",highlightthickness=0,borderwidth=0);host.pack(fill="both",expand=True)
-            self.sharp_hosts[page]=host
+            self.sharp_hosts[name]=host
 
     def selected_sharp_page(self):
-        return next((page for page,tab in getattr(self,"sharp_tabs",{}).items() if self.tabs.select()==str(tab)),None)
+        """The NeocronSharp page the selected suite tab shows, or None on the macro tabs."""
+        name=next((name for name,tab in getattr(self,"sharp_tabs",{}).items() if self.tabs.select()==str(tab)),None)
+        return None if name is None else self.sharp_pages[name].get()
+
+    def select_sharp_page(self,page):
+        """Open the suite tab that holds NeocronSharp page `page` (and pick it there), e.g. after NPC quests."""
+        import neocronsharp_link
+        name=neocronsharp_link.tab_of(page)
+        if name not in getattr(self,"sharp_tabs",{}):return
+        self.sharp_pages[name].set(page)
+        if self.tabs.select()!=str(self.sharp_tabs[name]):self.tabs.select(self.sharp_tabs[name])
 
     def show_sharp_page(self):
         page=self.selected_sharp_page()
         if page is None or self.tracker is None:return
         if not self.tracker.running():self.fit_sharp_pages()
         self.root.update_idletasks()
+        import neocronsharp_link
         try:
-            self.tracker.show(self.sharp_hosts[page].winfo_id(),page)
+            self.tracker.show(self.sharp_hosts[neocronsharp_link.tab_of(page)].winfo_id(),page)
         except (RuntimeError,OSError) as exc:
             self.sharp_status.set(str(exc))
 
@@ -296,14 +311,6 @@ class App:
             y=max(0,min(self.root.winfo_y(),self.root.winfo_screenheight()-height-60))
             self.root.geometry(f"{width}x{height}+{x}+{y}")
 
-    def open_sharp(self,arguments=()):
-        import neocronsharp_link
-        try:
-            neocronsharp_link.open_window(arguments)
-            self.sharp_status.set("Opened NeocronSharp.")
-        except (RuntimeError,OSError) as exc:
-            self.sharp_status.set(str(exc))
-
     def build_sharp(self):
         import neocronsharp_link
         self.sharp_status.set("Building NeocronSharp...");self.root.update_idletasks()
@@ -314,37 +321,11 @@ class App:
             self.sharp_status.set(str(exc))
         self.show_sharp_page()
 
-    def build_navray_tab(self):
-        host=ttk.Frame(self.navray_tab,padding=12);host.pack(fill="both",expand=True)
-        host.columnconfigure(1,weight=1)
-        for row,label in ((0,"Category"),(1,"Destination")):
-            ttk.Label(host,text=label).grid(row=row,column=0,sticky="w",pady=5)
-        self.navray_category=tk.StringVar();self.navray_target=tk.StringVar()
-        self.navray_category_box=ttk.Combobox(host,textvariable=self.navray_category,state="readonly",width=1)
-        self.navray_category_box.grid(row=0,column=1,sticky="ew",padx=(10,0),pady=5)
-        self.navray_target_box=ttk.Combobox(host,textvariable=self.navray_target,state="readonly",width=1)
-        self.navray_target_box.grid(row=1,column=1,sticky="ew",padx=(10,0),pady=5)
-        self.navray_category_box.bind("<<ComboboxSelected>>",lambda event:self.pick_navray_category())
-        ttk.Label(host,text="Open Nav-Ray first.").grid(row=2,column=1,sticky="w",padx=(10,0),pady=(8,0))
-        self.navray_overlay=tk.BooleanVar(value=self.profile.get("preferences",{}).get("navray_overlay",True))
-        overlay=ttk.Checkbutton(host,text="Show what Nav-Ray sees over the game",variable=self.navray_overlay,
-                                command=self.save_preferences)
-        overlay.grid(row=3,column=1,sticky="w",padx=(10,0),pady=(8,0));self.editable.append(overlay)
-        self.editable.extend((self.navray_category_box,self.navray_target_box))
-        self.load_navray_lists()
-
-    def load_navray_lists(self):
-        self.navray_catalog=navray.load_catalog(self.profile)
-        self.navray_category_box.configure(values=list(self.navray_catalog))
-
-    def pick_navray_category(self,target=""):
-        self.navray_target_box.configure(values=navray.numbered(self.navray_catalog.get(self.navray_category.get(),[])))
-        self.navray_target.set(target)
-
-    def set_navray_destination(self,text):
-        category,_,target=(text or "").partition(" > ")
-        self.navray_category.set(category if category in self.navray_catalog else "")
-        self.pick_navray_category(target if target in navray.numbered(self.navray_catalog.get(category,[])) else "")
+    def build_traversal_tab(self):
+        """Walk to a place or follow someone (traversal_tab.py); it runs traversal.exe with its own buttons, not Start.
+        Without a tracker (the tests) it does not read the game until Refresh is pressed."""
+        from traversal_tab import TraversalTab
+        self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -489,8 +470,7 @@ class App:
 
     def save_preferences(self):
         key=next(k for k,v in SKINS.items() if v["name"]==self.skin_var.get())
-        self.profile["preferences"]={"skin":key,"stop_sound":self.stop_sound_var.get(),
-                                     "navray_overlay":self.navray_overlay.get() if hasattr(self,"navray_overlay") else True}
+        self.profile["preferences"]={"skin":key,"stop_sound":self.stop_sound_var.get()}
         apply_skin(self.root,key,self.heading)
         self.style_item_picture()
         try:save_profile(self.profile_path,self.profile)
@@ -705,7 +685,7 @@ class App:
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
         browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
-                 or self.selected_sharp_page() is not None)
+                 or self.selected_sharp_page() is not None or self.tabs.select()==str(self.traversal_tab))
         self.start_button.configure(state="disabled" if browser else "normal")
 
     def materials_for(self,key):
@@ -781,9 +761,8 @@ class App:
         self.stop_on_slots.set(construction.get("stop_at_slots") is not None)
         self.minimum_slots.set(str(construction.get("stop_at_slots") if construction.get("stop_at_slots") is not None else 4))
         self.refresh_recipe()
-        self.load_navray_lists()
-        self.set_navray_destination(self.profile.get("navray",{}).get("destination",""))
-        self.tabs.select(self.navray_tab if operation=="navray" else self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
+        # A profile saved on the old Nav-Ray tab opens on Research: Start cannot walk any more.
+        self.tabs.select(self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
         recycle_id=self.profile.get("recycling",{}).get("recipe")
         if recycle_id and self.recycle_tree.exists(recycle_id):
             self.recycle_tree.selection_set(recycle_id);self.recycle_tree.see(recycle_id);self.show_recycle_recipe()
@@ -805,17 +784,15 @@ class App:
             raise ValueError("Tech Counter uses its own scan settings. Click Start in 3 seconds to scan.")
         if self.selected_sharp_page() is not None:
             raise ValueError(f"{self.selected_sharp_page()} shows NeocronSharp; Start is for the macro tabs.")
+        if self.tabs.select()==str(self.traversal_tab):
+            raise ValueError("Traversal walks with its own buttons; Start is for the macro tabs.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
         try:
             profile["research_operation"]=next(key for key,label in OPERATION_LABELS.items()
                                                 if label==self.operation_var.get())
-            if self.tabs.select()==str(self.navray_tab):
-                profile["operation"]="navray"
-                chosen=f"{self.navray_category.get()} > {self.navray_target.get()}" if self.navray_category.get() and self.navray_target.get() else ""
-                profile["navray"]={**self.profile.get("navray",{}),"destination":chosen,"scan":False}
-            elif self.tabs.select()==str(self.recycling_tab):
+            if self.tabs.select()==str(self.recycling_tab):
                 profile["operation"]="recycling"
                 selection=self.recycle_tree.selection()
                 profile["recycling"]={"recipe":selection[0] if selection else None}
@@ -853,7 +830,7 @@ class App:
             profile["settings"]["drag_button"]="left"
             profile["settings"]["drag_modifier"]="none"
             profile["preferences"]={"skin":next(k for k,v in SKINS.items() if v["name"]==self.skin_var.get()),
-                                    "stop_sound":self.stop_sound_var.get(),"navray_overlay":self.navray_overlay.get()}
+                                    "stop_sound":self.stop_sound_var.get()}
         except ValueError as exc:
             if "invalid literal for int()" in str(exc) or "could not convert string to float" in str(exc):
                 raise ValueError("Enter whole numbers for the stack and batch counts.") from None
@@ -945,15 +922,10 @@ class App:
                 self.worker.start()
                 return
             from recycling import RecyclingRunner
-            from navray_runner import NavRayRunner
             runner_class = {"blueprints":BlueprintRunner,"tech_parts":VisualRunner,"construction":ConstructionRunner,
-                            "recycling":RecyclingRunner,"navray":NavRayRunner}[self.profile["operation"]]
+                            "recycling":RecyclingRunner}[self.profile["operation"]]
             runner = runner_class(self.profile, self.backend, self.control,
                                   lambda kind, payload: self.events.put((kind, payload)))
-            if self.profile["operation"] == "navray":
-                import routes
-                self.route_book = runner.route_book = routes.RouteBook()
-                runner.overlay = self.open_overlay()
             self.worker = threading.Thread(target=runner.run, daemon=False, name="macro-sequence")
             self.worker.start()
         except (ValueError, RuntimeError) as exc:
@@ -983,8 +955,8 @@ class App:
 
     def poll(self):
         page=self.tracker.take_page() if self.tracker is not None else None
-        if page in getattr(self,"sharp_tabs",{}) and not self.locked():
-            self.tabs.select(self.sharp_tabs[page])  # NeocronSharp switched pages itself, e.g. NPC quests.
+        if page is not None and not self.locked():
+            self.select_sharp_page(page)  # NeocronSharp switched pages itself, e.g. NPC quests or Inspect player.
         while True:
             try:
                 kind, payload = self.events.get_nowait()
@@ -1009,14 +981,6 @@ class App:
                 except ValueError:pass
                 try:save_profile(self.profile_path,self.profile)
                 except (ValueError,OSError) as exc:self.report("Could not save material labels: "+str(exc))
-            elif kind == "navray_route":
-                try:
-                    entry = self.route_book.record(payload["start"], payload["destination"], payload["end"],
-                                                   payload["legs"], payload["seconds"])
-                    self.route_book.save()
-                    self.report(f"Route saved: {payload['start'] or '?'} to {payload['end'] or '?'} ({entry['walks']} walks).")
-                except (OSError, AttributeError) as exc:
-                    self.report("Could not save the route: "+str(exc))
             elif kind == "detected":
                 self.show_detected(payload)
             elif kind == "item_image":
@@ -1050,37 +1014,11 @@ class App:
                 if kind in ("done","error"):self.notify_stop()
         if self.worker is not None and not self.worker.is_alive():
             self.worker = None
-            self.close_overlay()
             self.set_editing(True)
         self.root.after(30, self.poll)
 
-    overlay = None
-
-    def open_overlay(self):
-        """The see-through overlay over the game showing what Nav-Ray sees and decides (hidden from the walk's own
-        screenshots). Off with the Nav-Ray tab's "Show what Nav-Ray sees" box."""
-        if not self.navray_overlay.get():
-            return None
-        try:
-            from navray_debug import Overlay
-            self.overlay = Overlay(self.root, Overlay.client_rect(self.backend), report=self.report)
-            self.overlay.show()
-            self.overlay.start()
-            return self.overlay
-        except Exception as exc:                          # the overlay is a help, never a reason not to walk
-            self.report(f"Nav-Ray overlay unavailable: {exc}")
-            self.overlay = None
-            return None
-
-    def close_overlay(self):
-        if self.overlay is not None:
-            try:
-                self.overlay.close()
-            except Exception:
-                pass
-            self.overlay = None
-
     def close(self):
+        if hasattr(self,"traversal"):self.traversal.close()  # F8 any walk it started
         self.cancel_work()
         if self.active():
             self.root.after(50, self.close)
@@ -1108,7 +1046,7 @@ def main():
                 job=profile["construction"]
                 print(f"Configuration valid: {job['count'] or job['available']} builds of {catalog(profile)[job['recipe']]['name']}. No input sent.")
             elif profile["operation"]=="navray":
-                print(f"Configuration valid: Nav-Ray walk to {profile['navray']['destination']}. No input sent.")
+                print("Configuration valid: an old Nav-Ray job; walks run from the Traversal tab now. No input sent.")
             elif profile["operation"]=="recycling":
                 print("Configuration valid: one prepared recycling run. No input sent.")
             elif profile["operation"] == "blueprints":

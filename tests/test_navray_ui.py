@@ -1,9 +1,5 @@
-import tempfile
-import tkinter as tk
 import unittest
-from pathlib import Path
 
-from app import App
 from macro_core import default_profile, validate_profile
 
 
@@ -24,19 +20,6 @@ class NavRayProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_profile(profile)
 
-    def test_tab_collects_and_restores_the_destination(self):
-        class NoInput:
-            def release_all(self):pass
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "profile.json"
-            root = tk.Tk();root.withdraw();app = App(root, profile_path=path, backend=NoInput())
-            try:
-                app.tabs.select(app.navray_tab)
-                app.navray_catalog = {"FACTION HQS": ["PROTOPHARM", "BLACK DRAGON"]}
-                app.navray_category.set("FACTION HQS");app.pick_navray_category("BLACK DRAGON")
-                profile = app.collect()
-                self.assertEqual(profile["operation"], "navray")
-                self.assertEqual(profile["navray"]["destination"], "FACTION HQS > BLACK DRAGON")
-                self.assertFalse(profile["navray"]["scan"])
-            finally:
-                app.close()
+
+if __name__ == "__main__":
+    unittest.main()

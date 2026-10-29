@@ -5,8 +5,11 @@ Open `dist/NeocronSharp.exe` on this computer. The application uses the installe
 
 ## Live NPC/player tracker
 
-Double-click **Open NPC Tracker.cmd** in `Documents\Neocron AoSharp`.
-The default application window is now the tracker. Log into the supported client;
+Start the suite with **Launch.cmd** and open its **Tracker** tab. Every NeocronSharp
+page sits in the suite's single window: the Tracker, Quests, Loot library and Plugins
+tabs, and the Tools tab with the Player, Recorder, Navigation and Environment pages.
+NeocronSharp opens no windows of its own. Started by itself, `dist/NeocronSharp.exe` shows the same pages as tabs
+in one window. Log into the supported client;
 the tracker connects automatically and refreshes every 500 ms while you play.
 
 - Lists real loaded NPC and nearby player names in bold, nearest first, with 3D distance, direction relative
@@ -59,8 +62,10 @@ the tracker connects automatically and refreshes every 500 ms while you play.
   an NPC first opens its template. Candidates are not actual corpse inventory;
   raw signed chance fields are not verified drop percentages. Special-generation
   base weapon references can produce parts and do not prove finished-weapon drops.
-- **Environment…** loads real BSP geometry, authored 3D path points and world
-  exits, overlays points/exits for the current map, exports OBJ plus JSON and
+- **Inspect player** (or double-clicking a player row) shows that player's published
+  gear on the **Player** page (suite: Tools › Player); inspecting another player replaces it.
+- **Environment** opens the Environment page, which loads real BSP geometry, authored 3D path points and world
+  exits, overlays points/exits for the current map (**Map overlay** returns to the tracker map), exports OBJ plus JSON and
   plans explicit sector links. Full scan resolves 787/791 world definitions
   (391 unique BSP source paths). This is navigation input: a collision-aware
   local navmesh and seamless macro traversal remain unimplemented.
@@ -110,8 +115,9 @@ The tracker and navigation currently share the fingerprinted read-only backend.
 
 ## Continuous coordinate recording
 
-Open **Open Coordinate Recorder.cmd** in Documents\Neocron AoSharp, or choose
-**Recorder…** in the tracker. The recorder can run on its own with `--recorder`.
+Open the suite's **Tools** tab and pick **Recorder**, or choose **Recorder** in the tracker. For
+development the recorder can also run on its own with `--recorder`; nothing in the
+suite starts it that way.
 
 1. Log your character into the game and wait for live XYZ/sector readings.
 2. Enter a recording name and keep the default 100 ms interval (up to 10 samples/s).
@@ -121,7 +127,7 @@ Open **Open Coordinate Recorder.cmd** in Documents\Neocron AoSharp, or choose
    alternate paths and revisit junctions. The optional height filter changes only
    the map preview, never the recorded 3D data.
 5. Choose **Stop & save** when finished. CSV is appended/flushed while recording;
-   JSON is finalized when stopping or closing the recorder. **Open folder** shows
+   JSON is finalized when stopping or when NeocronSharp (or the suite) closes. **Open folder** shows
    the files; **Export copy…** copies a completed CSV or JSON elsewhere.
 
 Recordings live in `NeocronSharp/recordings/` with unique timestamped filenames.
@@ -172,7 +178,7 @@ reads client memory: no writes, no input, no window focus.
 ## Walk back to a saved spot
 
 1. Log into the supported Neocron Evolution client. Stand at the destination.
-2. Open NeocronSharp, choose **Navigation…**, then **Save this spot**.
+2. Open the suite's **Tools** tab and pick **Navigation** (or **Navigation** in the tracker), then **Save this spot**.
 3. Walk somewhere else nearby, with an unobstructed path back on the same floor.
 4. Choose **Walk to saved spot**, then focus Neocron within five seconds.
 5. Close chat/RPOS and leave the mouse and movement keys alone while it runs.
@@ -245,7 +251,7 @@ dotnet run --project src/NeocronSharp -c Release -- --smoke-ui --ui-evidence --s
 dotnet run --project src/NeocronSharp -c Release -- --smoke-ui --ui-evidence --player-evidence
 dotnet run --project src/NeocronSharp -c Release -- --loot-index
 dotnet run --project src/NeocronSharp -c Release -- --environment-index
-dotnet run --project src/NeocronSharp -c Release -- --navigation
+dotnet run --project src/NeocronSharp -c Release -- --navigation   # standalone, development only
 dotnet publish src/NeocronSharp -c Release --no-self-contained -o dist
 ```
 

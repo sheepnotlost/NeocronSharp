@@ -1,4 +1,5 @@
-"""The suite opens the NeocronSharp (C#) windows; it never runs them in-process or sends game input."""
+"""The suite shows NeocronSharp (C#) inside its own tabs; it never opens NeocronSharp windows or sends game input."""
+import re
 import subprocess
 import unittest
 from unittest import mock
@@ -7,19 +8,29 @@ import neocronsharp_link
 
 
 class LinkTests(unittest.TestCase):
-    def test_each_button_starts_the_built_app_with_its_window_argument(self):
-        calls = []
-        with mock.patch.object(neocronsharp_link.Path, "exists", return_value=True):
-            for _, arguments in neocronsharp_link.WINDOWS:
-                neocronsharp_link.open_window(arguments, popen=lambda cmd, cwd: calls.append((cmd, cwd)))
-        self.assertEqual([cmd[1:] for cmd, _ in calls], [[], ["--recorder"], ["--navigation"]])
-        self.assertTrue(all(cmd[0].endswith("NeocronSharp.exe") for cmd, _ in calls))
-        self.assertTrue(all(cwd.endswith("dist") for _, cwd in calls))
+    def test_nothing_opens_neocronsharp_as_its_own_window(self):
+        self.assertFalse(hasattr(neocronsharp_link, "open_window"))
+        self.assertFalse(hasattr(neocronsharp_link, "WINDOWS"))
+        root = neocronsharp_link.ROOT
+        self.assertFalse((root / "Open NPC Tracker.cmd").exists())
+        self.assertFalse((root / "Open Coordinate Recorder.cmd").exists())
+
+    def test_every_former_window_is_a_page_the_suite_shows_in_a_tab(self):
+        self.assertEqual([name for name, _ in neocronsharp_link.TABS], ["Tracker", "Quests", "Loot library", "Tools", "Plugins"])
+        for page in ("Player", "Recorder", "Navigation", "Environment"):
+            self.assertEqual(neocronsharp_link.tab_of(page), "Tools")
+        self.assertEqual(neocronsharp_link.tab_of("Quests"), "Quests")
+        self.assertIsNone(neocronsharp_link.tab_of("Nowhere"))
+        self.assertEqual(len(neocronsharp_link.PAGES), len(set(neocronsharp_link.PAGES)))
+        tracker = (neocronsharp_link.PROJECT / "src" / "NeocronSharp" / "TrackerForm.cs").read_text(encoding="utf-8")
+        tabs = re.findall(r'TabPage\("([^"]+)"\)|_\w+Tab = new\("([^"]+)"\)', tracker)
+        names = {a or b for a, b in tabs}
+        self.assertEqual(names, set(neocronsharp_link.PAGES))  # "page <name>" only works for a tab the tracker has.
+        for window in (".Show(this)", "Application.Run"):  # Save/folder pickers (ShowDialog) are the only pop-ups left.
+            self.assertNotIn(window, tracker)
 
     def test_a_missing_build_says_so_instead_of_failing_silently(self):
         with mock.patch.object(neocronsharp_link, "EXECUTABLE", neocronsharp_link.PROJECT / "dist" / "missing.exe"):
-            with self.assertRaisesRegex(RuntimeError, "not built"):
-                neocronsharp_link.open_window()
             self.assertIn("Build", neocronsharp_link.status())
 
     def test_a_failed_build_reports_its_last_line(self):
@@ -70,3 +81,43 @@ class LinkTests(unittest.TestCase):
     def test_the_merged_project_ships_the_built_app_and_its_sources(self):
         self.assertTrue(neocronsharp_link.SOLUTION.exists())
         self.assertTrue(neocronsharp_link.EXECUTABLE.exists())
+
+
+class SuiteTabTests(unittest.TestCase):
+    def test_the_tools_tab_shows_the_former_windows_and_follows_neocronsharp(self):
+        import tempfile
+        import tkinter as tk
+        from pathlib import Path
+        from app import App
+
+        class NoInput:
+            def release_all(self): pass
+
+        class Tracker:
+            def __init__(self): self.shown, self.page = [], None
+            def running(self): return True
+            def show(self, parent, page): self.shown.append((parent, page))
+            def take_page(self):
+                page, self.page = self.page, None
+                return page
+            def close(self): pass
+
+        tracker = Tracker()
+        with tempfile.TemporaryDirectory() as folder, mock.patch("app.stop_sound"):
+            root = tk.Tk(); root.withdraw()
+            app = App(root, Path(folder) / "profile.json", NoInput(), tracker=tracker)
+            try:
+                self.assertEqual(list(app.sharp_tabs), ["Tracker", "Quests", "Loot library", "Tools", "Plugins"])
+                tools = app.sharp_hosts["Tools"].winfo_id()
+                app.tabs.select(app.sharp_tabs["Tools"]); app.show_sharp_page()
+                self.assertEqual(tracker.shown[-1], (tools, "Player"))
+                app.sharp_pages["Tools"].set("Recorder"); app.show_sharp_page()
+                self.assertEqual(tracker.shown[-1], (tools, "Recorder"))
+                self.assertEqual(app.selected_sharp_page(), "Recorder")
+                tracker.page = "Quests"; app.poll()  # NeocronSharp's NPC quests button
+                self.assertEqual(app.tabs.select(), str(app.sharp_tabs["Quests"]))
+                tracker.page = "Environment"; app.poll()  # its Environment button
+                self.assertEqual(app.tabs.select(), str(app.sharp_tabs["Tools"]))
+                self.assertEqual(app.selected_sharp_page(), "Environment")
+            finally:
+                app.close()

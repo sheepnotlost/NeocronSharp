@@ -32,3 +32,19 @@ item-images/
 
 # local research and other projects, never uploaded
 Do Not Commit/
+
+# Traversal engine (C#): build output, generated plans, terrain caches and run logs stay local;
+# only the small learned seeds in traversal/logs are committed
+traversal/bin/
+traversal/obj/
+traversal/tests/bin/
+traversal/tests/obj/
+traversal/out/
+traversal/logs/*
+!traversal/logs/traversal-crossings.txt
+!traversal/logs/traversal-obstacles.txt
+!traversal/logs/traversal-blocked.txt
+!traversal/logs/traversal-arrows.txt
+!traversal/logs/door-graph.txt
+!traversal/logs/wasteland-places.json
+!traversal/logs/arrows-*.json

@@ -1,8 +1,9 @@
-"""Launch the NeocronSharp windows (C#, in the NeocronSharp/ folder) from the suite.
+"""Show NeocronSharp (C#, in the NeocronSharp/ folder) inside the suite's own window.
 
 NeocronSharp reads the game client's memory read-only (fingerprinted build) for the NPC/player tracker, the
 native sector map, coordinate recording, point navigation, the loot library, environment/BSP export, quests and
-plugins. It runs as its own process; the suite only starts it. Nothing here sends game input.
+plugins. It runs as its own process, but the suite only ever starts it embedded (--embedded): each of its pages
+sits in a suite tab and it never opens a window of its own. Nothing here sends game input.
 """
 
 import os
@@ -16,14 +17,21 @@ PROJECT = ROOT / "NeocronSharp"
 EXECUTABLE = PROJECT / "dist" / "NeocronSharp.exe"
 SOLUTION = PROJECT / "NeocronSharp.sln"
 
-# What each button opens: (label, command-line arguments).
-WINDOWS = (
-    ("NPC tracker & map", ()),
-    ("Coordinate recorder", ("--recorder",)),
-    ("Point navigation", ("--navigation",)),
+# The suite tabs that show NeocronSharp, with the pages each one holds (names match NeocronSharp's "page <name>"
+# command). A tab with several pages gets a row of buttons to pick one; Tools holds what used to be separate windows.
+TABS = (
+    ("Tracker", ("Tracker",)),
+    ("Quests", ("Quests",)),
+    ("Loot library", ("Loot library",)),
+    ("Tools", ("Player", "Recorder", "Navigation", "Environment")),
+    ("Plugins", ("Plugins",)),
 )
-# The tracker window's pages, each shown in its own suite tab.
-PAGES = ("Tracker", "Quests", "Loot library", "Plugins")
+PAGES = tuple(page for _, pages in TABS for page in pages)
+
+
+def tab_of(page):
+    """The suite tab that shows NeocronSharp page `page`, or None."""
+    return next((tab for tab, pages in TABS if page in pages), None)
 
 
 def status():
@@ -47,15 +55,8 @@ def command(arguments=()):
     return [str(EXECUTABLE), *arguments]
 
 
-def open_window(arguments=(), popen=subprocess.Popen):
-    """Start NeocronSharp with `arguments` as a separate process. Raises RuntimeError with a short reason."""
-    if not EXECUTABLE.exists():
-        raise RuntimeError("NeocronSharp is not built yet. Use Build (needs the .NET 9 SDK).")
-    return popen(command(arguments), cwd=str(EXECUTABLE.parent))
-
-
 class EmbeddedTracker:
-    """One NeocronSharp tracker process shown inside the suite's Tracker, Quests and Plugins tabs.
+    """One NeocronSharp tracker process shown inside the suite's NeocronSharp tabs (TABS).
 
     It starts on first use with --embedded and takes one command per line on stdin (see EmbeddedHost.cs):
     the window handle of the tab to sit in, and the page to show.
