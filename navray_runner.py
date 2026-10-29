@@ -48,6 +48,7 @@ ZONE_MEMORY = 20.0       # the district banner was read this recently: the zone 
 ZONE_PUSH_SECONDS = 10.0  # near the zone line the dashes stop: keep walking forward this long for the zone to change
 ZONE_CHECK_EVERY = 1.0   # how often the Location name is read while pushing through
 ZONE_LOAD_SECONDS = 90.0  # longest a loading screen may last
+ZONE_AREA_SECONDS = 6.0   # after zoning, read the Location until it shows the new sector, at most this long
 ZONE_QUIET_SECONDS = 15.0  # after crossing, the new district's banner stays up a while: it is not a zone line ahead
 LOST_GRACE = .4          # seconds the dashes may drop out of view while walking a straight stretch before stopping
 MAX_TURNS = 6            # turns in a row that do not line the dashes up before giving up
@@ -446,6 +447,9 @@ class NavRayRunner(VisualRunner):
         if found:
             height, width = bgr.shape[:2]
             self.banner_box = (now, (box[0]/width, box[1]/height, box[2]/width, box[3]/height))
+            text = " ".join(words)
+            if "district" in text and ":" in text:     # "entering new district: pepper park sec-1"
+                self.banner_name = navray._norm(text.split(":", 1)[1])
         # Just after crossing, the new district's own banner is still shown: that is not a zone line ahead.
         ahead = found and now >= self.zone_quiet_until
         if ahead and not self.near_zone(now):
@@ -457,6 +461,7 @@ class NavRayRunner(VisualRunner):
         return found
 
     zone_seen = None             # when the district banner was last read: the zone line is close
+    banner_name = ""             # the district the banner names (letters and digits only), once read
     zone_quiet_until = float("-inf")   # a banner read before this is the zone just entered, not one ahead
 
     def near_zone(self, now):
@@ -934,17 +939,26 @@ class NavRayRunner(VisualRunner):
                                    "legs": list(self.route_legs), "seconds": self.clock() - started})
 
     def entered_zone(self, started):
-        """After crossing into a new zone: True (and the walk is over) when that zone is the destination."""
-        self.zone_seen, self.banner = None, None
+        """After crossing into a new zone: True (and the walk is over) when that zone is the destination.
+
+        Live (28 Oct 23:47): right after the loading screen the Location panel still showed the old sector, so the
+        arrival in PEPPER PARK SEC-1 was missed. Read it until it changes (a few seconds at most); the district
+        named on the banner at the zone line ("Entering new district: PEPPER PARK SEC-1") counts as well."""
+        previous, named = self.current_area, self.banner_name
+        self.zone_seen, self.banner, self.banner_name = None, None, ""
         self.zone_quiet_until = self.clock() + ZONE_QUIET_SECONDS
+        deadline = self.clock() + ZONE_AREA_SECONDS
         area = self.area_name()
+        while (len(navray._norm(area)) < 4 or navray._norm(area) == previous) and self.clock() < deadline:
+            self.wait(.4)
+            area = self.area_name()
         if len(navray._norm(area)) >= 4:
             self.current_area = navray._norm(area)
-        wanted = (getattr(self, "route_destination", "") or "").split(">")[-1]
+        wanted = navray._norm((getattr(self, "route_destination", "") or "").split(">")[-1])
         self.emit("status", f"Nav-Ray: entered {area or 'a new zone'}.")
-        if area and navray._norm(area) == navray._norm(wanted):
+        if wanted and (navray._norm(area) == wanted or (named and named == wanted and navray._norm(area) != previous)):
             self.finish_route(started)
-            self.emit("done", f"Nav-Ray: arrived in {area}.")
+            self.emit("done", f"Nav-Ray: arrived in {area or named}.")
             return True
         return False
 
@@ -1179,13 +1193,14 @@ class NavRayRunner(VisualRunner):
                 frame = got[1] if got else self.frame()
                 self.look(frame, got[0] if got else None, "searching" if scanning or got is None else "lining up")
                 self.vitals(reader, frame, state)
-                if state.pop("zoned", False):
+                if state.pop("zoned", False) or state.get("map_result") == "entered a new zone":
+                    state.pop("map_result", None)
                     if self.entered_zone(started):
                         return
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
                     wide, came_back, pushing = 0, False, False
-                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped", "stuck_mapped"):
                         state.pop(key, None)
                     continue
                 view = None
@@ -1222,7 +1237,7 @@ class NavRayRunner(VisualRunner):
                         track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                         scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
                         wide, came_back, pushing = 0, False, False
-                        for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped"):
+                        for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped", "stuck_mapped"):
                             state.pop(key, None)
                         continue
                     state.pop("map_result", None)
@@ -1324,7 +1339,7 @@ class NavRayRunner(VisualRunner):
                 if view is not None:
                     ahead = len(self.next_dashes(view, frame.shape[0]))
                     self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
-                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped", "stuck_mapped"):
                         state.pop(key, None)                 # following dashes again: a later wall gets both sides afresh
                 else:
                     self.emit("status", f"Nav-Ray: leg {legs}, no dashes in view; walking on towards the zone line.")
@@ -1345,7 +1360,7 @@ class NavRayRunner(VisualRunner):
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
                     wide = 0
-                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped", "stuck_mapped"):
                         state.pop(key, None)
                     continue
                 if reason == "stuck against something":
@@ -1356,6 +1371,15 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
+                    if self.near_zone(self.clock()) and not state.get("stuck_mapped"):
+                        # Live (28 Oct 23:46): a wall stopped the walk at the zone line and only the blind side push
+                        # was tried. Walk the sector map first.
+                        state["stuck_mapped"] = True
+                        result = self.map_walk(reader, state, "a wall at the zone line")
+                        if result == "entered a new zone":
+                            state["map_result"] = result
+                            track, lost, scanning = None, 0, False
+                            continue
                     open_side = self.corridor(_bgr(frame))[1] if self.near_zone(self.clock()) else 0
                     if self.near_zone(self.clock()) and self.side_push(state, open_side or last_side, frame.shape[1]):
                         track, lost, scanning, wide, pushing = None, 0, False, 0, True

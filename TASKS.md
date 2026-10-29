@@ -6,6 +6,7 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ### Pale dashes, zone lines, live viewer, game update — 28 October 2026
 
+- [x] First live run all the way (23:46): Plaza 1 through Plaza 3 into PEPPER PARK SEC-1 (confirmed by the user). The arrival was missed because the Location still read PLAZA SEC-3 just after loading; now it waits for the Location to change and trusts the banner's district name. Map walking now also runs when a wall stops the walk at a zone line.
 - [x] First live zone crossing (22:28, unattended): Plaza 1 to PLAZA SEC-3 through the zone line at 117 s, overlay on the whole run without losing focus. Not clean: at the copbot dead end the corridor reading chose the wrong way and the walk spent about 55 s in the NEM'A magazine shop before the dashes led it back. In Plaza 3 the route was lost again after about 30 s.
 - [x] Pale dashes on pale tiles past the Plaza 3 zone line are found: a dash lying over the crosshair is kept (only crosshair-sized blobs there are dropped), solid bars may vary a little more in hue, and a lone clear dash is followed along its own direction. Checked on five clips: no new false paths on signs, posters, screens or the district banner (about 30 new detections looked at).
 - [x] Near a zone line the walk never gives up after a short search: a wall turns the push to each side in turn, then it looks all round; a turn that loses the dashes comes back once, then steps towards them.

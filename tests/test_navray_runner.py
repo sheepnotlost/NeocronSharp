@@ -494,6 +494,24 @@ class WalkTests(unittest.TestCase):
         self.assertNotIn("w", backend.held_keys)
         self.assertTrue(any("walking the sector map to exit 3" in p for k, p in events if k == "status"))
 
+    def test_arrival_waits_for_the_location_to_change_and_trusts_the_banner(self):
+        # Live (28 Oct 23:47): after the loading screen the Location still read the old sector, so arriving in
+        # PEPPER PARK SEC-1 was missed.
+        runner, events = make_runner(lambda i: DARK)
+        runner.route_destination = "NEOCRON CITY SECTORS > PEPPER PARK SEC-1"
+        runner.current_area = "plazasec3"
+        readings = iter(["PLAZA SEC-3", "PLAZA SEC-3", "PEPPER PARK SEC-1"])
+        runner.area_name = lambda: next(readings, "PEPPER PARK SEC-1")
+        runner.finish_route = lambda started: None
+        self.assertTrue(runner.entered_zone(0.0))
+        self.assertIn("Nav-Ray: arrived in PEPPER PARK SEC-1.", [p for k, p in events if k == "done"])
+        runner, events = make_runner(lambda i: DARK)                 # the Location cannot be read: the banner decides
+        runner.route_destination = "NEOCRON CITY SECTORS > PEPPER PARK SEC-1"
+        runner.current_area, runner.banner_name = "plazasec3", "pepperparksec1"
+        runner.area_name = lambda: ""
+        runner.finish_route = lambda started: None
+        self.assertTrue(runner.entered_zone(0.0))
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None
