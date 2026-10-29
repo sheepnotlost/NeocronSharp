@@ -535,6 +535,26 @@ class WalkTests(unittest.TestCase):
         state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
         self.assertEqual(runner.map_walk(runner.detector.text_reader(), state, "test"), "entered a new zone")
 
+    def test_a_gap_in_the_dashes_is_crossed_on_the_tracked_route_only_when_it_is_sure(self):
+        import telemetry
+        runner, _ = make_runner(lambda i: DARK)
+        runner.px_per_count = -4.0
+        pose = telemetry.Sample(0.0, 1, 270.0, 0.0, 0.0, 0.0, 90.0)
+
+        class Tracker:
+            def __init__(self, confidence):
+                self.confidence = confidence
+
+            def steer(self, sample):
+                return type("Steer", (), {"error": 20.0, "point": (100.0, 0.0), "confidence": self.confidence})()
+        runner.tracker = Tracker(.3)
+        self.assertFalse(runner.follow_track(pose, 2000))                  # not sure enough: the old behaviour
+        self.assertFalse([e for e in runner.backend.events if e[0] == "rel"])
+        runner.tracker = Tracker(.9)
+        self.assertTrue(runner.follow_track(pose, 2000))
+        self.assertTrue([e for e in runner.backend.events if e[0] == "rel"])   # steered towards the route
+        self.assertFalse(runner.follow_track(None, 2000))                  # no live position: no tracked route
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None

@@ -13,6 +13,7 @@ import numpy as np
 
 import navray
 import navray_debug
+import pathtrack
 import pathvision
 import telemetry
 import routes
@@ -77,6 +78,9 @@ MAP_STUCK_UNITS = 25.0   # moved less than this (world units) ...
 MAP_STUCK_SECONDS = 1.6  # ...in this long with W held: a wall
 MAP_SECONDS = 120.0      # longest map walk
 MAP_EXIT_NEAR = 450.0    # world units from the exit within which a halt means the next zone is loading
+TRACK_CONFIDENCE = .6    # the self-tracked route (orbs placed from the dashes) is followed through a gap when this sure
+TRACK_GAP_SECONDS = 2.5  # ...for at most this long without a dash in view
+TRACK_DAMP = .6          # share of the tracked route's heading error corrected per look
 CORRIDOR_PIVOT = .2       # facing a wall near a zone line, turn this much (fraction of the width) per look to the open side
 ZONE_SIDE_TRIES = 2      # side pushes after a wall stops the push to a zone line: the side the dashes were on, then the other
 STEP_SECONDS = .6        # a short walk towards dashes that a turn keeps losing (low on screen: the body hides them)
@@ -834,9 +838,15 @@ class NavRayRunner(VisualRunner):
                 seen = self.find_dashes(bgr, prior=track, tube=.25)
                 if seen is None and track is not None:
                     seen = self.find_dashes(bgr)           # a pivot at a corner moves the line out of the old tube
+                pose = self.feed.latest(max_age=.3) if self.feed else None
+                if seen is not None and pose is not None and self.tracker is not None:
+                    try:
+                        self.tracker.update(pose, list(seen.route or seen.points), (frame.shape[1], frame.shape[0]))
+                    except Exception:                     # the tracker is a help, never a reason to stop
+                        pass
                 self.look(frame, seen, "pushing to zone line" if seen is None and self.near_zone(now)
                           else "walking" if forward else "turning in place",
-                          None if seen is None else self.steer_error(seen, frame))
+                          None if seen is None else self.steer_error(seen, frame), pose)
                 if seen is None:
                     missing_since = now if missing_since is None else missing_since
                     if tether and self.near_zone(now):
@@ -863,6 +873,11 @@ class NavRayRunner(VisualRunner):
                                 forward = True
                             if way is not None:
                                 self.steer_by(way, frame.shape[1])
+                    # The route tracked from the dashes already seen carries the walk through a short gap (the dashes
+                    # hidden behind the character, round a bend, by a passer-by): steer along it by the live position.
+                    elif tether and now - missing_since < TRACK_GAP_SECONDS and self.follow_track(pose, frame.shape[1]):
+                        self.sleep(.005)
+                        continue
                     # A straight stretch may blink out for a moment (stairs, a passer-by): keep going briefly. Never
                     # coast blind at a corner: release W at once and search from standing.
                     elif not at_corner and now - missing_since < LOST_GRACE:
@@ -1179,6 +1194,7 @@ class NavRayRunner(VisualRunner):
         self.current_area = navray._norm(self.route_start) if len(navray._norm(self.route_start)) >= 4 else ""
         if self.feed is None and getattr(self, "use_telemetry", True):
             self.feed = telemetry.Feed()
+        self.tracker = pathtrack.PathTracker() if self.feed is not None else None
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
@@ -1450,12 +1466,48 @@ class NavRayRunner(VisualRunner):
     overlay = None               # navray_debug.Overlay over the game, set by the app: what the walk sees, live
     blackbox = None              # navray_debug.BlackBox: the last 60 s of looks, saved when the walk ends
 
-    def look(self, frame, view, state, error=None):
+    tracker = None               # pathtrack.PathTracker while a walk runs with a live position
+
+    def follow_track(self, pose, width):
+        """Steer along the self-tracked route through a gap in the dashes; False when it is not sure enough."""
+        if pose is None or self.tracker is None or not self.px_per_count:
+            return False
+        try:
+            steer = self.tracker.steer(pose)
+        except Exception:
+            return False
+        if steer is None or steer.confidence < TRACK_CONFIDENCE:
+            return False
+        if abs(steer.error) > 3:
+            self.map_turn(-steer.error*TRACK_DAMP, width)   # pathtrack's + is NeocronSharp's heading; mapplan's is reversed
+        return True
+
+    def tracked_marks(self, frame, pose):
+        """(orbs, route) of the self-tracked path as screen pixels, for the overlay and the black box."""
+        if pose is None or self.tracker is None:
+            return [], []
+        size = (frame.shape[1], frame.shape[0])
+        cam, here = self.tracker.camera, (pose.x, pose.z, pose.heading)
+        orbs = [(o.x, o.z) for o in self.tracker.orbs(pose.sector)]
+        route = list(self.tracker.route(pose))
+
+        def on_screen(world):
+            if not len(world):
+                return []
+            pixels = cam.to_image(np.asarray(world, float), *here, size=size)
+            return [tuple(p) for p in pixels if np.all(np.isfinite(p)) and 0 <= p[0] < size[0] and 0 <= p[1] < size[1]]
+        return on_screen(orbs), on_screen(route)
+
+    def look(self, frame, view, state, error=None, pose=None):
         """Show a look on the overlay and keep it in the black box. Never allowed to stop a walk."""
         if self.overlay is None and self.blackbox is None:
             return
         try:
-            info = navray_debug.view_info(view, frame.shape, state, self.dash_color or "green", error=error)
+            orbs, route = self.tracked_marks(frame, pose) if pose is not None else ([], [])
+            info = navray_debug.view_info(view, frame.shape, state, self.dash_color or "green", error=error,
+                                          candidates=[(x, y, 0, 0) for x, y in orbs])
+            if route and view is None:
+                info["route"] = route                     # dashes out of view: show the tracked route instead
             if self.blackbox is not None:
                 self.blackbox.add(frame, info)
             if self.overlay is not None:
