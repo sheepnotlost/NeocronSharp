@@ -78,6 +78,8 @@ MAP_STUCK_UNITS = 25.0   # moved less than this (world units) ...
 MAP_STUCK_SECONDS = 1.6  # ...in this long with W held: a wall
 MAP_SECONDS = 120.0      # longest map walk
 MAP_EXIT_NEAR = 450.0    # world units from the exit within which a halt means the next zone is loading
+TRAIL_SECONDS = 6.0       # the way the walk was going is judged over this much of the live position's past
+TRAIL_MIN_UNITS = 150.0   # ...when it moved at least this far; else by the heading
 TRACK_CONFIDENCE = .6    # the self-tracked route (orbs placed from the dashes) is followed through a gap when this sure
 TRACK_GAP_SECONDS = 2.5  # ...for at most this long without a dash in view
 TRACK_DAMP = .6          # share of the tracked route's heading error corrected per look
@@ -796,11 +798,26 @@ class NavRayRunner(VisualRunner):
             self.backend.move_relative(counts, 0)
         return counts
 
+    walk_sector = None           # the sector id the walk is in, from the live position
+    trail = None                 # recent (time, x, z, sector) of the live position, for the way the walk was going
+
     def vitals(self, reader, frame, state):
         if frame.mean() < 6:
             self.wait_for_load(state)
             return
         now = self.clock()
+        sample = self.feed.latest() if self.feed else None
+        if sample is not None:
+            # Live (29 Oct 01:18): the sector changed to PEPPER PARK SEC-1 at 172 s, but the walk waited on the
+            # Location panel, took the halt while the zone loaded for a wall, and walked back out. The live sector
+            # is the zone change.
+            if self.walk_sector is not None and sample.sector != self.walk_sector:
+                state["zoned"] = True
+            self.walk_sector = sample.sector
+            if self.trail is None:
+                self.trail = []
+            self.trail.append((now, sample.x, sample.z, sample.sector))
+            self.trail = [t for t in self.trail if now - t[0] <= TRAIL_SECONDS]
         if now - state["health_checked"] >= HEALTH_EVERY:
             state["health_checked"] = now
             reading = self.health(reader, frame)
@@ -963,11 +980,14 @@ class NavRayRunner(VisualRunner):
         previous, named = self.current_area, self.banner_name
         self.zone_seen, self.banner, self.banner_name = None, None, ""
         self.zone_quiet_until = self.clock() + ZONE_QUIET_SECONDS
+        self.trail = []
+        area = self.sector_name()                          # the game's own name for the live sector: no OCR delay
         deadline = self.clock() + ZONE_AREA_SECONDS
-        area = self.area_name()
+        if not area:
+            area = self.area_name()
         while (len(navray._norm(area)) < 4 or navray._norm(area) == previous) and self.clock() < deadline:
             self.wait(.4)
-            area = self.area_name()
+            area = self.sector_name() or self.area_name()
         if len(navray._norm(area)) >= 4:
             self.current_area = navray._norm(area)
         wanted = navray._norm((getattr(self, "route_destination", "") or "").split(">")[-1])
@@ -1104,7 +1124,7 @@ class NavRayRunner(VisualRunner):
         planner = self.planner_for(sample)
         if planner is None:
             return None
-        got = planner.plan_to_exit((sample.x, sample.z), self.map_bearing(sample))
+        got = planner.plan_to_exit((sample.x, sample.z), self.travel_bearing(sample))
         if got is None:
             return None
         exit_, path = got
@@ -1166,6 +1186,31 @@ class NavRayRunner(VisualRunner):
             if "w" in self.backend.held_keys:
                 self.backend.key("w", False)
 
+    def sector_name(self):
+        """The game's name of the sector the live position is in (e.g. PEPPER PARK SEC-1), or ""."""
+        sample = self.feed.latest() if self.feed else None
+        if sample is None:
+            return ""
+        try:
+            import mapplan
+            if self.map_catalog is None:
+                self.map_catalog = mapplan.SectorMapCatalog()
+            return self.map_catalog.name(sample.sector) or ""
+        except Exception:
+            return ""
+
+    def travel_bearing(self, sample):
+        """The way the character has been going over the last few seconds (mapplan bearing), or its heading when it
+        has hardly moved. Live (29 Oct 01:18): at a wall the heading pointed back the way it came, and the map walk
+        chose the exit behind."""
+        import mapplan
+        points = [t for t in (self.trail or []) if t[3] == sample.sector]
+        if points:
+            dx, dz = sample.x - points[0][1], sample.z - points[0][2]
+            if np.hypot(dx, dz) >= TRAIL_MIN_UNITS:
+                return mapplan.bearing_of(dx, dz)
+        return self.map_bearing(sample)
+
     def destination_is_elsewhere(self):
         """Is the destination a city sector other than the one the walk is in (so the way leads to an exit)?"""
         category, _, name = (getattr(self, "route_destination", "") or "").partition(">")
@@ -1195,6 +1240,7 @@ class NavRayRunner(VisualRunner):
         if self.feed is None and getattr(self, "use_telemetry", True):
             self.feed = telemetry.Feed()
         self.tracker = pathtrack.PathTracker() if self.feed is not None else None
+        self.walk_sector, self.trail = None, []
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")

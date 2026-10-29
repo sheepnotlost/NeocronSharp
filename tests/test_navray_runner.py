@@ -555,6 +555,37 @@ class WalkTests(unittest.TestCase):
         self.assertTrue([e for e in runner.backend.events if e[0] == "rel"])   # steered towards the route
         self.assertFalse(runner.follow_track(None, 2000))                  # no live position: no tracked route
 
+    def test_the_live_sector_changing_is_a_zone_change_and_names_the_arrival(self):
+        # Live (29 Oct 01:18): the sector became PEPPER PARK SEC-1 (5) at 172 s, unnoticed; the walk turned back.
+        import telemetry
+        runner, events = make_runner(lambda i: DARK)
+        sector = {"id": 101}
+
+        class Feed:
+            def latest(self, max_age=1.0, now=None):
+                return telemetry.Sample(runner.clock(), sector["id"], 270.0, 10.0, 0.0, 20.0, 90.0)
+        runner.feed = Feed()
+        state = {"health": None, "health_checked": runner.clock(), "last_path": 0.0}
+        runner.vitals(None, DARK, state)
+        self.assertNotIn("zoned", state)
+        sector["id"] = 5
+        runner.vitals(None, DARK, state)
+        self.assertTrue(state.get("zoned"))
+        runner.sector_name = lambda: "PEPPER PARK SEC-1"
+        runner.route_destination = "NEOCRON CITY SECTORS > PEPPER PARK SEC-1"
+        runner.current_area = "plazasec3"
+        runner.finish_route = lambda started: None
+        self.assertTrue(runner.entered_zone(0.0))
+
+    def test_the_exit_is_chosen_by_the_way_the_walk_was_going_not_the_facing(self):
+        import telemetry, mapplan
+        runner, _ = make_runner(lambda i: DARK)
+        runner.trail = [(0.0, 0.0, 0.0, 101), (2.0, 0.0, 400.0, 101)]          # going +Z for the last seconds
+        facing_back = telemetry.Sample(3.0, 101, 270.0, 0.0, 0.0, 420.0, 0.0)  # heading 0 = facing -Z (a wall turn)
+        self.assertAlmostEqual(runner.travel_bearing(facing_back), mapplan.bearing_of(0.0, 420.0))
+        runner.trail = []
+        self.assertAlmostEqual(runner.travel_bearing(facing_back), runner.map_bearing(facing_back))
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None
