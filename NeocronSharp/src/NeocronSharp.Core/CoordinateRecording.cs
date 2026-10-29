@@ -56,12 +56,14 @@ public sealed class CoordinateRecording
             if (reason.Length == 0) DistanceWorldUnits += Vector3.Distance(last.Position, fix.Position);
         }
         int segment = _points.Count == 0 ? 1 : _points[^1].Segment + (reason.Length > 0 ? 1 : 0);
-        float heading = (MathF.Atan2(fix.Forward.X, -fix.Forward.Z) * 180 / MathF.PI + 360) % 360;
+        float heading = HeadingDegrees(fix.Forward);
         var point = new CoordinatePoint(_points.Count + 1, fix.CapturedAt.ToUniversalTime(), fix.MonotonicMilliseconds - _startedTick,
             segment, fix.SectorId, sectorName, fix.Position.X, fix.Position.Y, fix.Position.Z,
             fix.Forward.X, fix.Forward.Y, fix.Forward.Z, heading, reason);
         _points.Add(point); _previous = fix; _pendingBreak = null; return point;
     }
+    /// <summary>Ground heading in degrees: 0 = -Z, 90 = +X, in [0, 360).</summary>
+    public static float HeadingDegrees(Vector3 forward) => (MathF.Atan2(forward.X, -forward.Z) * 180 / MathF.PI + 360) % 360;
     public void MarkGap(DateTimeOffset at, string reason)
     {
         if (!IsRecording || _pendingBreak != null) return;

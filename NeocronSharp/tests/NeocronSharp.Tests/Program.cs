@@ -128,6 +128,7 @@ ExpansionTests.Run(Test, Check);
 PlayerTests.Run(Test, Check);
 OrderingTests.Run(Test, Check);
 CoordinateRecordingTests.Run(Test, Check);
+TelemetryLineTests.Run(Test, Check);
 QuestTests.Run(Test, Check);
 PluginTests.Run(Test, Check);
 Console.WriteLine($"{passed} tests passed.");

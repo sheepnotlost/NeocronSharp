@@ -99,6 +99,7 @@ internal static class Program
             }
             catch (Exception error) { Console.WriteLine(JsonSerializer.Serialize(new { status = "unavailable", message = error.Message })); return 1; }
         }
+        if (args.Contains("--telemetry")) return TelemetryStream.Run(args);
         if (args.Contains("--diagnose"))
         {
             try

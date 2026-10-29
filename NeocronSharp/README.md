@@ -148,6 +148,27 @@ Build validation covers 92 tests. Passive live UI verification uses:
 `dotnet run --project src/NeocronSharp -c Release -- --recorder --smoke-ui --ui-evidence`.
 It captures without moving the character and checks CSV/JSON sample counts.
 
+## Live telemetry stream
+
+`NeocronSharp.exe --telemetry [interval_ms]` (default 100, allowed 10..60000)
+opens no window and writes one JSON object per line to stdout, flushed after
+each line:
+
+```
+{"t":1793247595255,"sector":1,"rotation":270,"x":-1631.0957,"y":-255.9,"z":828.47003,"fx":0.10506358,"fz":0.99446553,"heading":173.96918,"ok":true}
+{"t":1793247595355,"ok":false,"error":"The sector changed during sampling. Retrying."}
+```
+
+`t` is Unix milliseconds (UTC); `rotation` is the native map rotation in
+degrees or `null` while the HUD has not loaded; X/Z are ground and Y is height
+as in the recorder; `fx`/`fz` is the ground-plane unit forward vector; `heading`
+uses the recorder convention (0 = -Z, 90 = +X). A failed sample (zoning, game
+closed, sector changed mid-sample) becomes an `"ok":false` line and sampling
+continues; while the client is closed one line per reconnect attempt (about
+1/s) is written until it is back. The stream ends cleanly when stdin reaches
+end of input, when stdout is closed, or on Ctrl+C. Like every other mode it only
+reads client memory: no writes, no input, no window focus.
+
 ## Walk back to a saved spot
 
 1. Log into the supported Neocron Evolution client. Stand at the destination.
@@ -217,6 +238,7 @@ dotnet build NeocronSharp.sln -c Release
 dotnet run --project tests/NeocronSharp.Tests -c Release
 dotnet run --project src/NeocronSharp -c Release -- --diagnose
 dotnet run --project src/NeocronSharp -c Release -- --entities
+dotnet run --project src/NeocronSharp -c Release -- --telemetry 100
 dotnet run --project src/NeocronSharp -c Release -- --smoke-ui
 dotnet run --project src/NeocronSharp -c Release -- --smoke-ui --ui-evidence
 dotnet run --project src/NeocronSharp -c Release -- --smoke-ui --ui-evidence --skin-evidence --expansion-evidence
