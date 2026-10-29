@@ -645,7 +645,11 @@ class WalkTests(unittest.TestCase):
                 self.assertEqual(legs, [True, False])                  # the second leg is a push with no dashes in view
                 self.assertFalse([k for k, p in events if k == "done"])
                 local = round(navray_runner.LOCAL_SCAN_WIDTH*2000/4.0)
-                self.assertGreater(max(abs(o) for o in offsets), 2*local)    # beyond where a local search reaches
+                if when == "before":
+                    # Live (28 Oct 21:53): the dashes end at the zone line; walk straight on, do not spin round first.
+                    self.assertLess(max((abs(o) for o in offsets), default=0), local)
+                else:
+                    self.assertGreater(max(abs(o) for o in offsets), 2*local)    # beyond where a local search reaches
 
     def test_a_turn_that_keeps_losing_the_dashes_comes_back_once_then_steps_towards_them(self):
         # Live (28 Oct, 19:37): "turn N, aim -0.3, 3 marks, nearest (392, 981)", "the turn lost the dashes; coming

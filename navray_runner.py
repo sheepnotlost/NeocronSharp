@@ -1027,7 +1027,7 @@ class NavRayRunner(VisualRunner):
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
                     wide, came_back, pushing = 0, False, False
-                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
                         state.pop(key, None)
                     continue
                 view = None
@@ -1050,9 +1050,16 @@ class NavRayRunner(VisualRunner):
                         self.emit("status", "Nav-Ray: the turn lost the dashes again; keeping this heading and "
                                             "stepping towards where they were.")
                         self.step_forward()
+                    if not scanning and seen_path and self.near_zone(self.clock()) and not state.get("zone_pushed"):
+                        # The dashes end at a zone line: walk straight on the way they led (live, 28 Oct 21:53: they
+                        # stopped 0.3 s before the banner showed, and looking all round spun the view twice instead).
+                        state["zone_pushed"] = True
+                        self.emit("status", "Nav-Ray: the dashes ended at the zone line; walking straight on through it.")
+                        track, lost, pushing = None, 0, True
+                        continue
                     if not scanning:
                         # The dashes went out of view (a corner, a pillar): look nearby before deciding the route is
-                        # over. Near a zone line the dashes stop there: look all the way round instead.
+                        # over. Near a zone line, once walking on did not get through: look all the way round.
                         scanning, scan_first, scan_looks, searched = True, None, 0, 0
                         scan_offset, scan_phase = 0, 0
                         wide = last_side if seen_path and self.near_zone(self.clock()) else 0
@@ -1130,7 +1137,7 @@ class NavRayRunner(VisualRunner):
                 if view is not None:
                     ahead = len(self.next_dashes(view, frame.shape[0]))
                     self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
-                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
                         state.pop(key, None)                 # following dashes again: a later wall gets both sides afresh
                 else:
                     self.emit("status", f"Nav-Ray: leg {legs}, no dashes in view; walking on towards the zone line.")
@@ -1151,7 +1158,7 @@ class NavRayRunner(VisualRunner):
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
                     wide = 0
-                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                    for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed"):
                         state.pop(key, None)
                     continue
                 if reason == "stuck against something":
