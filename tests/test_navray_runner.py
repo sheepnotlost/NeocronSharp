@@ -304,6 +304,13 @@ class WalkTests(unittest.TestCase):
         self.assertTrue(turns and all(t < 0 for t in turns), turns)                # left, and in one bold move each
         self.assertFalse([e for e in runner.backend.events if e[:2] == ("key", "w") and e[2]])   # never walked unaligned
 
+    def test_the_nav_ray_menu_item_is_found_even_when_lit_and_unreadable(self):
+        # Live (28 Oct, 2560 x 1440): the lit NAV-RAY item was missing from the OCR reading of the top menu.
+        words = [("MISSIONS", 1178, 14, 112, 22), ("TEAM", 1429, 14, 62, 22), ("OPTIONS", 1513, 14, 100, 22)]
+        self.assertEqual(NavRayRunner.navray_menu_point(words), (1359, 25))
+        self.assertEqual(NavRayRunner.navray_menu_point(words + [("NAV-RAY", 1310, 14, 100, 22)]), (1360, 25))
+        self.assertIsNone(NavRayRunner.navray_menu_point([("OPTIONS", 1513, 14, 100, 22)]))
+
     def test_a_moderate_heading_error_is_corrected_on_the_move_once_turning_is_calibrated(self):
         frame = np.roll(AHEAD, -300, axis=1)                      # the dashes lie to the left, not far
         runner, _ = make_runner(lambda i: frame)

@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Live Nav-Ray testing while away — 28 October 2026
+
+- [x] Run 1 (Plaza 2 towards Pepper Park 1): the zone-line push worked: the banner was read, the walk went on through the line, the game synchronised into the city zone and the Location became PLAZA SEC-3.
+- [x] Run 2 stopped with "Nav-Ray window not found": NAV-RAY in the top menu, when lit, is not read by the OCR, so the window could not be reopened. It is now clicked by its place between MISSIONS and TEAM when its word is missing (checked live: the window opened).
+- [ ] Runs 1 and 3, just past the Plaza 3 zone line: the route runs along the foot of the wall and only one or two pale dashes are in view at a time; a path needs two marks in a line, so it was lost, and turning towards the marks lost them again ("the turn lost the dashes; coming back", up to six times). Possible fix to agree: take a single clear dash's own direction as the line.
+
 ### Winamp-style skin polish and Pepper Park billboard — 28 October 2026
 
 - [x] Looked at the app in every skin. In the 13 drawn skins every button's text was hidden (a ttk "border" layout node is drawn after its children, so the button picture covered the label); corner details repeated across panels and fields as stray marks; tab names were cut (an image element is never narrower than its 100 px picture). Fixed, with a test that no drawn skin hides text or repeats marks.

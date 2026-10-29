@@ -514,13 +514,28 @@ class NavRayRunner(VisualRunner):
             if navray.find_navray(reader, self.detector.gray(self.frame())) is not None:
                 return True
             self.set_ui(reader, True)
-            for text, x, y, w, h in self.menu_words(reader):
-                if text.upper().startswith("NAV"):
-                    self.emit("status", "Nav-Ray: opening the window from the top menu.")
-                    self.click((x + w//2, y + h//2))
-                    self.wait(1.0)
-                    break
+            point = self.navray_menu_point(self.menu_words(reader))
+            if point is not None:
+                self.emit("status", "Nav-Ray: opening the window from the top menu.")
+                self.click(point)
+                self.wait(1.0)
         return navray.find_navray(reader, self.detector.gray(self.frame())) is not None
+
+    @staticmethod
+    def navray_menu_point(words):
+        """Where to click NAV-RAY in the top menu: its word, or, when it is lit and the OCR cannot read it (live,
+        28 Oct: the walk stopped with "Nav-Ray window not found"), its place between MISSIONS and TEAM."""
+        by_name = {}
+        for text, x, y, w, h in words:
+            if text.upper().startswith("NAV"):
+                return (x + w//2, y + h//2)
+            by_name[text.upper()] = (x, y, w, h)
+        if "MISSIONS" in by_name and "TEAM" in by_name:
+            mx, my, mw, mh = by_name["MISSIONS"]
+            tx = by_name["TEAM"][0]
+            if tx > mx + mw:
+                return ((mx + mw + tx)//2, my + mh//2)
+        return None
 
     def press(self, name):
         self.backend.key(name, True)
