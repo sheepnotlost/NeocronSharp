@@ -994,7 +994,7 @@ class NavRayRunner(VisualRunner):
 
     def finish_route(self, started):
         """Hand the finished walk to whoever keeps the route library (a single event; no file access here)."""
-        end = self.area_name()
+        end = self.sector_name() or self.area_name()     # the live sector's own name; OCR as the fallback
         self.emit("navray_route", {"start": self.route_start, "destination": self.route_destination, "end": end,
                                    "legs": list(self.route_legs), "seconds": self.clock() - started})
 
@@ -1318,6 +1318,11 @@ class NavRayRunner(VisualRunner):
         self.current_area = navray._norm(self.route_start) if len(navray._norm(self.route_start)) >= 4 else ""
         if self.feed is None and getattr(self, "use_telemetry", True):
             self.feed = telemetry.Feed()
+            waited = self.clock()
+            while self.feed.latest() is None and self.feed.process is not None and self.clock() - waited < 1.5:
+                self.wait(.1)                              # the first sample, to name where the walk starts
+            # Live (29 Oct 02:02): read from the Location panel the route was saved as "SEC-1 to PLAZA SEC-3".
+            self.route_start = self.sector_name() or self.route_start
         self.tracker = pathtrack.PathTracker() if self.feed is not None else None
         if self.navplanner is None and self.feed is not None:
             try:
