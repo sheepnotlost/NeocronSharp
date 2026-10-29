@@ -26,3 +26,6 @@ Research/*
 
 # pictures kept on this PC only (game artwork; the repository is public)
 assets/local/
+
+# Recycling item pictures from Tech Haven (game artwork; the repository is public)
+item-images/

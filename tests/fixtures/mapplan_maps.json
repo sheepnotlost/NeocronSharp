@@ -1,0 +1,36 @@
+{
+ "1": {
+  "name": "PLAZA SEC-1",
+  "image": "mapplan_1.png",
+  "crop_origin": [
+   38,
+   16
+  ],
+  "bitmap_ref": [
+   195.0,
+   204.0
+  ],
+  "world_ref": [
+   -3248.0,
+   -2767.0
+  ],
+  "scale": 0.028
+ },
+ "5": {
+  "name": "PEPPER PARK SEC-1",
+  "image": "mapplan_5.png",
+  "crop_origin": [
+   37,
+   15
+  ],
+  "bitmap_ref": [
+   43.0,
+   71.0
+  ],
+  "world_ref": [
+   1103.0,
+   -816.0
+  ],
+  "scale": 0.046
+ }
+}

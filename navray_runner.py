@@ -14,6 +14,7 @@ import numpy as np
 import navray
 import navray_debug
 import pathvision
+import telemetry
 import routes
 from macro_core import Interrupted
 from vision_runner import VisualRunner
@@ -65,6 +66,15 @@ DOOR_TARGET_WAIT = 2.0    # allow a moving character or NPC to clear the target 
 MAX_STUCK = 6            # wall recoveries in one walk before giving up
 ZONE_SIDE_TURN = .8      # a side push towards a zone line turns the view by this many widths of slide (about a quarter
                          # turn at a 90 degree view; the calibration is measured at the centre of the view)
+MAP_FOV = 90.0           # degrees across the view assumed for the first map turn; then measured from the heading
+MAP_TURN_IN_PLACE = 55.0  # walking the map: this far off the way (degrees), stop and turn on the spot
+MAP_RESUME = 20.0        # ...and walk on below this
+MAP_DAMP = .6            # share of the heading error corrected per look while walking the map
+MAP_LOOKAHEAD = 220.0    # world units ahead along the planned path to steer for
+MAP_PUSH = 600.0         # world units on past an exit arrow (the zone changes there)
+MAP_STUCK_UNITS = 25.0   # moved less than this (world units) ...
+MAP_STUCK_SECONDS = 1.6  # ...in this long with W held: a wall
+MAP_SECONDS = 120.0      # longest map walk
 CORRIDOR_PIVOT = .2       # facing a wall near a zone line, turn this much (fraction of the width) per look to the open side
 ZONE_SIDE_TRIES = 2      # side pushes after a wall stops the push to a zone line: the side the dashes were on, then the other
 STEP_SECONDS = .6        # a short walk towards dashes that a turn keeps losing (low on screen: the body hides them)
@@ -1002,6 +1012,119 @@ class NavRayRunner(VisualRunner):
             self.backend.move_relative(counts, 0)
         return counts
 
+    # ---- walking by the game's own sector map and the live position (NeocronSharp --telemetry) ----
+    feed = None                  # telemetry.Feed while a walk runs, None without NeocronSharp
+    map_catalog = None
+    deg_per_count = None         # heading degrees per mouse count (signed), measured on map turns
+
+    def planner_for(self, sample):
+        """The mapplan.SectorPlanner for the sector the sample is in (cached), or None (no map, no rotation)."""
+        if sample is None or sample.rotation is None:
+            return None
+        cache = self.__dict__.setdefault("planners", {})
+        key = (sample.sector, sample.rotation)
+        if key not in cache:
+            try:
+                import mapplan
+                if self.map_catalog is None:
+                    self.map_catalog = mapplan.SectorMapCatalog()
+                cache[key] = mapplan.SectorPlanner.from_catalog(self.map_catalog, sample.sector, sample.rotation)
+            except Exception as exc:                     # no map for this sector, no game install: walk by sight
+                self.emit("status", f"Nav-Ray: no sector map to plan on ({exc}).")
+                cache[key] = None
+        return cache[key]
+
+    @staticmethod
+    def map_bearing(sample):
+        """The character's heading in mapplan's convention (0 = +Z, 90 = +X); NeocronSharp's is 0 = -Z."""
+        return (180.0 - sample.heading) % 360.0
+
+    def map_turn(self, degrees, width):
+        """Turn by `degrees` of heading, then learn the real degrees per count from the live heading (its sign
+        too: which way the mouse turns the bearing is not assumed)."""
+        if self.deg_per_count is None:
+            self.deg_per_count = abs(self.px_per_count or 4.0)*MAP_FOV/width
+        before = self.feed.latest() if self.feed else None
+        limit = max(5, round(CAL_MAX_PX/abs(self.px_per_count))) if self.px_per_count else MAX_STEP*3
+        counts = round(max(-limit, min(limit, degrees/self.deg_per_count)))
+        if not counts:
+            return 0
+        self.backend.move_relative(counts, 0)
+        self.wait(.15)
+        after = self.feed.latest() if self.feed else None
+        if before is not None and after is not None and abs(counts) >= 15:
+            turned = (self.map_bearing(after) - self.map_bearing(before) + 180.0) % 360.0 - 180.0
+            if abs(turned) >= 2:
+                measured = turned/counts
+                self.deg_per_count = measured if measured*self.deg_per_count < 0 else .5*self.deg_per_count + .5*measured
+        return counts
+
+    def map_walk(self, reader, state, why):
+        """Walk the sector map from the live position to the exit the character is heading for, steering by the
+        live heading: the dashes are gone (a zone line ahead, or lost for good mid-sector). Returns why it ended,
+        or None when there is no live position or map to walk by (then the walk carries on by sight)."""
+        import mapplan
+        sample = self.feed.latest() if self.feed else None
+        planner = self.planner_for(sample)
+        if planner is None:
+            return None
+        got = planner.plan_to_exit((sample.x, sample.z), self.map_bearing(sample))
+        if got is None:
+            return None
+        exit_, path = got
+        ahead = np.radians(exit_.bearing)
+        path = list(path) + [exit_.beyond, (exit_.beyond[0] + MAP_PUSH*np.sin(ahead),
+                                            exit_.beyond[1] + MAP_PUSH*np.cos(ahead))]
+        self.emit("status", f"Nav-Ray: {why}; walking the sector map to exit {exit_.label} ({len(path)} waypoints).")
+        sector, started = sample.sector, self.clock()
+        forward, moved_at, moved_from = False, self.clock(), (sample.x, sample.z)
+        try:
+            while self.clock() - started < MAP_SECONDS:
+                self.checkpoint()
+                frame = self.frame()
+                width = frame.shape[1]
+                self.vitals(reader, frame, state)
+                if state.get("zoned"):
+                    return "entered a new zone"
+                sample = self.feed.latest()
+                if sample is None:
+                    return "lost the live position"
+                if sample.sector != sector:
+                    return "entered a new zone"
+                here = (sample.x, sample.z)
+                _, target = mapplan.next_waypoint(here, path, lookahead=MAP_LOOKAHEAD)
+                want = mapplan.bearing_of(target[0] - here[0], target[1] - here[1])
+                off = (want - self.map_bearing(sample) + 180.0) % 360.0 - 180.0
+                self.look(frame, None, f"map to exit {exit_.label}", off/MAP_FOV)
+                if abs(off) > MAP_TURN_IN_PLACE or (not forward and abs(off) > MAP_RESUME):
+                    if forward:
+                        self.backend.key("w", False)
+                        forward = False
+                    self.map_turn(off, width)
+                    moved_at, moved_from = self.clock(), here
+                    continue
+                if not forward:
+                    self.backend.key("w", True)
+                    forward = True
+                    moved_at, moved_from = self.clock(), here
+                if abs(off) > 3:
+                    self.map_turn(off*MAP_DAMP, width)
+                if np.hypot(here[0] - moved_from[0], here[1] - moved_from[1]) >= MAP_STUCK_UNITS:
+                    moved_at, moved_from = self.clock(), here
+                elif self.clock() - moved_at > MAP_STUCK_SECONDS:
+                    return "stuck against something"
+                self.sleep(.05)
+            return "map walk time limit"
+        finally:
+            if "w" in self.backend.held_keys:
+                self.backend.key("w", False)
+
+    def destination_is_elsewhere(self):
+        """Is the destination a city sector other than the one the walk is in (so the way leads to an exit)?"""
+        category, _, name = (getattr(self, "route_destination", "") or "").partition(">")
+        sector = "SECTOR" in category.upper() or "SEC-" in name.upper()
+        return sector and bool(self.current_area) and navray._norm(name) != self.current_area
+
     def step_forward(self, seconds=STEP_SECONDS):
         """Walk a short way straight on, without steering."""
         self.backend.key("w", True)
@@ -1022,6 +1145,8 @@ class NavRayRunner(VisualRunner):
                           f"{self.route_start} to {known.get('end')}).")
         self.zone_seen, self.banner, self.banner_box, self.zone_quiet_until = None, None, None, float("-inf")
         self.current_area = navray._norm(self.route_start) if len(navray._norm(self.route_start)) >= 4 else ""
+        if self.feed is None and getattr(self, "use_telemetry", True):
+            self.feed = telemetry.Feed()
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
             self.emit("status", f"Nav-Ray: turning calibrated, the view slides {self.px_per_count:+.2f} px per mouse count.")
@@ -1083,6 +1208,24 @@ class NavRayRunner(VisualRunner):
                         self.emit("status", "Nav-Ray: the turn lost the dashes again; keeping this heading and "
                                             "stepping towards where they were.")
                         self.step_forward()
+                    if not scanning and seen_path and self.near_zone(self.clock()) and not state.get("zone_mapped"):
+                        state["zone_mapped"] = True
+                        result = self.map_walk(reader, state, "the dashes ended at the zone line")
+                        if result is not None:
+                            state["map_result"] = result
+                    if state.get("map_result") == "entered a new zone":
+                        state.pop("map_result")
+                        state.pop("zoned", None)
+                        state.pop("zone_reading", None)
+                        if self.entered_zone(started):
+                            return
+                        track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
+                        scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
+                        wide, came_back, pushing = 0, False, False
+                        for key in ("zone_tries", "zone_turned", "zone_side", "zone_pushed", "zone_mapped", "lost_mapped"):
+                            state.pop(key, None)
+                        continue
+                    state.pop("map_result", None)
                     if not scanning and seen_path and self.near_zone(self.clock()) and not state.get("zone_pushed"):
                         # The dashes end at a zone line: walk straight on the way they led (live, 28 Oct 21:53: they
                         # stopped 0.3 s before the banner showed, and looking all round spun the view twice instead).
@@ -1126,6 +1269,17 @@ class NavRayRunner(VisualRunner):
                                 # Live (28 Oct, 20:00): the local search ended the walk 3 m from the zone line.
                                 wide, scan_first, scan_looks, searched = -last_side, None, 0, 0     # on round the same way
                                 self.emit("status", "Nav-Ray: nothing nearby, and the zone line is close; looking all round.")
+                            elif scan_offset == target and self.destination_is_elsewhere() and not state.get("lost_mapped"):
+                                state["lost_mapped"] = True
+                                result = self.map_walk(reader, state, "the dashes are lost")
+                                if result is not None:
+                                    state["map_result"] = result
+                                    scanning, track, lost = False, None, 0
+                                    continue
+                                self.save_failure(Interrupted("Path lost or ended."))
+                                self.finish_route(started)
+                                self.emit("done", "Nav-Ray: path lost or ended. Arrived, or the route was lost.")
+                                return
                             elif scan_offset == target:
                                 self.save_failure(Interrupted("Path lost or ended."))
                                 self.finish_route(started)
@@ -1218,6 +1372,9 @@ class NavRayRunner(VisualRunner):
             for key in ("shift", "w", "s"):
                 if key in self.backend.held_keys:
                     self.backend.key(key, False)
+            if self.feed is not None:
+                self.feed.close()
+                self.feed = None
 
     # ---- sequence ----
     def execute(self):

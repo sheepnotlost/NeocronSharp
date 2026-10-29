@@ -1,5 +1,6 @@
 """Walk loop with a fake backend and the user's real path frames."""
 from pathlib import Path
+import math
 import unittest
 from unittest.mock import patch
 
@@ -71,6 +72,7 @@ def make_runner(frames, health=(972,)):
     runner.control = Control()
     runner.events = events = []
     runner.emit = lambda kind, payload=None: events.append((kind, payload))
+    runner.use_telemetry = False                 # never start the real NeocronSharp feed in tests
     runner.clock = lambda: clock["t"]
     runner.sleep = lambda seconds: clock.__setitem__("t", clock["t"] + seconds)
     runner.last_frame = None
@@ -451,6 +453,51 @@ class WalkTests(unittest.TestCase):
                 released = max(i for i, e in enumerate(events) if e == ("key", "w", False))
                 last_turn = max(i for i, e in enumerate(events) if e[0] == "rel")
                 self.assertEqual(released > last_turn, expect_walking)   # steering on the move, or stopped to turn
+
+    def test_walking_the_sector_map_turns_onto_the_planned_path_and_ends_in_the_new_zone(self):
+        # The dashes vanish near a zone change; the live position and the game's own sector map give the way to the
+        # exit. A simulated character: the mouse turns its heading (the opposite way to the first guess, which the
+        # walk must learn), W moves it forward, and crossing Z = 600 is the zone change.
+        import telemetry
+        runner, events = make_runner(lambda i: moving_dark(i))
+        runner.px_per_count = -4.0
+        backend = runner.backend
+        body = {"x": 0.0, "z": 0.0, "bearing": 90.0}             # facing +X; the exit is due +Z
+        original = backend.move_relative
+
+        def move(dx, dy):
+            original(dx, dy)
+            body["bearing"] = (body["bearing"] - .18*dx) % 360   # the mouse turns the other way to the guess
+        backend.move_relative = move
+
+        class Feed:
+            def latest(self, max_age=1.0, now=None):
+                if "w" in backend.held_keys:
+                    rad = math.radians(body["bearing"])
+                    body["x"] += 20*math.sin(rad); body["z"] += 20*math.cos(rad)
+                return telemetry.Sample(runner.clock(), 2 if body["z"] > 600 else 1, 270.0, body["x"], 0.0, body["z"],
+                                        (180.0 - body["bearing"]) % 360)
+
+        class Exit:
+            label, bearing, beyond = "3", 0.0, (0.0, 650.0)
+
+        class Planner:
+            def plan_to_exit(self, here, hint):
+                return Exit(), [here, (0.0, 300.0), (0.0, 600.0)]
+        runner.feed = Feed()
+        runner.planner_for = lambda sample: Planner()
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        result = runner.map_walk(runner.detector.text_reader(), state, "the dashes ended at the zone line")
+        self.assertEqual(result, "entered a new zone")
+        self.assertLess(abs(body["x"]), 120)                       # it stayed near the planned line X = 0
+        self.assertLess(runner.deg_per_count, 0)                   # learned which way the mouse really turns
+        self.assertNotIn("w", backend.held_keys)
+        self.assertTrue(any("walking the sector map to exit 3" in p for k, p in events if k == "status"))
+
+    def test_without_a_live_position_the_map_walk_steps_aside(self):
+        runner, _ = make_runner(lambda i: DARK)
+        runner.feed = None
+        self.assertIsNone(runner.map_walk(runner.detector.text_reader(), {}, "test"))
 
     def test_away_from_a_zone_line_losing_the_dashes_still_stops_at_once(self):
         runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))

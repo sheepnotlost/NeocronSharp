@@ -18,6 +18,7 @@ from recipes import RECIPES, catalog, find_recipe, add_recipe, remove_recipe
 from recycling import load_catalog, filter_recipes
 from appearance import SKINS, apply_skin, stop_sound
 from construction_catalog import load_construction_catalog, filter_construction
+from item_images import ItemImages, PictureLoader
 import gogo
 import navray
 
@@ -25,11 +26,21 @@ ROOT = Path(__file__).resolve().parent
 PROFILE_PATH = ROOT / "profile.json"
 OPERATION_LABELS = {"tech_parts": "Tech parts (T / E / A / L)", "blueprints": "Item → blueprint"}
 SEARCH_LABELS={"fast":"Fast — datacube icons","all_cells":"Thorough — every cell"}
+PICTURE_WELL=136      # px square slot for a recycling item's picture (pictures fit in 128 px)
+PICTURE_DELAY_MS=150  # let the selection settle before looking a picture up
+PICTURE_TEXT={"loading":"Loading\npicture…","missing":"No picture on\nTech Haven",
+              "failed":"No answer from\nTech Haven"}
 
 
 class App:
-    def __init__(self, root, profile_path=PROFILE_PATH, backend=None, tracker=None):
+    def __init__(self, root, profile_path=PROFILE_PATH, backend=None, tracker=None, item_images=None):
         self.root = root
+        # Recycling pictures come from Tech Haven on a worker thread; results return through self.events.
+        self.item_images = item_images if item_images is not None else ItemImages()
+        self.picture_loader = PictureLoader(self.item_images, lambda rid, state, image: self.events.put(("item_image", (rid, state, image))))
+        self._picture_after = None
+        self._picture_shown = None  # (recipe id, PIL image) currently in the slot
+        self._picture_photo = None
         self.backend = backend if backend is not None else WindowsBackend()
         self.tracker = tracker  # neocronsharp_link.EmbeddedTracker; None leaves the NeocronSharp tabs empty (tests).
         self.profile_path = Path(profile_path)
@@ -63,6 +74,7 @@ class App:
         self.build_ui()
         self.populate()
         apply_skin(self.root,self.profile.get("preferences",{}).get("skin","basic"),self.heading)
+        self.style_item_picture()
         if load_error:
             self.report("Could not load profile: " + load_error)
         self.root.after(30, self.poll)
@@ -203,7 +215,7 @@ class App:
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
-        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.sync_start_button(),self.show_sharp_page()))
+        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.sync_start_button(),self.show_sharp_page(),self.queue_item_picture()))
 
     def install_responsive_text(self):
         """Wrap paragraphs to their allocated width, including after skin changes.
@@ -366,10 +378,16 @@ class App:
         detail_window=detail_canvas.create_window((0,0),window=details,anchor="nw")
         details.bind("<Configure>",lambda e:detail_canvas.configure(scrollregion=detail_canvas.bbox("all")))
         detail_canvas.bind("<Configure>",lambda e:detail_canvas.itemconfigure(detail_window,width=e.width))
+        details.columnconfigure(0,weight=1)
         self.recycle_description=tk.StringVar()
-        ttk.Label(details,textvariable=self.recycle_description,wraplength=340,justify="left").pack(anchor="nw")
+        ttk.Label(details,textvariable=self.recycle_description,wraplength=340,justify="left").grid(row=0,column=0,sticky="nw")
+        # The item's picture sits in a fixed slot beside the text, so nothing moves when it loads.
+        self.picture_well=ttk.Frame(details,style="Picture.TFrame",width=PICTURE_WELL,height=PICTURE_WELL)
+        self.picture_well.grid(row=0,column=1,sticky="ne",padx=(10,2));self.picture_well.pack_propagate(False)
+        self.picture_label=ttk.Label(self.picture_well,style="Picture.TLabel",anchor="center",justify="center")
+        self.picture_label.pack(fill="both",expand=True,padx=1,pady=1)
         source=ttk.Button(details,text="Open recipe source",command=self.open_recycle_source)
-        source.pack(anchor="w",pady=(10,14));self.editable.append(source)
+        source.grid(row=1,column=0,columnspan=2,sticky="w",pady=(10,14));self.editable.append(source)
         self.recycle_query.trace_add("write",lambda *args:self.filter_recycling())
         self.recycle_category.trace_add("write",lambda *args:self.filter_recycling())
         self.filter_recycling()
@@ -388,11 +406,79 @@ class App:
     def show_recycle_recipe(self):
         selection=self.recycle_tree.selection()
         row=next((r for r in self.recycle_data["recipes"] if selection and r["id"]==selection[0]),None)
-        if row is None:self.recycle_description.set("No matching recipe.");return
+        if row is None:self.recycle_description.set("No matching recipe.");self.queue_item_picture();return
         text=row["name"]+"\n"+row["category"]+f" · TL {row['tech_level'] if row['tech_level'] is not None else 'not listed'}\n\nIngredients:\n"
         text+="\n".join(f"{p['quantity']} × {p['name']}" for p in row["ingredients"])
         if row["requirements"]:text+="\n\nItem requirements: "+row["requirements"]
         self.recycle_description.set(text)
+        self.queue_item_picture()
+
+    def selected_recycle_recipe(self):
+        selection=self.recycle_tree.selection()
+        return next((r for r in self.recycle_data["recipes"] if selection and r["id"]==selection[0]),None)
+
+    def pictures_visible(self):
+        """Pictures are only looked up while someone can see them: the Recycling tab open in a shown window."""
+        try:
+            return (self.tabs.select()==str(self.recycling_tab) and bool(self.root.winfo_viewable())
+                    and float(self.root.attributes("-alpha"))>0)
+        except tk.TclError:
+            return False
+
+    def queue_item_picture(self):
+        """Ask for the selected recipe's picture once the selection settles (arrow-key scrolling skips rows)."""
+        if not hasattr(self,"picture_label"):return
+        if self._picture_after is not None:
+            self.root.after_cancel(self._picture_after);self._picture_after=None
+        row=self.selected_recycle_recipe()
+        if row is None:
+            self.set_item_picture(None,"");return
+        if self._picture_shown is not None and self._picture_shown[0]==row["id"]:return
+        self.set_item_picture(None,"")
+        if self.pictures_visible():
+            self._picture_after=self.root.after(PICTURE_DELAY_MS,lambda:self._request_item_picture(row["id"]))
+
+    def _request_item_picture(self,recipe_id):
+        self._picture_after=None
+        row=self.selected_recycle_recipe()
+        if row is not None and row["id"]==recipe_id and self.pictures_visible():
+            self.picture_loader.request(row)
+
+    def show_item_picture(self,recipe_id,state,image):
+        row=self.selected_recycle_recipe()
+        if row is None or row["id"]!=recipe_id:return  # The user moved on; a later request is pending.
+        if state=="ok" and image is not None:
+            self.set_item_picture((recipe_id,image),"")
+        else:
+            self.set_item_picture(None,PICTURE_TEXT.get(state,""))
+
+    def set_item_picture(self,shown,text):
+        self._picture_shown=shown
+        self._picture_photo=None
+        if shown is not None:
+            from PIL import Image, ImageTk
+            image=shown[1]
+            if image.mode=="RGBA":  # Flatten onto the slot colour so the edges match every skin.
+                flat=Image.new("RGB",image.size,self.skin_rgb("input"))
+                flat.paste(image,mask=image.getchannel("A"));image=flat
+            self._picture_photo=ImageTk.PhotoImage(image,master=self.root)
+        self.picture_label.configure(image=self._picture_photo or "",text=text)
+
+    def current_skin(self):
+        key=self.profile.get("preferences",{}).get("skin","basic")
+        return key if key in SKINS else "basic"
+
+    def skin_rgb(self,role):
+        value=SKINS[self.current_skin()][role].lstrip("#")
+        return tuple(int(value[i:i+2],16) for i in (0,2,4))
+
+    def style_item_picture(self):
+        """The picture slot reads like an inventory cell: the skin's input well, edged in its border colour."""
+        skin=SKINS[self.current_skin()]
+        style=ttk.Style(self.root)
+        style.configure("Picture.TFrame",background=skin["edge"])
+        style.configure("Picture.TLabel",background=skin["input"],foreground=skin["muted"],font=(skin["font"],9))
+        if self._picture_shown is not None:self.set_item_picture(self._picture_shown,"")
 
     def open_recycle_source(self):
         selection=self.recycle_tree.selection()
@@ -406,6 +492,7 @@ class App:
         self.profile["preferences"]={"skin":key,"stop_sound":self.stop_sound_var.get(),
                                      "navray_overlay":self.navray_overlay.get() if hasattr(self,"navray_overlay") else True}
         apply_skin(self.root,key,self.heading)
+        self.style_item_picture()
         try:save_profile(self.profile_path,self.profile)
         except (ValueError,OSError) as exc:self.report("Could not save preferences: "+str(exc))
 
@@ -932,6 +1019,8 @@ class App:
                     self.report("Could not save the route: "+str(exc))
             elif kind == "detected":
                 self.show_detected(payload)
+            elif kind == "item_image":
+                self.show_item_picture(*payload)
             elif kind == "blueprint_cycle":
                 remaining = "repeating until stopped" if payload["continuous"] else f"{payload['count']} copies remaining"
                 self.report(f"Blueprint: completed {payload['completed']}; {remaining}.")
