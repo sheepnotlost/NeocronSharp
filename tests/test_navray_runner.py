@@ -1,6 +1,7 @@
 """Walk loop with a fake backend and the user's real path frames."""
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -428,6 +429,28 @@ class WalkTests(unittest.TestCase):
         _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
         self.assertEqual(reason, "stuck against something")
         self.assertLess(runner.clock(), navray_runner.ZONE_PUSH_SECONDS)
+
+    def test_near_a_zone_line_with_no_dashes_it_follows_the_corridor(self):
+        # The user's rule (28 Oct): the dashes vanish near a zone change; walk the corridor itself until the zone
+        # changes. Open way to the left: steer left while walking. A wall ahead, open on the right: stop and turn right.
+        for way, side, expect_turn, expect_walking in ((-.2, 0, -1, True), (None, 1, 1, False)):
+            with self.subTest(way=way, side=side):
+                runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))
+                runner.px_per_count = -4.2
+                runner.zone_seen = 0.0
+                runner.area_name = lambda: "PLAZA SEC-1"
+                runner.corridor = lambda bgr, _w=way, _s=side: (_w, _s)
+                view = pathvision_find(AHEAD)
+                state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+                with patch.object(navray_runner, "ZONE_PUSH_SECONDS", 3.0):
+                    runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+                moves = [e[1] for e in runner.backend.events if e[0] == "rel"]
+                turns = moves[-5:]
+                self.assertTrue(turns and all(m*expect_turn > 0 for m in turns), turns)   # right = positive counts here
+                events = runner.backend.events
+                released = max(i for i, e in enumerate(events) if e == ("key", "w", False))
+                last_turn = max(i for i, e in enumerate(events) if e[0] == "rel")
+                self.assertEqual(released > last_turn, expect_walking)   # steering on the move, or stopped to turn
 
     def test_away_from_a_zone_line_losing_the_dashes_still_stops_at_once(self):
         runner, _ = make_runner(lambda i: AHEAD if i <= 3 else moving_dark(i))

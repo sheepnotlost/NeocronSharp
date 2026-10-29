@@ -65,6 +65,7 @@ DOOR_TARGET_WAIT = 2.0    # allow a moving character or NPC to clear the target 
 MAX_STUCK = 6            # wall recoveries in one walk before giving up
 ZONE_SIDE_TURN = .8      # a side push towards a zone line turns the view by this many widths of slide (about a quarter
                          # turn at a 90 degree view; the calibration is measured at the centre of the view)
+CORRIDOR_PIVOT = .2       # facing a wall near a zone line, turn this much (fraction of the width) per look to the open side
 ZONE_SIDE_TRIES = 2      # side pushes after a wall stops the push to a zone line: the side the dashes were on, then the other
 STEP_SECONDS = .6        # a short walk towards dashes that a turn keeps losing (low on screen: the body hides them)
 MAX_SECONDS = 600.0
@@ -826,15 +827,26 @@ class NavRayRunner(VisualRunner):
                         # The dashes stop at a zone line (live, 28 Oct): walk on through it until the Location
                         # name changes. The stuck checks below still run: a wall (the corridor bends before the
                         # line) ends the push, and the search from a stop finds the way round.
-                        if not forward:
-                            self.backend.key("w", True)
-                            forward = True
                         if self.zone_changed(state, now):
                             reason = "entered a new zone"
                             break
                         if now - missing_since >= ZONE_PUSH_SECONDS:
                             reason = "lost the dashes"
                             break
+                        # The dashes are gone here: follow the corridor itself (the user's rule, 28 Oct). Facing a
+                        # wall, turn on the spot towards the open side; resume walking once the way on shows.
+                        way, side = self.corridor(bgr)
+                        if way is None and side and self.px_per_count:
+                            if forward:
+                                self.backend.key("w", False)
+                                forward = False
+                            self.steer_by(CORRIDOR_PIVOT*side, frame.shape[1], damp=1.0)
+                        else:                                    # the way on, or no reading: walk on
+                            if not forward:
+                                self.backend.key("w", True)
+                                forward = True
+                            if way is not None:
+                                self.steer_by(way, frame.shape[1])
                     # A straight stretch may blink out for a moment (stairs, a passer-by): keep going briefly. Never
                     # coast blind at a corner: release W at once and search from standing.
                     elif not at_corner and now - missing_since < LOST_GRACE:
@@ -968,6 +980,27 @@ class NavRayRunner(VisualRunner):
         self.emit("status", f"Nav-Ray: the way to the zone line is blocked; turning {'right' if side > 0 else 'left'} "
                             f"and pushing on ({tries + 1} of {ZONE_SIDE_TRIES}).")
         return True
+
+    def corridor(self, bgr):
+        """(heading, open side) of the corridor ahead from corridor.corridor_heading: the heading (fraction of the
+        width, negative = left) when the way on is visible, else None and the side that looks more open (-1, +1,
+        or 0 when unknown). Never allowed to stop a walk."""
+        try:
+            import corridor
+            way, confidence, debug = corridor.corridor_heading(bgr)
+            return way, int(debug.get("side", 0) or 0)
+        except Exception:
+            return None, 0
+
+    def steer_by(self, error, width, damp=TETHER_DAMP):
+        """A calibrated turn towards `error` (fraction of the width), in one move the game can follow."""
+        if not self.px_per_count or abs(error) <= LINED_UP:
+            return 0
+        limit = max(5, round(CAL_MAX_PX/abs(self.px_per_count)))
+        counts = round(max(-limit, min(limit, -(error*width)*damp/self.px_per_count)))
+        if counts:
+            self.backend.move_relative(counts, 0)
+        return counts
 
     def step_forward(self, seconds=STEP_SECONDS):
         """Walk a short way straight on, without steering."""
@@ -1169,7 +1202,8 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
-                    if self.near_zone(self.clock()) and self.side_push(state, last_side, frame.shape[1]):
+                    open_side = self.corridor(_bgr(frame))[1] if self.near_zone(self.clock()) else 0
+                    if self.near_zone(self.clock()) and self.side_push(state, open_side or last_side, frame.shape[1]):
                         track, lost, scanning, wide, pushing = None, 0, False, 0, True
                         continue
                     # Look for the route from a stop; do not run away while searching. Near a zone line, once both
