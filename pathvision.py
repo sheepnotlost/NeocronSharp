@@ -103,9 +103,10 @@ def _dash_mask(frame, color="green", parts=False):
     return (mask, cv2.LUT(hue, shift), sat, strict) if parts else mask
 
 
-def dash_candidates(frame, ignore=(), color="green", parts=None):
+def dash_candidates(frame, ignore=(), color="green", parts=None, shapes=None):
     """[(cx, cy, area, angle)] of dash-shaped blobs of the dash colour (a name from COLOR_HUES or a numeric hue).
-    `ignore` = pixel boxes (x0,y0,x1,y1). `parts` = _dash_mask(frame, color, parts=True), when already made."""
+    `ignore` = pixel boxes (x0,y0,x1,y1). `parts` = _dash_mask(frame, color, parts=True), when already made.
+    `shapes`, a dict, receives the _fill of each elongated candidate, keyed by its rounded centre."""
     height, width = frame.shape[:2]
     unit = width/2000
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -122,8 +123,9 @@ def dash_candidates(frame, ignore=(), color="green", parts=None):
         cx, cy = middles[i]
         if _excluded(cx/width, cy/height, "red" if strict else "green"):
             continue
-        if abs(cx - width/2) < 28*unit and abs(cy - .504*height) < 28*unit:
-            continue                                   # the reticle
+        reticle = abs(cx - width/2) < 28*unit and abs(cy - .504*height) < 28*unit
+        if reticle and max(w, h) <= 30*unit:
+            continue                                   # the reticle (20x20 at 1920); a dash lying over it is bigger
         if any(x0 <= cx <= x1 and y0 <= cy <= y1 for x0, y0, x1, y1 in ignore):
             continue
         long_side, short_side = max(w, h), max(1, min(w, h))
@@ -132,6 +134,9 @@ def dash_candidates(frame, ignore=(), color="green", parts=None):
         inside = labels[y:y + h, x:x + w] == i
         saturation = float(sat[y:y + h, x:x + w][inside].mean())
         direction = _orientation(labels, i, x, y, w, h, unit, inside)
+        fill = _fill(inside) if direction == direction else 0.0
+        if reticle and fill < RETICLE_FILL:
+            continue                                   # the reticle joined to a lit edge, not a dash lying over it
         if not strict and .43 < cx/width < .60 and cy/height > .50:
             if direction != direction or area < 100*unit*unit:
                 continue                               # gear and tiny character markers, while retaining clear floor dashes
@@ -141,13 +146,16 @@ def dash_candidates(frame, ignore=(), color="green", parts=None):
             if (strict or cy < .35*height or direction != direction
                     or _contrast(gray, labels, i, x, y, w, h, unit) < FAINT_CONTRAST):
                 continue                               # washed-out glass, walls and sign backing
-        if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > MAX_HUE_SPREAD:
+        spread = MAX_HUE_SPREAD + (SHAPED_HUE_SPREAD if fill >= SOLID_FILL else 0.0)
+        if area >= 60*unit*unit and float(hue[y:y + h, x:x + w][inside].std()) > spread:
             continue                                   # blotchy colour: a picture or sign, not a flat overlay
         # A clear dash shape passes whatever the floor looks like (green-lit floors give little contrast);
         # anything else must stand out, which a flat green glow on a wall does not.
         if direction != direction and _contrast(gray, labels, i, x, y, w, h, unit) < MIN_CONTRAST:
             continue
         found.append((float(cx), float(cy), int(area), direction))
+        if shapes is not None and direction == direction:
+            shapes[(round(cx), round(cy))] = fill
     return found
 
 
@@ -179,6 +187,11 @@ def crowding(frame, candidates, color="green", mask=None):
 
 MIN_SATURATION = 62   # real dashes are a rich green (measured 70-120); signs and glass are washed out (43-55)
 MAX_HUE_SPREAD = 4.0  # and a flat overlay: the hue barely varies across a dash (measured 1.4-3.1)
+SHAPED_HUE_SPREAD = 1.0   # ...a little more for a solid bar: on pale tiles the floor shows through (live, 28 Oct:
+                          # a dash on Plaza 3 tiles measured 4.1); screens, kiosks and banner words measured 4.0-4.9
+SOLID_FILL = .85      # _fill of a solid bar: dashes measured .92-.97; screens, kiosk frames and words .11-.72
+RETICLE_FILL = .65    # a dash lying over the crosshair measured .72 (the crosshair's dark marks cut into it);
+                      # the crosshair joined to a lit wall edge .57
 MIN_CONTRAST = 14    # a dash is this much brighter (grey levels) than the floor around it
 FAINT_CONTRAST = 16  # low-saturation floor dashes measured 16.6-23.5; wall/gear clutter measured <=15.8
 
@@ -196,6 +209,16 @@ def _contrast(gray, labels, index, x, y, w, h, unit):
     if not ring.any():
         return 255.0
     return float(crop[inside].mean() - crop[ring].mean())
+
+
+def _fill(inside):
+    """How fully a blob fills the ellipse of its own second moments: about 1 for a solid bar (.955 for a rectangle),
+    low for outlines, letters and the frames of screens."""
+    moments = cv2.moments(inside.astype(np.uint8), binaryImage=True)
+    if moments["m00"] <= 0:
+        return 0.0
+    a, b, c = moments["mu20"]/moments["m00"], moments["mu02"]/moments["m00"], moments["mu11"]/moments["m00"]
+    return float(moments["m00"]/(4*np.pi*np.sqrt(max(a*b - c*c, 1e-9))))
 
 
 def _orientation(labels, index, x, y, w, h, unit, inside=None):
@@ -519,16 +542,57 @@ def _scaled(view, scale):
 
 
 def _marks(frame, ignore, color):
-    """(candidates, crowding) of a frame, made from one colour mask. The last frame's are kept: the walk looks at
-    the same frame twice when the followed line is not in its tube (once along it, once at the whole view)."""
+    """(candidates, crowding, shapes) of a frame, made from one colour mask (shapes: see dash_candidates). The last
+    frame's are kept: the walk looks at the same frame twice when the followed line is not in its tube (once along
+    it, once at the whole view)."""
     key = (tuple(tuple(box) for box in ignore), color)
     if _LAST.get("frame") is frame and _LAST.get("key") == key:
         return _LAST["marks"]
     parts = _dash_mask(frame, color, parts=True)
-    candidates = dash_candidates(frame, ignore, color, parts=parts)
-    marks = (candidates, crowding(frame, candidates, color, mask=parts[0]))
+    shapes = {}
+    candidates = dash_candidates(frame, ignore, color, parts=parts, shapes=shapes)
+    marks = (candidates, crowding(frame, candidates, color, mask=parts[0]), shapes)
     _LAST.update(frame=frame, key=key, marks=marks)          # holds the frame, so its identity cannot be reused
     return marks
+
+
+LONE_FILL = .65      # _fill of a lone dash: measured .72-.97 (.72-.76 where the crosshair or a leg cuts it); letters .46
+LONE_DEPTH = .07     # area / (y - .30 height)^2 of a lone dash: floor dashes shrink towards the horizon (measured
+                     # .010-.038); posters and screens on far walls are big for their height (measured .11-.47)
+
+
+def _lone_dash(candidates, busy, everything, shapes, width, height):
+    """(x, y, angle) of the one clear dash nearest the character when nothing else makes a chain; None if none.
+    Live (28 Oct, Plaza 3 zone corridor): pale tiles leave one dash in view at a time and the walk stood still
+    beside it. A clear dash: a solid bar, dash-sized for its depth, on the floor part of the view, alone on grey,
+    not a letter."""
+    big, largest = 560*(width/1920)**2, 9000*(width/1920)**2
+    anchor = (.5*width, .85*height)
+    picks = sorted((float(np.hypot(c[0] - anchor[0], c[1] - anchor[1])), i) for i, c in enumerate(candidates)
+                   if c[3] == c[3] and big <= c[2] <= largest and .40*height <= c[1] <= .80*height and busy[i] <= BUSY
+                   and .02*width <= c[0] <= .98*width                 # cut by the screen edge: its shape is not its own
+                   and shapes.get((round(c[0]), round(c[1])), 0.0) >= LONE_FILL
+                   and c[2] <= LONE_DEPTH*(c[1] - .30*height)**2)
+    for _, i in picks:
+        x, y, _, angle = candidates[i]
+        if _lettered([(x, y)], [(x, y)], everything, width, height):
+            continue
+        if sum(1 for c in everything if abs(c[1] - y) <= .008*height and 0 < abs(c[0] - x) <= .15*width) >= 2:
+            continue                                   # a word of a line of text (red "Entering new district" label)
+        if any(c[3] == c[3] and c[2] >= big/2 and 0 < np.hypot(c[0] - x, c[1] - y) <= .06*width
+               and abs((_heading((x, y), c[:2]) - angle + np.pi/2) % np.pi - np.pi/2) > np.pi/4 for c in everything):
+            continue                                   # stacked bars of a sign panel (VIAROSSO, 02-51-16 at 70 s); the
+                                                       # next dash of a path lies along the line instead
+        return float(x), float(y), float(angle)
+    return None
+
+
+def _dash_slope(angle, cap=5.0):
+    """dx/dy of a dash pointing `angle` (radians, image axes), capped: a dash lying across the view gives no depth."""
+    dy, dx = np.sin(angle), np.cos(angle)
+    if abs(dy)*cap < abs(dx):
+        return float(np.copysign(cap, dx*dy) if dy else cap)
+    return float(dx/dy)
 
 
 def banner_row(candidates, width, height):
@@ -569,7 +633,7 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green", text=None):
     if scale != 1.0:
         shrunk = [tuple(v*scale for v in box) for box in ignore]
         return _scaled(find_path(small, shrunk, _scaled(prior, scale), tube, color, text), 1/scale)
-    candidates, crowded = _marks(frame, ignore, color)
+    candidates, crowded, shapes = _marks(frame, ignore, color)
     if text is not None:
         box = banner_row(candidates, frame.shape[1], frame.shape[0])
         if box is not None and text(frame, box):
@@ -596,8 +660,12 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green", text=None):
         chain = []                                         # a run of sign lettering, not a path
     if not chain and prior is not None:
         chain = _continuation(candidates, prior, height, width)    # one or two dashes of the path already being followed
+    lone = None
     if not chain:
-        return None
+        lone = _lone_dash(candidates, busy, everything, shapes, width, height)
+        if lone is None:
+            return None
+        chain = [lone[:2]]
     ys = np.array([p[1] for p in chain])
     xs = np.array([p[0] for p in chain])
     if ys.min() > .80*height:
@@ -605,7 +673,10 @@ def find_path(frame, ignore=(), prior=None, tube=.18, color="green", text=None):
     if ys.max() - ys.min() < .25*(xs.max() - xs.min()):
         # A path running across the view lies in a flat row: its near end is the one by the character, not the lowest.
         chain = sorted(chain, key=lambda p: np.hypot(p[0] - .5*width, p[1] - .80*height))
-    if len(chain) >= 2 and np.ptp(ys) > 0:
+    if lone is not None:
+        slope = _dash_slope(lone[2])                        # one dash: the line runs the way it points
+        intercept = lone[0] - slope*lone[1]
+    elif len(chain) >= 2 and np.ptp(ys) > 0:
         slope, intercept = np.polyfit(ys, xs, 1)           # kept for tracking: where the line runs
     elif prior is not None:
         slope, intercept = prior.slope, prior.intercept    # too few marks to fit: the path keeps its line

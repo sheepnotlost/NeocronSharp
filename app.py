@@ -314,6 +314,10 @@ class App:
         self.navray_target_box.grid(row=1,column=1,sticky="ew",padx=(10,0),pady=5)
         self.navray_category_box.bind("<<ComboboxSelected>>",lambda event:self.pick_navray_category())
         ttk.Label(host,text="Open Nav-Ray first.").grid(row=2,column=1,sticky="w",padx=(10,0),pady=(8,0))
+        self.navray_overlay=tk.BooleanVar(value=self.profile.get("preferences",{}).get("navray_overlay",True))
+        overlay=ttk.Checkbutton(host,text="Show what Nav-Ray sees over the game",variable=self.navray_overlay,
+                                command=self.save_preferences)
+        overlay.grid(row=3,column=1,sticky="w",padx=(10,0),pady=(8,0));self.editable.append(overlay)
         self.editable.extend((self.navray_category_box,self.navray_target_box))
         self.load_navray_lists()
 
@@ -399,7 +403,8 @@ class App:
 
     def save_preferences(self):
         key=next(k for k,v in SKINS.items() if v["name"]==self.skin_var.get())
-        self.profile["preferences"]={"skin":key,"stop_sound":self.stop_sound_var.get()}
+        self.profile["preferences"]={"skin":key,"stop_sound":self.stop_sound_var.get(),
+                                     "navray_overlay":self.navray_overlay.get() if hasattr(self,"navray_overlay") else True}
         apply_skin(self.root,key,self.heading)
         try:save_profile(self.profile_path,self.profile)
         except (ValueError,OSError) as exc:self.report("Could not save preferences: "+str(exc))
@@ -761,7 +766,7 @@ class App:
             profile["settings"]["drag_button"]="left"
             profile["settings"]["drag_modifier"]="none"
             profile["preferences"]={"skin":next(k for k,v in SKINS.items() if v["name"]==self.skin_var.get()),
-                                    "stop_sound":self.stop_sound_var.get()}
+                                    "stop_sound":self.stop_sound_var.get(),"navray_overlay":self.navray_overlay.get()}
         except ValueError as exc:
             if "invalid literal for int()" in str(exc) or "could not convert string to float" in str(exc):
                 raise ValueError("Enter whole numbers for the stack and batch counts.") from None
@@ -861,6 +866,7 @@ class App:
             if self.profile["operation"] == "navray":
                 import routes
                 self.route_book = runner.route_book = routes.RouteBook()
+                runner.overlay = self.open_overlay()
             self.worker = threading.Thread(target=runner.run, daemon=False, name="macro-sequence")
             self.worker.start()
         except (ValueError, RuntimeError) as exc:
@@ -955,8 +961,35 @@ class App:
                 if kind in ("done","error"):self.notify_stop()
         if self.worker is not None and not self.worker.is_alive():
             self.worker = None
+            self.close_overlay()
             self.set_editing(True)
         self.root.after(30, self.poll)
+
+    overlay = None
+
+    def open_overlay(self):
+        """The see-through overlay over the game showing what Nav-Ray sees and decides (hidden from the walk's own
+        screenshots). Off with the Nav-Ray tab's "Show what Nav-Ray sees" box."""
+        if not self.navray_overlay.get():
+            return None
+        try:
+            from navray_debug import Overlay
+            self.overlay = Overlay(self.root, Overlay.client_rect(self.backend), report=self.report)
+            self.overlay.show()
+            self.overlay.start()
+            return self.overlay
+        except Exception as exc:                          # the overlay is a help, never a reason not to walk
+            self.report(f"Nav-Ray overlay unavailable: {exc}")
+            self.overlay = None
+            return None
+
+    def close_overlay(self):
+        if self.overlay is not None:
+            try:
+                self.overlay.close()
+            except Exception:
+                pass
+            self.overlay = None
 
     def close(self):
         self.cancel_work()

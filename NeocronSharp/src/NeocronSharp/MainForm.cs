@@ -76,7 +76,7 @@ internal sealed class MainForm : Form
         {
             using var reader = new PlayerReader(ProjectPaths.Client);
             var sample = reader.ReadSample();
-            Status($"Connected to Evolution 2.5.902. X {sample.Position.X:F3}, Y {sample.Position.Y:F3}, Z {sample.Position.Z:F3}. No movement sent.");
+            Status($"Connected to {PlayerReader.BuildLabel}. X {sample.Position.X:F3}, Y {sample.Position.Y:F3}, Z {sample.Position.Z:F3}. No movement sent.");
         }
         catch (Exception error) { Status(error.Message); }
     }

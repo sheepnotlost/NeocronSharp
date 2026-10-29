@@ -237,8 +237,9 @@ stored in `logs/` as JSON lines with positions, actions and completion/failure.
 ## Native backend evidence
 
 Supported local reference: `../Neocron Evolution 2.5/neocronclient.exe`,
-Evolution 2.5.902, x64, SHA-256
-`8fa50ebe20b5e15738cfac398bef19fef3c048f0f3e89a7a9bad7172b73d5d8c`.
+Evolution 2.5 client of 28 Oct 2026, x64, SHA-256
+`60bbdb55031f4cabb916ed46341a6920e150dc4dd6abfaa8ef08a947de4b01c1`
+(re-mapped from 2.5.902 `8fa50ebe…5d8c` by RTTI and byte signatures; see TRACKER-MIGRATION.md).
 Exactly one matching game process must be open. A launcher-started copy is
 accepted only if it has the identical fingerprint. Updates require revalidation.
 
@@ -246,11 +247,11 @@ All addresses below are relative to the executable's loaded base:
 
 | Item | Evidence |
 | --- | --- |
-| Player controller root | Global pointer RVA `0x6d3db0`; RTTI/vtable identifies `WORLDCTRLPLAYER` |
-| World client root | Global pointer RVA `0xd68330`; RTTI/vtable identifies `WORLDCLIENT` |
-| Player physics | World client + `0xa8` equals player controller + `0x498` |
-| Position getter | Physics vtable + `0x98` resolves to RVA `0x248270`: `lea rax,[rcx+0xd8]; ret` |
-| Transform getter | Physics vtable + `0x88` resolves to RVA `0x335a30`: `lea rax,[rcx+0xf0]; ret` |
+| Player controller root | Global pointer RVA `0x6d7db0`; RTTI/vtable identifies `WORLDCTRLPLAYER` |
+| World client root | Global pointer RVA `0xd6c330`; RTTI/vtable identifies `WORLDCLIENT` |
+| Player physics | World client + `0xa8` equals player controller + `0x528` (was `0x498` in 2.5.902) |
+| Position getter | Physics vtable + `0x98` resolves to RVA `0x24bc90`: `lea rax,[rcx+0xd8]; ret` |
+| Transform getter | Physics vtable + `0x88` resolves to RVA `0x339540`: `lea rax,[rcx+0xf0]; ret` |
 
 The backend verifies executable hashes, getter instructions, object vtables,
 pointer relationships, finite coordinates, and orthonormal rotation rows.

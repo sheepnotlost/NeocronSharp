@@ -561,6 +561,133 @@ class WalkTests(unittest.TestCase):
             runner.walk()
         self.assertFalse(runner.backend.held_keys)
 
+    @staticmethod
+    def zone_runner():
+        """A calibrated walk (-4 px per count, 2000 wide) that sees AHEAD's dashes once, then none."""
+        runner, events = make_runner(lambda i: DARK)
+        runner.area_name = lambda: "PLAZA SEC-2"
+        runner.calibrate_turn = lambda: -4.0
+        runner.vitals = lambda *args: None
+        runner.try_open_door = lambda reader: False
+        view = pathvision_find(AHEAD)
+        sightings = {"n": 2}                               # a quick look while sweeping, then confirmed standing
+        runner.looks = 0
+
+        def evaluate(track, lost, quick=False):
+            runner.looks += 1
+            if sightings["n"]:
+                sightings["n"] -= 1
+                return view, AHEAD
+            return None
+        runner.evaluate = evaluate
+        return runner, events
+
+    @staticmethod
+    def rel_total(runner):
+        return sum(e[1] for e in runner.backend.events if e[0] == "rel")
+
+    def test_near_a_zone_line_a_wall_turns_the_push_to_each_side_then_looks_all_round_before_giving_up(self):
+        # Live (28 Oct, 20:00): the corridor turned right just before the zone line, the push ran into the corner, and
+        # a local search ended the walk with "path lost or ended" 3 m from the line, still in PLAZA SEC-2.
+        runner, events = self.zone_runner()
+        legs = []
+
+        def leg(view, track, reader, state, tether=False):
+            legs.append((view is not None, tether, runner.near_zone(runner.clock()), self.rel_total(runner)))
+            if len(legs) == 1:
+                runner.zone_seen = runner.clock()          # "Entering new district" was read on the way
+                state["last_side"] = 1                     # the dashes bent right before they stopped
+            runner.sleep(2.0)
+            return view, 0, "stuck against something"
+        runner.walk_leg = leg
+        runner.walk()
+        quarter = round(navray_runner.ZONE_SIDE_TURN*2000/4.0)
+        self.assertEqual([l[:3] for l in legs[1:]], [(False, True, True)]*2)            # two pushes with no dashes
+        self.assertEqual(len(legs), 1 + navray_runner.ZONE_SIDE_TRIES)                    # and no more
+        self.assertEqual([l[3] for l in legs], [0, quarter, -quarter])     # right first, then left, from the first heading
+        statuses = [p for k, p in events if k == "status"]
+        self.assertTrue(any("all round" in p for p in statuses), statuses)
+        local = round(navray_runner.LOCAL_SCAN_WIDTH*2000/4.0)
+        self.assertGreater(abs(self.rel_total(runner) - -quarter), 2*local)    # swept further than a local search
+        done = [p for k, p in events if k == "done"]
+        self.assertEqual(done, ["Nav-Ray: path lost or ended. Arrived, or the route was lost."])
+        self.assertFalse(runner.backend.held_keys)
+
+    def test_near_a_zone_line_losing_the_dashes_looks_all_round_then_pushes_on(self):
+        for when in ("before", "during"):                  # the banner read before the dashes went, or while searching
+            with self.subTest(when=when):
+                runner, events = self.zone_runner()
+                original = runner.evaluate
+
+                def evaluate(track, lost, quick=False, _original=original, _when=when, _runner=runner):
+                    if _when == "during" and _runner.looks == 5:
+                        _runner.zone_seen = _runner.clock()
+                    return _original(track, lost, quick)
+                runner.evaluate = evaluate
+                legs, offsets = [], []
+
+                def leg(view, track, reader, state, tether=False, _runner=runner, _when=when):
+                    legs.append(view is not None)
+                    if len(legs) == 1:
+                        if _when == "before":
+                            _runner.zone_seen = _runner.clock()
+                        return view, 0, "lost the dashes"
+                    raise Interrupted("test complete")
+                runner.walk_leg = leg
+                moves = runner.backend.move_relative
+
+                def move(dx, dy, _moves=moves):
+                    _moves(dx, dy)
+                    offsets.append(self.rel_total(runner))
+                runner.backend.move_relative = move
+                with self.assertRaisesRegex(Interrupted, "test complete"):
+                    runner.walk()
+                self.assertEqual(legs, [True, False])                  # the second leg is a push with no dashes in view
+                self.assertFalse([k for k, p in events if k == "done"])
+                local = round(navray_runner.LOCAL_SCAN_WIDTH*2000/4.0)
+                self.assertGreater(max(abs(o) for o in offsets), 2*local)    # beyond where a local search reaches
+
+    def test_a_turn_that_keeps_losing_the_dashes_comes_back_once_then_steps_towards_them(self):
+        # Live (28 Oct, 19:37): "turn N, aim -0.3, 3 marks, nearest (392, 981)", "the turn lost the dashes; coming
+        # back", found again, turn, lost... six times, then "path lost or ended". The marks were near the feet.
+        far = np.roll(AHEAD, -700, axis=1)                 # aim -.34: a stop-and-turn after a leg
+        runner, events = make_runner(lambda i: far)
+        runner.area_name = lambda: ""
+        runner.calibrate_turn = lambda: -4.0
+        runner.vitals = lambda *args: None
+        view = pathvision_find(far)
+        visible = {"on": True}
+
+        def turn(error, width):
+            visible["on"] = False                          # turning to the marks hides them under the body
+            runner.last_turn = -100
+            return -100
+        runner.turn = turn
+        moves = runner.backend.move_relative
+
+        def move(dx, dy):
+            visible["on"] = True                           # coming back, or a sweep, finds them again
+            moves(dx, dy)
+        runner.backend.move_relative = move
+        runner.evaluate = lambda track, lost, quick=False: (view, far) if visible["on"] else None
+        legs = []
+
+        def leg(view, track, reader, state, tether=False):
+            legs.append(len([p for k, p in events if k == "status" and p.startswith("Nav-Ray: turn ")]))
+            if len(legs) == 1:
+                return view, 0, "tether time limit"
+            raise Interrupted("test complete")
+        runner.walk_leg = leg
+        with self.assertRaisesRegex(Interrupted, "test complete"):
+            runner.walk()
+        statuses = [p for k, p in events if k == "status"]
+        self.assertEqual(legs, [0, 2])            # found by the first look: walked at once; after the step: no third turn
+        self.assertEqual(len([p for p in statuses if "coming back" in p]), 1)
+        self.assertEqual(len([p for p in statuses if "stepping towards" in p]), 1)
+        step = statuses.index(next(p for p in statuses if "stepping towards" in p))
+        self.assertTrue(any("searching nearby" in p for p in statuses[step:]))
+        self.assertEqual([e[2] for e in runner.backend.events if e[:2] == ("key", "w")], [True, False])   # the step
+
 
 class CornerSteeringTests(unittest.TestCase):
     """At a close corner the macro steers for the way beyond it (a sharp turn), not for the dash in front."""

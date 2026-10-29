@@ -210,6 +210,54 @@ class PathVisionTests(unittest.TestCase):
                     self.assertTrue(.50*scaled.shape[0] < view.aim[1] < .65*scaled.shape[0], view.aim)
                     self.assertTrue(all(y > .40*scaled.shape[0] for _, y in view.points), view.points)
 
+    def test_a_dash_lying_over_the_crosshair_is_not_dropped_as_the_reticle(self):
+        # Live (28 Oct, live3 at 33 s, Plaza 3 zone corridor): an 80x32 dash covered the crosshair (itself 20x20 at 1920)
+        # and the reticle rule threw it away, so the walk saw nothing.
+        frame = load("navray_pale_dash_reticle_1920.jpg")
+        marks = [c for c in pathvision.dash_candidates(frame, color=70) if abs(c[0] - 958) < 20 and abs(c[1] - 554) < 20]
+        self.assertTrue(marks and marks[0][2] > 1000, marks)
+        view = pathvision.find_path(frame, color=70)
+        self.assertIsNotNone(view)
+        self.assertTrue(abs(view.aim[0] - 958) < 20 and abs(view.aim[1] - 554) < 20, view.aim)
+
+    def test_a_dash_on_pale_tiles_with_the_floor_showing_through_is_found(self):
+        # live3 at 37 s: the pale tiles show through the dash, so its hue spread measured 4.1 (1.4-3.1 elsewhere).
+        view = pathvision.find_path(load("navray_pale_dash_hue_spread_1920.jpg"), color=70)
+        self.assertIsNotNone(view)
+        self.assertTrue(abs(view.aim[0] - 241) < 20 and abs(view.aim[1] - 718) < 20, view.aim)
+        self.assertLess(view.error, -.3)                                # far to the left
+        self.assertLess(view.slope, 0)                                  # and it points up and to the right
+
+    def test_one_clear_dash_alone_is_followed_without_a_prior(self):
+        # live3 at 34 s and 29 s: one dash in view at a time on pale tiles; best_chain needs two and the walk stood still.
+        for name, (x, y) in (("navray_pale_lone_dash_1920.jpg", (705, 569)), ("navray_pale_lone_dash2_1920.jpg", (348, 703))):
+            with self.subTest(frame=name):
+                view = pathvision.find_path(load(name), color=70)
+                self.assertIsNotNone(view)
+                self.assertEqual(len(view.points), 1)
+                self.assertTrue(abs(view.aim[0] - x) < 20 and abs(view.aim[1] - y) < 20, view.aim)
+                self.assertEqual(view.route, view.points)
+                self.assertEqual(view.corner, -1)
+                self.assertLess(view.error, 0)
+                self.assertTrue(-5 <= view.slope < 0, view.slope)         # the line runs the way the dash points
+                self.assertAlmostEqual(view.slope*view.aim[1] + view.intercept, view.aim[0], places=3)
+
+    def test_a_lone_bar_on_a_poster_or_beside_a_sign_is_not_taken_for_a_dash(self):
+        # 02-51-16 at 66 s: a solid green bar by a WANTED poster on a far wall, far too big for its height on the screen.
+        self.assertIsNone(pathvision.find_path(load("navray_wanted_poster_025116_66_1920.jpg"), color=70))
+        # 17-17-10 at 55.5 s: the lone pick must be the floor dash near the character (the next dash lies along its line),
+        # not a bar of the Pepper Park sign further off.
+        view = pathvision.find_path(load("navray_lone_dash_by_sign_171710_55_1920.jpg"), color=70)
+        self.assertIsNotNone(view)
+        self.assertTrue(abs(view.aim[0] - 871) < 20 and abs(view.aim[1] - 677) < 20, view.aim)
+
+    def test_a_lone_dash_gives_the_line_its_own_direction(self):
+        self.assertAlmostEqual(pathvision._dash_slope(np.pi/2), 0.0)    # pointing straight up the screen
+        self.assertAlmostEqual(pathvision._dash_slope(np.pi/4), 1.0)
+        self.assertAlmostEqual(pathvision._dash_slope(-np.pi/4), -1.0)
+        self.assertEqual(abs(pathvision._dash_slope(0.0)), 5.0)          # lying across the view: capped
+        self.assertEqual(pathvision._dash_slope(-.05), -5.0)
+
     def test_ignored_boxes_hide_candidates(self):
         frame = load("navray_path_stairs_2000.png")
         everything = (0, 0, frame.shape[1], frame.shape[0])

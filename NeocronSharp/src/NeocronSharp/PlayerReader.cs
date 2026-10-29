@@ -9,10 +9,11 @@ namespace NeocronSharp;
 
 internal sealed record PlayerSample(Vector3 Position, ulong Player, ulong World, ulong Physics, Vector3 Forward);
 
-/// <summary>Read-only backend pinned to the inspected Evolution 2.5.902 binary.</summary>
+/// <summary>Read-only backend pinned to the inspected Evolution 2.5 client of 28 Oct 2026 (re-mapped from 2.5.902).</summary>
 internal sealed partial class PlayerReader : IDisposable
 {
-    internal const string SupportedSha256 = "8fa50ebe20b5e15738cfac398bef19fef3c048f0f3e89a7a9bad7172b73d5d8c";
+    internal const string BuildLabel = "Evolution 2.5 (28 Oct 2026 client)";
+    internal const string SupportedSha256 = "60bbdb55031f4cabb916ed46341a6920e150dc4dd6abfaa8ef08a947de4b01c1";
     public Process Process { get; }
     public nint Window { get; }
     public string Executable { get; }
@@ -45,9 +46,9 @@ internal sealed partial class PlayerReader : IDisposable
             if (Window == 0) throw new InvalidOperationException("The client has no game window.");
             _handle = Native.OpenProcess(0x410, false, Process.Id); // query information + VM read only
             if (_handle.IsInvalid) throw new System.ComponentModel.Win32Exception();
-            if (!Read(_base + 0x248270, 8).SequenceEqual(new byte[] { 0x48, 0x8d, 0x81, 0xd8, 0, 0, 0, 0xc3 }))
+            if (!Read(_base + 0x24bc90, 8).SequenceEqual(new byte[] { 0x48, 0x8d, 0x81, 0xd8, 0, 0, 0, 0xc3 }))
                 throw new InvalidOperationException("The live position getter does not match the inspected executable.");
-            if (!Read(_base + 0x335a30, 8).SequenceEqual(new byte[] { 0x48, 0x8d, 0x81, 0xf0, 0, 0, 0, 0xc3 }))
+            if (!Read(_base + 0x339540, 8).SequenceEqual(new byte[] { 0x48, 0x8d, 0x81, 0xf0, 0, 0, 0, 0xc3 }))
                 throw new InvalidOperationException("The live orientation getter does not match the inspected executable.");
             ReadSample();
         }
@@ -65,13 +66,13 @@ internal sealed partial class PlayerReader : IDisposable
     public PlayerSample ReadSample()
     {
         if (Process.HasExited) throw new InvalidOperationException("The game closed.");
-        ulong player = Pointer(_base + 0x6d3db0);
-        ulong world = Pointer(_base + 0xd68330);
-        if (player < 0x10000 || world < 0x10000 || Pointer(player) != _base + 0x58b6a8 || Pointer(world) != _base + 0x60c6e8)
+        ulong player = Pointer(_base + 0x6d7db0);
+        ulong world = Pointer(_base + 0xd6c330);
+        if (player < 0x10000 || world < 0x10000 || Pointer(player) != _base + 0x58f6f8 || Pointer(world) != _base + 0x610be8)
             throw new InvalidOperationException("A verified in-world player is unavailable. Log in and finish zoning.");
         ulong physics = Pointer(world + 0xa8);
-        if (physics != player + 0x498 || Pointer(physics) != _base + 0x58b750 ||
-            Pointer(Pointer(physics) + 0x98) != _base + 0x248270 || Pointer(Pointer(physics) + 0x88) != _base + 0x335a30)
+        if (physics != player + 0x528 || Pointer(physics) != _base + 0x58f7a0 ||
+            Pointer(Pointer(physics) + 0x98) != _base + 0x24bc90 || Pointer(Pointer(physics) + 0x88) != _base + 0x339540)
             throw new InvalidOperationException("Player physics identity changed. Finish zoning and restart the test.");
         byte[] bytes = Read(physics + 0xd8, 12);
         var position = new Vector3(BitConverter.ToSingle(bytes, 0), BitConverter.ToSingle(bytes, 4), BitConverter.ToSingle(bytes, 8));
@@ -82,7 +83,7 @@ internal sealed partial class PlayerReader : IDisposable
         Buffer.BlockCopy(transformBytes, 0, transform, 0, 48);
         Vector3 forward = PointNavigation.ForwardFromTransform(transform);
         // Reject a torn read if the owning objects changed while the position was sampled.
-        if (Pointer(_base + 0x6d3db0) != player || Pointer(_base + 0xd68330) != world || Pointer(world + 0xa8) != physics)
+        if (Pointer(_base + 0x6d7db0) != player || Pointer(_base + 0xd6c330) != world || Pointer(world + 0xa8) != physics)
             throw new InvalidOperationException("Player changed during telemetry sampling.");
         return new(position, player, world, physics, forward);
     }

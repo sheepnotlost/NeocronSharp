@@ -4,5 +4,6 @@
   "version": "1.2.0",
   "description": "Shows the number of loaded NPCs beneath the compass while Neocron is focused.",
   "assembly": "GameStatusOverlay.dll",
-  "type": "GameStatusOverlay.StatusPlugin"
+  "type": "GameStatusOverlay.StatusPlugin",
+  "enabledByDefault": true
 }

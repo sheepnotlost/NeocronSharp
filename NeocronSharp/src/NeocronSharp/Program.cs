@@ -36,10 +36,32 @@ internal static class ProjectPaths
             }
             catch (Exception) { }
             candidates.Add(Path.Combine("C:\\Games", "Neocron Client", "Neocron Evolution 2.5", "neocronclient.exe"));
-            foreach (string candidate in candidates)
-                if (File.Exists(candidate)) return Path.GetFullPath(candidate);
-            return Path.GetFullPath(candidates[0]);
+            var existing = candidates.Where(File.Exists).Select(Path.GetFullPath).ToList();
+            // A stale copy (e.g. the Research snapshot of an older build) must not shadow the supported install.
+            foreach (string candidate in existing)
+                if (IsSupportedBuild(candidate)) return candidate;
+            return existing.FirstOrDefault() ?? Path.GetFullPath(candidates[0]);
         }
+    }
+
+    private static readonly Dictionary<(string, DateTime, long), bool> SupportedCache = new();
+    private static bool IsSupportedBuild(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            var key = (path, info.LastWriteTimeUtc, info.Length);
+            lock (SupportedCache)
+            {
+                if (SupportedCache.TryGetValue(key, out bool known)) return known;
+                using var stream = info.OpenRead();
+                bool supported = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))
+                    .Equals(PlayerReader.SupportedSha256, StringComparison.OrdinalIgnoreCase);
+                SupportedCache[key] = supported;
+                return supported;
+            }
+        }
+        catch (Exception) { return false; }
     }
 }
 

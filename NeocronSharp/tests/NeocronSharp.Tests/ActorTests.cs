@@ -136,17 +136,17 @@ internal static class ActorTests
         public MemoryFixture()
         {
             Put(Registry, new byte[12]); Q(Registry, Buckets); I(Registry + 8, 4); Put(Buckets, new byte[32]);
-            Q(Module + 0x5bfe48 + 0x98, Module + 0x248270); Q(Module + 0x5bbbb8 + 0x98, Module + 0x248270);
-            Q(Module + 0x5bfe48 + 0x58, Module + 0x30fcb0); Q(Module + 0x5bfe48 + 0x160, Module + 0x19d420);
-            Q(Module + 0x5bbbb8 + 0x58, Module + 0x2e7178); Q(Module + 0x5bbbb8 + 0x160, Module + 0x19d420);
+            Q(Module + 0x5c4388 + 0x98, Module + 0x24bc90); Q(Module + 0x5c0108 + 0x98, Module + 0x24bc90);
+            Q(Module + 0x5c4388 + 0x58, Module + 0x3137c0); Q(Module + 0x5c4388 + 0x160, Module + 0x1a10c0);
+            Q(Module + 0x5c0108 + 0x58, Module + 0x2eac88); Q(Module + 0x5c0108 + 0x160, Module + 0x1a10c0);
         }
         public ulong Node(int index) => 0x40000UL + (ulong)index * 0x100;
         public ulong Physics(int index) => 0x100000UL + (ulong)index * 0x1000;
         public void Add(int key, string? name)
         {
             int index = ++_count; ulong node = Node(index), actor = Physics(index), bucket = Buckets + (ulong)(Math.Abs((long)key) % 4) * 8;
-            Put(node, new byte[32]); Q(node, Module + 0x5ade80); I(node + 8, key); Q(node + 16, actor); Q(node + 24, BinaryPrimitives.ReadUInt64LittleEndian(Read(bucket, 8))); Q(bucket, node);
-            Q(actor, Module + (name == null ? 0x5bbbb8UL : 0x5bfe48UL));
+            Put(node, new byte[32]); Q(node, Module + 0x5b23d0); I(node + 8, key); Q(node + 16, actor); Q(node + 24, BinaryPrimitives.ReadUInt64LittleEndian(Read(bucket, 8))); Q(bucket, node);
+            Q(actor, Module + (name == null ? 0x5c0108UL : 0x5c4388UL));
             Put(actor + 0xd8, BitConverter.GetBytes(10f).Concat(BitConverter.GetBytes(20f)).Concat(BitConverter.GetBytes(30f)).ToArray());
             if (name == null) { Q(actor + 0x608, 0); return; }
             Put(actor + 0x738, new byte[0x212]); I(actor + 0x73c, 1); I(actor + 0x740, 1);
@@ -163,10 +163,10 @@ internal static class ActorTests
         {
             int index = _count + 1; Add(key, null); ulong actor = Physics(index), app = Appearance(index);
             ulong scalars = app + 0x100, blobs = app + 0x300, text = app + 0x500, body = app + 0x600, clan = app + 0x700;
-            Q(actor + 0x608, app); Put(actor + 0x218, new byte[] { 0 }); Put(app, new byte[0x38]); Q(app, Module + 0x5c5d90);
+            Q(actor + 0x608, app); Put(actor + 0x218, new byte[] { 0 }); Put(app, new byte[0x38]); Q(app, Module + 0x5ca2c0);
             Put(app + 8, BitConverter.GetBytes((ushort)19)); Q(app + 0x10, scalars);
             Put(app + 0x18, BitConverter.GetBytes((ushort)4)); Q(app + 0x20, blobs);
-            Q(Module + 0x5c5d90 + 0x38, Module + 0x3dfa50); Q(Module + 0x5c5d90 + 0x40, Module + 0x3dfa20);
+            Q(Module + 0x5ca2c0 + 0x38, Module + 0x3e35a0); Q(Module + 0x5ca2c0 + 0x40, Module + 0x3e3570);
             Put(scalars, new byte[19*16]); Put(blobs, new byte[4*16]);
             foreach (var value in new[] { (5,228f), (6,64f), (7,60f), (8,4f), (10,448f), (11,65535f), (12,3635f), (13,1024f) })
                 Put(scalars + (ulong)value.Item1*16, BitConverter.GetBytes(value.Item2));

@@ -29,7 +29,9 @@ public interface IGameTelemetryContext
 public sealed record PluginTelemetry(DateTimeOffset CapturedAt, float X, float Y, float Z,
     int NearbyNpcCount, int? SectorId, nint GameWindow);
 
-public sealed record PluginManifest(string Id, string Name, string Version, string Description, string Assembly, string Type);
+/// <summary><c>EnabledByDefault</c>: a plugin shipped with NeocronSharp starts enabled on a fresh download, until the user chooses.</summary>
+public sealed record PluginManifest(string Id, string Name, string Version, string Description, string Assembly, string Type,
+                                   bool EnabledByDefault = false);
 
 public sealed class PluginEntry
 {
@@ -91,7 +93,7 @@ public sealed class PluginHost : IDisposable
                     if (!seen.Add(manifest.Id)) throw new InvalidDataException("Duplicate plugin ID: " + manifest.Id);
                     if (previous.Remove(manifest.Id, out var old) && old.Folder == folder && old.Manifest == manifest) { found.Add(old); continue; }
                     if (old != null) Stop(old);
-                    found.Add(new PluginEntry { Folder = folder, Manifest = manifest, Enabled = _enabled.GetValueOrDefault(manifest.Id) });
+                    found.Add(new PluginEntry { Folder = folder, Manifest = manifest, Enabled = _enabled.TryGetValue(manifest.Id, out bool on) ? on : manifest.EnabledByDefault });
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
                 { found.Add(new PluginEntry { Folder = folder, Error = e.Message }); }

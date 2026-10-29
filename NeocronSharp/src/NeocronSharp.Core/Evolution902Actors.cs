@@ -44,18 +44,18 @@ public static class Evolution902Actors
                 if (++chain > MaxChain || !visited.Add(node) || visited.Count > MaxEntries)
                     throw new InvalidOperationException("Actor registry changed or exceeded its traversal limit.");
                 var data = Bytes(node, 32);
-                if (U64(data) != module + 0x5ade80) throw new InvalidOperationException("Unrecognized actor registry node.");
+                if (U64(data) != module + 0x5b23d0) throw new InvalidOperationException("Unrecognized actor registry node.");
                 int key = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(8));
                 if (Math.Abs((long)key) % count != bucket) throw new InvalidOperationException("Actor hash chain changed during sampling.");
                 ulong physics = U64(data, 16), next = U64(data, 24);
                 Pointer(physics);
                 ulong table = U64(Bytes(physics, 8));
-                EntityKind? kind = table == module + 0x5bfe48 ? EntityKind.Npc :
-                    table == module + 0x5bbbb8 ? EntityKind.UnclassifiedCharacter : null;
+                EntityKind? kind = table == module + 0x5c4388 ? EntityKind.Npc :
+                    table == module + 0x5c0108 ? EntityKind.UnclassifiedCharacter : null;
                 if (kind != null && physics != localPhysics)
                 {
                     if (!payloads.Add(physics)) throw new InvalidOperationException("Duplicate actor payload in registry.");
-                    if (U64(Bytes(table + 0x98, 8)) != module + 0x248270)
+                    if (U64(Bytes(table + 0x98, 8)) != module + 0x24bc90)
                         throw new InvalidOperationException("Actor position getter changed.");
                     var xyz = Bytes(physics + 0xd8, 12);
                     var position = new Vector3(BitConverter.ToSingle(xyz, 0), BitConverter.ToSingle(xyz, 4), BitConverter.ToSingle(xyz, 8));
@@ -82,14 +82,14 @@ public static class Evolution902Actors
 
         (string Name, PlayerDetails Details)? ReadPlayer(ulong physics, ulong table)
         {
-            if (U64(Bytes(table + 0x58, 8)) != module + 0x2e7178 || U64(Bytes(table + 0x160, 8)) != module + 0x19d420)
+            if (U64(Bytes(table + 0x58, 8)) != module + 0x2eac88 || U64(Bytes(table + 0x160, 8)) != module + 0x1a10c0)
                 throw new InvalidOperationException("Network player getters changed.");
             ulong manager = U64(Bytes(physics + 0x608, 8));
             if (manager == 0) return null;
             Pointer(manager);
             var header = Bytes(manager, 0x38);
-            if (U64(header) != module + 0x5c5d90 || U64(Bytes(module + 0x5c5d90 + 0x38, 8)) != module + 0x3dfa50 ||
-                U64(Bytes(module + 0x5c5d90 + 0x40, 8)) != module + 0x3dfa20)
+            if (U64(header) != module + 0x5ca2c0 || U64(Bytes(module + 0x5ca2c0 + 0x38, 8)) != module + 0x3e35a0 ||
+                U64(Bytes(module + 0x5ca2c0 + 0x40, 8)) != module + 0x3e3570)
                 throw new InvalidOperationException("Player appearance getters changed.");
             int scalarCount = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8));
             int blobCount = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(0x18));
@@ -146,8 +146,8 @@ public static class Evolution902Actors
 
         NpcStats ReadStats(ulong physics, ulong table)
         {
-            if (U64(Bytes(table + 0x58, 8)) != module + 0x30fcb0 ||
-                U64(Bytes(table + 0x160, 8)) != module + 0x19d420)
+            if (U64(Bytes(table + 0x58, 8)) != module + 0x3137c0 ||
+                U64(Bytes(table + 0x160, 8)) != module + 0x1a10c0)
                 throw new InvalidOperationException("NPC stats getters changed.");
             // Contiguous native fields, including the std::string objects but
             // without dereferencing their pointers a second time.

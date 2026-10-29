@@ -4,6 +4,15 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Pale dashes, zone lines, live viewer, game update — 28 October 2026
+
+- [x] Pale dashes on pale tiles past the Plaza 3 zone line are found: a dash lying over the crosshair is kept (only crosshair-sized blobs there are dropped), solid bars may vary a little more in hue, and a lone clear dash is followed along its own direction. Checked on five clips: no new false paths on signs, posters, screens or the district banner (about 30 new detections looked at).
+- [x] Near a zone line the walk never gives up after a short search: a wall turns the push to each side in turn, then it looks all round; a turn that loses the dashes comes back once, then steps towards them.
+- [x] Live viewer: a see-through overlay over the game shows what Nav-Ray sees and decides (hidden from its own screenshots; never takes focus; off with the Nav-Ray tab's box), and a black box keeps the last minute of looks, saved to diagnostics/blackbox when a walk ends.
+- [x] The game was updated (28 Oct 4:49 PM): NeocronSharp's memory reader is re-mapped to the new build (about 20 addresses and two field offsets moved). Builds; 101 tests pass. Not yet checked against the running game.
+- [x] Plugins shipped with NeocronSharp start enabled on a fresh download (their manifest says "enabledByDefault"); a user's choice wins.
+- [x] Removed the AI prompt/handoff files.
+
 ### Live Nav-Ray testing while away — 28 October 2026
 
 - [x] Run 1 (Plaza 2 towards Pepper Park 1): the zone-line push worked: the banner was read, the walk went on through the line, the game synchronised into the city zone and the Location became PLAZA SEC-3.
@@ -237,7 +246,7 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 - [x] New Nav-Ray tab: `Category > Destination` (e.g. Faction HQs > Black Dragon). The macro finds the open Nav-Ray window (any scale), picks the category and destination (scrolling the lists), presses Start, waits for the dashed path, presses Tab for mouse-look and walks: holds W and steers with relative mouse motion toward the dashes.
 - [x] Stops with a reason: no path found, path ended (reported as arrived/lost), not moving, health dropped, loading screen, longer than 10 minutes, game focus lost. Keys are always released.
-- [x] Design spec and plan in docs/superpowers/. 244 tests pass (path detection on the user's real stairs/hall frames; Nav-Ray window and list reading on three real captures at two UI scales; walk loop with a fake backend).
+- [x] Design spec and plan written. 244 tests pass (path detection on the user's real stairs/hall frames; Nav-Ray window and list reading on three real captures at two UI scales; walk loop with a fake backend).
 - [x] Destination lists: Category and Destination dropdowns filled from data/navray_destinations.json (23 categories, 239 destinations), compiled by hand from the user's screenshots on 27 Oct. The game cuts long names short, so repeated labels are numbered ("... #2") and picked by position. Unverified counts: Pepper Park Apartments (Complex 1 = 6, Complex 2 = 9, estimated) and Outzone Dungeons (may miss 1-2 rows). "Read lists from Nav-Ray" (tools/scan_navray.py does the same from the command line) refreshes them from the game; list rows are read with Tesseract (exact on a real 2560x1440 frame). Live scans were interrupted three times (misread name; user pause; focus lost), so a full live scan has not completed. 252 tests pass.
 - [x] Nav-Ray lists now scroll by dragging their own scroll thumb (the wheel jumped too far in the small window and skipped rows): the thumb is found by pixels, drag distance = rows x thumb length / visible rows, the distance actually moved is measured from the thumb, pages overlap by two rows. Thumb detection checked on four real captures at two scales; the drag itself is unverified live.
 - [ ] Not verified live: Start, Tab returning to mouse-look, steering direction/gain, arrival, stuck and health detection, speed. Tuning constants are at the top of navray_runner.py. Doors, subway, loading screens and combat are out of scope (the walk stops).

@@ -55,6 +55,22 @@ Static corroboration:
   `tools/discover_actors.py` reads this metadata from the PE; it is development
   tooling, not a runtime dependency.
 
+## Client update of 28 Oct 2026
+
+The supported build is now SHA-256 `60bbdb55031f4cabb916ed46341a6920e150dc4dd6abfaa8ef08a947de4b01c1`.
+The tables above describe 2.5.902; the new build moves these (old -> new RVA):
+vtables by RTTI name and complete-object offset WORLDCTRLPLAYER 0x58b6a8->0x58f6f8, its physics
+subobject 0x58b750->0x58f7a0 (now at +0x528, was +0x498), WORLDCLIENT 0x60c6e8->0x610be8, WORLDMGR
+0x584418->0x588418, RPOSCONSOLE 0x587398->0x58b3e8, BASERPOS 0x587418->0x58b468, RPOSCOMPASS
+0x5917b8->0x595c98, HASHNODE 0x5ade80->0x5b23d0, SCRIPTEDPLAYER 0x5bfe48->0x5c4388, LSTPLAYER
+0x5bbbb8->0x5c0108 (still +0x1c8), PLAYERAPPMGR 0x5c5d90->0x5ca2c0; getters read from the same vtable
+slots with identical bytes: position 0x248270->0x24bc90, transform 0x335a30->0x339540, dead flag
+0x19d420->0x1a10c0, LSTPLAYER thunk 0x2e7178->0x2eac88, NPC dispatch 0x30fcb0->0x3137c0, appearance
+getters 0x3dfa50->0x3e35a0 / 0x3dfa20->0x3e3570; globals by unique RIP-relative signatures player
+0x6d3db0->0x6d7db0 and world 0xd68330->0xd6c330. The sector ID moved from WORLDCLIENT+0x258 to +0x264
+(message 0x2779 handler 0x54c057 reads subobject+0x234). SCRIPTEDPLAYER/LSTPLAYER field offsets
+(+0x218, +0x608, +0x738..+0x948, +0xad8, +0x750) and the getter-cited code sites are byte-identical.
+
 ## Bounds and consistency
 
 At most 4,096 buckets, 8,192 nodes, 128 nodes per chain and 192 bytes per NPC name.

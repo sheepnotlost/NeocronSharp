@@ -1,7 +1,10 @@
 # Using plugins
 
-Open NeocronSharp and select **Plugins**. The included example is disabled by
-default. Select it, adjust its greeting if desired, choose **Save settings**,
+Open NeocronSharp and select **Plugins**. The plugins that come with NeocronSharp
+(the In-game NPC counter and the example) are enabled on a fresh download: their
+`plugin.json` says `"enabledByDefault": true`. Any plugin you add yourself starts
+disabled. Your own Enable/Disable choice always wins over the default. To try the
+example, select it, adjust its greeting if desired, choose **Save settings**,
 then **Enable**. The plugin starts and writes a message in the recent log. Use
 **Disable** to stop it. Settings saved while a plugin is running apply when it
 next starts, so disable and enable it again to apply changes. Enabled choices

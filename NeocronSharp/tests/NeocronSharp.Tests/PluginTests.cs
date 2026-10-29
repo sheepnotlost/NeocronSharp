@@ -33,6 +33,26 @@ internal static class PluginTests
             }
             finally { Directory.Delete(root, recursive: true); }
         });
+        test("A plugin shipped enabled by default starts enabled on a fresh download until the user chooses", () =>
+        {
+            string root = TempRoot();
+            try
+            {
+                var manifest = JsonSerializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(Fixture(), "plugin.json")))!;
+                manifest["enabledByDefault"] = true;
+                Install(root, "bundled", JsonSerializer.Serialize(manifest));
+                using (var host = new PluginHost(root))
+                {
+                    host.Discover(); var entry = host.Entries.Single();
+                    check(entry.Enabled, "A bundled plugin is enabled with no saved choice");
+                    host.StartEnabled(); check(entry.Running, "and starts with the app");
+                    host.Disable(entry);
+                }
+                using var again = new PluginHost(root); again.Discover();
+                check(!again.Entries.Single().Enabled, "The user's choice to disable it wins over the default");
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        });
         test("Plugin refresh preserves a running instance and settings validation rejects invalid JSON", () =>
         {
             string root = TempRoot();

@@ -22,7 +22,6 @@ Tests: `runtime\python.exe -m unittest discover -s tests` (Python) and
 
 The complete current specification is [SPEC-SHEET.md](SPEC-SHEET.md). [TASKS.md](TASKS.md) tracks the requests from this chat. [FEATURE-IDEAS.md](FEATURE-IDEAS.md) separates delivered features from future ideas.
 
-Project transfer: [Claude project brief](CLAUDE-HANDOFF.md) and [copyable handoff prompt](CLAUDE-PROMPT.txt).
 
 The imported counter's 51 pure-logic regression checks live in `tests/counter/`.
 Run `python -m pytest tests/counter -q` with the optional `requirements-dev.txt`

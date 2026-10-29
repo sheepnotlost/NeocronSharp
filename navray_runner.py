@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 import navray
+import navray_debug
 import pathvision
 import routes
 from macro_core import Interrupted
@@ -62,6 +63,10 @@ SCENE_HISTORY_SECONDS = 6.0
 DOOR_RETRY_SECONDS = 10.0  # do not immediately toggle a door again if the first interaction did not clear the obstruction
 DOOR_TARGET_WAIT = 2.0    # allow a moving character or NPC to clear the target before attempting the door
 MAX_STUCK = 6            # wall recoveries in one walk before giving up
+ZONE_SIDE_TURN = .8      # a side push towards a zone line turns the view by this many widths of slide (about a quarter
+                         # turn at a 90 degree view; the calibration is measured at the centre of the view)
+ZONE_SIDE_TRIES = 2      # side pushes after a wall stops the push to a zone line: the side the dashes were on, then the other
+STEP_SECONDS = .6        # a short walk towards dashes that a turn keeps losing (low on screen: the body hides them)
 MAX_SECONDS = 600.0
 HEALTH_EVERY = 1.0
 REPORT_EVERY = 2.0       # progress line in the log
@@ -812,6 +817,9 @@ class NavRayRunner(VisualRunner):
                 seen = self.find_dashes(bgr, prior=track, tube=.25)
                 if seen is None and track is not None:
                     seen = self.find_dashes(bgr)           # a pivot at a corner moves the line out of the old tube
+                self.look(frame, seen, "pushing to zone line" if seen is None and self.near_zone(now)
+                          else "walking" if forward else "turning in place",
+                          None if seen is None else self.steer_error(seen, frame))
                 if seen is None:
                     missing_since = now if missing_since is None else missing_since
                     if tether and self.near_zone(now):
@@ -924,6 +932,51 @@ class NavRayRunner(VisualRunner):
         except Exception:                                  # OCR trouble must never stop a walk
             return ""
 
+    def side_counts(self, side, width):
+        """Mouse counts for about a quarter turn towards `side` (+1 right, -1 left)."""
+        return round(-side*ZONE_SIDE_TURN*width/self.px_per_count)
+
+    def swing(self, total):
+        """Turn by `total` mouse counts in moves the game can follow, then let it settle. Not a turn towards dashes,
+        so there is nothing to come back from if none are in view afterwards."""
+        limit = max(10, round(CAL_MAX_PX/abs(self.px_per_count))) if self.px_per_count else MAX_STEP*3
+        remaining = total
+        while remaining:
+            chunk = max(-limit, min(limit, remaining))
+            self.backend.move_relative(chunk, 0)
+            remaining -= chunk
+            self.wait(.02)
+        self.wait(.15)
+        self.last_turn = 0
+        return total
+
+    def side_push(self, state, side, width):
+        """Near a zone line a wall stopped the push (live, 28 Oct 20:00: the corridor turned right just before the
+        line and the push ran into the corner): turn about a quarter of the way round, first towards the side the
+        dashes were last on, then the other, and walk on again. Both turns are measured from the heading of the
+        first push. False once both sides were tried (or turning is not calibrated)."""
+        tries = state.get("zone_tries", 0)
+        if not self.px_per_count or tries >= ZONE_SIDE_TRIES:
+            return False
+        if not tries:
+            state["zone_side"], state["zone_turned"] = side, 0
+        side = state["zone_side"] if tries % 2 == 0 else -state["zone_side"]
+        target = self.side_counts(side, width)
+        self.swing(target - state["zone_turned"])
+        state["zone_turned"], state["zone_tries"] = target, tries + 1
+        self.zone_seen = self.clock()      # the push did not get through: the zone line is no further away than it was
+        self.emit("status", f"Nav-Ray: the way to the zone line is blocked; turning {'right' if side > 0 else 'left'} "
+                            f"and pushing on ({tries + 1} of {ZONE_SIDE_TRIES}).")
+        return True
+
+    def step_forward(self, seconds=STEP_SECONDS):
+        """Walk a short way straight on, without steering."""
+        self.backend.key("w", True)
+        try:
+            self.wait(seconds)
+        finally:
+            self.backend.key("w", False)
+
     def walk(self):
         reader = self.detector.text_reader()
         self.route_legs, self.route_start = [], self.area_name()
@@ -951,6 +1004,9 @@ class NavRayRunner(VisualRunner):
         seen_path, searched, scan_first, scan_looks, last_side = False, 0, None, 0, 1
         scan_offset, scan_phase = 0, 0
         scanning = True                                 # until the first dashes are found, look all round for them
+        wide = 0                                        # a search after the path was seen that turns all the way round: its direction
+        came_back = False                               # a turn that lost the dashes was half undone since the last leg
+        pushing = False                                 # a side push towards a zone line: walk on with no dashes in view
         last_report = started
         try:
             while True:
@@ -958,32 +1014,52 @@ class NavRayRunner(VisualRunner):
                 now = self.clock()
                 if now - started > MAX_SECONDS:
                     raise Interrupted("Nav-Ray: the walk took longer than 10 minutes. Stopped.")
+                from_search = scanning or pushing
                 got = self.evaluate(track, lost, quick=scanning)
                 if got is not None and scanning:
                     got = self.evaluate(track, lost)               # something showed while sweeping: confirm it standing still
                 frame = got[1] if got else self.frame()
+                self.look(frame, got[0] if got else None, "searching" if scanning or got is None else "lining up")
                 self.vitals(reader, frame, state)
                 if state.pop("zoned", False):
                     if self.entered_zone(started):
                         return
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
+                    wide, came_back, pushing = 0, False, False
+                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                        state.pop(key, None)
                     continue
-                if got is None:
+                view = None
+                if got is None and pushing:
+                    pushing = False                          # walk on below, towards the zone line, with no dashes in view
+                elif got is None:
                     lost += 1
                     if not scanning and self.last_turn and seen_path:
-                        back = -self.last_turn//2
-                        self.last_turn = 0
-                        self.emit("status", f"Nav-Ray: the turn lost the dashes; coming back {back:+d} counts.")
-                        self.backend.move_relative(back, 0)
-                        self.wait(.15)
-                        continue
+                        turned_by, self.last_turn = self.last_turn, 0
+                        if not came_back:
+                            came_back = True
+                            back = -turned_by//2
+                            self.emit("status", f"Nav-Ray: the turn lost the dashes; coming back {back:+d} counts.")
+                            self.backend.move_relative(back, 0)
+                            self.wait(.15)
+                            continue
+                        # Live (28 Oct, 19:37): turn, lost, come back, found, turn, lost... six times, then "path lost".
+                        # The marks were low on screen, where the body hides them once the view turns to them: keep
+                        # the new heading and walk a step towards them before searching.
+                        self.emit("status", "Nav-Ray: the turn lost the dashes again; keeping this heading and "
+                                            "stepping towards where they were.")
+                        self.step_forward()
                     if not scanning:
-                        # The dashes went out of view (a corner, a pillar): look all the way round before
-                        # deciding the route is over.
+                        # The dashes went out of view (a corner, a pillar): look nearby before deciding the route is
+                        # over. Near a zone line the dashes stop there: look all the way round instead.
                         scanning, scan_first, scan_looks, searched = True, None, 0, 0
                         scan_offset, scan_phase = 0, 0
-                        self.emit("status", f"Nav-Ray: no dashes in view; searching nearby from a stop ({'right' if last_side > 0 else 'left'} first).")
+                        wide = last_side if seen_path and self.near_zone(self.clock()) else 0
+                        if wide:
+                            self.emit("status", "Nav-Ray: no dashes in view near the zone line; looking all round.")
+                        else:
+                            self.emit("status", f"Nav-Ray: no dashes in view; searching nearby from a stop ({'right' if last_side > 0 else 'left'} first).")
                     if scanning:
                         small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY), (96, 54), interpolation=cv2.INTER_AREA).astype(np.int16)
                         scan_looks += 1
@@ -992,24 +1068,34 @@ class NavRayRunner(VisualRunner):
                         back_where_it_began = scan_looks > 15 and float(np.abs(small - scan_first).mean()) < SAME_VIEW
                         if not seen_path and (back_where_it_began or searched >= SEARCH_COUNTS):
                             raise Interrupted("No Nav-Ray path found after turning all the way round. Check that a route is active.")
+                        if wide and (back_where_it_began or searched >= SEARCH_COUNTS):
+                            if self.side_push(state, last_side, frame.shape[1]):
+                                track, lost, scanning, wide, pushing = None, 0, False, 0, True
+                                continue
+                            self.save_failure(Interrupted("Path lost or ended."))
+                            self.finish_route(started)
+                            self.emit("done", "Nav-Ray: path lost or ended. Arrived, or the route was lost.")
+                            return
                         look = max(20, round(SCAN_PX/abs(self.px_per_count))) if self.px_per_count else SEARCH_STEP
-                        if seen_path:
+                        if seen_path and not wide:
                             limit = max(look, round(LOCAL_SCAN_WIDTH*frame.shape[1]/abs(self.px_per_count))) if self.px_per_count else 5*look
                             target = (last_side if scan_phase == 0 else -last_side)*limit
-                            if scan_offset == target:
-                                if scan_phase == 0:
-                                    scan_phase = 1
-                                    target = -last_side*limit
-                                else:
-                                    self.save_failure(Interrupted("Path lost or ended."))
-                                    self.finish_route(started)
-                                    self.emit("done", "Nav-Ray: path lost or ended. Arrived, or the route was lost.")
-                                    return
-                            delta = target - scan_offset
-                            move = max(-look, min(look, delta))
+                            if scan_offset == target and scan_phase == 0:
+                                scan_phase, target = 1, -last_side*limit
+                            elif scan_offset == target and self.near_zone(self.clock()):
+                                # Live (28 Oct, 20:00): the local search ended the walk 3 m from the zone line.
+                                wide, scan_first, scan_looks, searched = -last_side, None, 0, 0     # on round the same way
+                                self.emit("status", "Nav-Ray: nothing nearby, and the zone line is close; looking all round.")
+                            elif scan_offset == target:
+                                self.save_failure(Interrupted("Path lost or ended."))
+                                self.finish_route(started)
+                                self.emit("done", "Nav-Ray: path lost or ended. Arrived, or the route was lost.")
+                                return
+                        if seen_path and not wide:
+                            move = max(-look, min(look, target - scan_offset))
                             scan_offset += move
                         else:
-                            move = look*(self.route_hint or 1)
+                            move = look*(wide or self.route_hint or 1)
                         self.backend.move_relative(move, 0)
                         track = None                         # sweeping: look at the whole picture every time
                         searched += abs(move)
@@ -1017,30 +1103,38 @@ class NavRayRunner(VisualRunner):
                             last_report = self.clock()
                             self.emit("status", f"Nav-Ray: looking for the path, turned {searched}.")
                     continue
-                scanning = False
-                view, frame = got
-                self.last_turn = 0 if abs(self.aim_error(view, frame)) <= TURN_FIRST else self.last_turn
-                track, lost = view, 0
-                seen_path = True
-                state["last_path"] = self.clock()
-                error = self.aim_error(view, frame)
-                last_side = 1 if error >= 0 else -1
-                # Once turning is calibrated, a moderate error is corrected on the move (the tethered walk steers
-                # every look): stopping to turn first cost a second or more each time (28 Oct run: 15 such turns).
-                if abs(error) > (TETHER_TURN_IN_PLACE if self.px_per_count else TURN_FIRST):
-                    turns_in_row += 1
-                    first = view.points[0] if view.points else view.aim
-                    self.emit("status", f"Nav-Ray: turn {turns_in_row}, aim {error:+.3f}, {len(view.points)} marks, "
-                              f"nearest ({first[0]:.0f}, {first[1]:.0f}).")
-                    if turns_in_row > MAX_TURNS:
-                        raise Interrupted("Nav-Ray: turning does not line the dashes up. Check the mouse look and try again.")
-                    turned += self.turn(error, frame.shape[1])
-                    track, lost = None, 0                    # the camera moved: the old path line no longer applies to the new picture
-                    continue
-                turns_in_row = 0
+                else:
+                    scanning, wide, pushing = False, 0, False
+                    view, frame = got
+                    self.last_turn = 0 if abs(self.aim_error(view, frame)) <= TURN_FIRST else self.last_turn
+                    track, lost = view, 0
+                    seen_path = True
+                    state["last_path"] = self.clock()
+                    error = self.aim_error(view, frame)
+                    last_side = 1 if error >= 0 else -1
+                    # Once turning is calibrated, a moderate error is corrected on the move (the tethered walk steers
+                    # every look): stopping to turn first cost a second or more each time (28 Oct run: 15 such turns).
+                    # Dashes a search has just found are followed at once: the tethered walk pivots in place on a big error.
+                    if abs(error) > (TETHER_TURN_IN_PLACE if self.px_per_count else TURN_FIRST) and not (from_search and self.px_per_count):
+                        turns_in_row += 1
+                        first = view.points[0] if view.points else view.aim
+                        self.emit("status", f"Nav-Ray: turn {turns_in_row}, aim {error:+.3f}, {len(view.points)} marks, "
+                                  f"nearest ({first[0]:.0f}, {first[1]:.0f}).")
+                        if turns_in_row > MAX_TURNS:
+                            raise Interrupted("Nav-Ray: turning does not line the dashes up. Check the mouse look and try again.")
+                        turned += self.turn(error, frame.shape[1])
+                        track, lost = None, 0                    # the camera moved: the old path line no longer applies to the new picture
+                        continue
+                    turns_in_row = 0
                 legs += 1
-                ahead = len(self.next_dashes(view, frame.shape[0]))
-                self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
+                if view is not None:
+                    ahead = len(self.next_dashes(view, frame.shape[0]))
+                    self.emit("status", f"Nav-Ray: leg {legs}, {ahead} dashes ahead, aim {error:+.2f}, turned {turned:+d} so far.")
+                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                        state.pop(key, None)                 # following dashes again: a later wall gets both sides afresh
+                else:
+                    self.emit("status", f"Nav-Ray: leg {legs}, no dashes in view; walking on towards the zone line.")
+                self.last_turn, came_back = 0, False
                 leg_started = self.clock()
                 track, passed, reason = self.walk_leg(view, track, reader, state, tether=bool(self.px_per_count))
                 self.emit("status", f"Nav-Ray: leg {legs} ended after {self.clock() - leg_started:.0f}s: {reason}.")
@@ -1056,6 +1150,9 @@ class NavRayRunner(VisualRunner):
                     # A new zone: its dashes may lie anywhere, so look all round for them.
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase, seen_path, self.last_turn = 0, 0, False, 0
+                    wide = 0
+                    for key in ("zone_tries", "zone_turned", "zone_side"):
+                        state.pop(key, None)
                     continue
                 if reason == "stuck against something":
                     if self.clock() - door_tried_at >= DOOR_RETRY_SECONDS and self.try_open_door(reader):
@@ -1065,11 +1162,17 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
-                    # Look for the route from a stop; do not run away while searching.
+                    if self.near_zone(self.clock()) and self.side_push(state, last_side, frame.shape[1]):
+                        track, lost, scanning, wide, pushing = None, 0, False, 0, True
+                        continue
+                    # Look for the route from a stop; do not run away while searching. Near a zone line, once both
+                    # sides were pushed, look all the way round.
                     last_side = -last_side
                     track, lost, scanning, scan_first, scan_looks, searched = None, 0, True, None, 0, 0
                     scan_offset, scan_phase = 0, 0
-                    self.emit("status", f"Nav-Ray: stuck ({stuck}); stopped, searching nearby for the way round.")
+                    wide = last_side if seen_path and self.near_zone(self.clock()) else 0
+                    self.emit("status", f"Nav-Ray: stuck ({stuck}); stopped, searching "
+                                        f"{'all round' if wide else 'nearby'} for the way round.")
         finally:
             for key in ("shift", "w", "s"):
                 if key in self.backend.held_keys:
@@ -1103,8 +1206,53 @@ class NavRayRunner(VisualRunner):
         self.emit("status", "Nav-Ray: walking the path.")
         self.walk()
 
+    overlay = None               # navray_debug.Overlay over the game, set by the app: what the walk sees, live
+    blackbox = None              # navray_debug.BlackBox: the last 60 s of looks, saved when the walk ends
+
+    def look(self, frame, view, state, error=None):
+        """Show a look on the overlay and keep it in the black box. Never allowed to stop a walk."""
+        if self.overlay is None and self.blackbox is None:
+            return
+        try:
+            info = navray_debug.view_info(view, frame.shape, state, self.dash_color or "green", error=error)
+            if self.blackbox is not None:
+                self.blackbox.add(frame, info)
+            if self.overlay is not None:
+                self.overlay.post(info)
+        except Exception:
+            pass
+
+    def save_blackbox(self):
+        """Write the black box to diagnostics/blackbox/<time> on a background thread (it takes seconds); keep five."""
+        box, self.blackbox = self.blackbox, None
+        if box is None or not len(box):
+            return
+        import threading
+        root = Path(__file__).parent / "diagnostics" / "blackbox"
+        folder = root / time.strftime("%Y%m%d-%H%M%S")
+
+        def write():
+            try:
+                box.save(folder)
+                for old in sorted(p for p in root.iterdir() if p.is_dir())[:-5]:
+                    import shutil
+                    shutil.rmtree(old, ignore_errors=True)
+            except Exception:
+                pass
+        threading.Thread(target=write, name="navray-blackbox", daemon=False).start()
+        self.emit("status", f"Nav-Ray: the last minute of the walk is saved in {folder}.")
+
     def run(self):
         try:
+            if self.blackbox is None:
+                self.blackbox = navray_debug.BlackBox()
+                plain = self.emit
+                box = self.blackbox
+
+                def boxed(kind, payload=None, _plain=plain):
+                    box.event(kind, payload if isinstance(payload, str) else json.dumps(payload, default=str)[:500])
+                    _plain(kind, payload)
+                self.emit = boxed
             if self.record_dir is None:
                 self.start_recording(Path(__file__).parent / "diagnostics" / "last_run")
             self.guard()
@@ -1116,3 +1264,4 @@ class NavRayRunner(VisualRunner):
             self.emit("error", f"{exc}")
         finally:
             self.backend.release_all()
+            self.save_blackbox()

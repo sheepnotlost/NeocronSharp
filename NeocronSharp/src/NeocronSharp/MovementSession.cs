@@ -54,7 +54,7 @@ internal sealed class MovementSession
 
         try
         {
-            Record("start", initial, message: $"Evolution 2.5.902 / {_reader.Process.Id} / {_reader.Executable} / {PlayerReader.SupportedSha256}");
+            Record("start", initial, message: $"{PlayerReader.BuildLabel} / {_reader.Process.Id} / {_reader.Executable} / {PlayerReader.SupportedSha256}");
             var stable = await SettleAsync(300);
             if (Vector3.Distance(initial.Position, stable.Position) > 0.5f)
                 throw new InvalidOperationException("Character was already moving. Stand still before starting.");
