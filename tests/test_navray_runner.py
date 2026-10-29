@@ -512,6 +512,29 @@ class WalkTests(unittest.TestCase):
         runner.finish_route = lambda started: None
         self.assertTrue(runner.entered_zone(0.0))
 
+    def test_a_halt_at_the_exit_while_the_zone_loads_is_not_a_wall(self):
+        # Live (28 Oct 23:55): the position froze at the exit while Plaza 1 loaded; the map walk called it stuck.
+        import telemetry
+        runner, _ = make_runner(lambda i: moving_dark(i))
+        runner.px_per_count = -4.0
+        frozen = {"sector": 101}
+
+        class Feed:
+            def latest(self, max_age=1.0, now=None):
+                if runner.clock() > 4.0:
+                    frozen["sector"] = 1                                 # the new zone, after the halt
+                return telemetry.Sample(runner.clock(), frozen["sector"], 270.0, 0.0, 0.0, 590.0, 180.0)
+
+        class Exit:
+            label, bearing, beyond, world = "1", 0.0, (0.0, 650.0), (0.0, 600.0)
+
+        class Planner:
+            def plan_to_exit(self, here, hint):
+                return Exit(), [here, (0.0, 600.0)]
+        runner.feed, runner.planner_for = Feed(), (lambda sample: Planner())
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        self.assertEqual(runner.map_walk(runner.detector.text_reader(), state, "test"), "entered a new zone")
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None

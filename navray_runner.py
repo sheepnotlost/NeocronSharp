@@ -76,6 +76,7 @@ MAP_PUSH = 600.0         # world units on past an exit arrow (the zone changes t
 MAP_STUCK_UNITS = 25.0   # moved less than this (world units) ...
 MAP_STUCK_SECONDS = 1.6  # ...in this long with W held: a wall
 MAP_SECONDS = 120.0      # longest map walk
+MAP_EXIT_NEAR = 450.0    # world units from the exit within which a halt means the next zone is loading
 CORRIDOR_PIVOT = .2       # facing a wall near a zone line, turn this much (fraction of the width) per look to the open side
 ZONE_SIDE_TRIES = 2      # side pushes after a wall stops the push to a zone line: the side the dashes were on, then the other
 STEP_SECONDS = .6        # a short walk towards dashes that a turn keeps losing (low on screen: the body hides them)
@@ -1126,7 +1127,11 @@ class NavRayRunner(VisualRunner):
                 if np.hypot(here[0] - moved_from[0], here[1] - moved_from[1]) >= MAP_STUCK_UNITS:
                     moved_at, moved_from = self.clock(), here
                 elif self.clock() - moved_at > MAP_STUCK_SECONDS:
-                    return "stuck against something"
+                    # Live (28 Oct 23:55): at the exit the position stops while the next zone loads; that is not a
+                    # wall. Keep walking on there until the sector changes.
+                    near_exit = np.hypot(here[0] - exit_.world[0], here[1] - exit_.world[1]) < MAP_EXIT_NEAR
+                    if not near_exit or self.clock() - moved_at > MAP_STUCK_SECONDS + ZONE_PUSH_SECONDS:
+                        return "stuck against something"
                 self.sleep(.05)
             return "map walk time limit"
         finally:
