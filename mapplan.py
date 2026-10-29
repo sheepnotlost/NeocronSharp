@@ -472,11 +472,12 @@ class SectorPlanner:
             return
         # Some arrows point across the corridor rather than along it (Viarosso 1 '1', Plaza 4 '1' and '2'): past
         # such an exit, push on the way the corridor leads into the box, not the way the arrow points.
+        push = d
         into = (cu - p[0], cv - p[1])
         norm = (into[0]**2 + into[1]**2) ** .5
         if norm > 1e-6 and (into[0]*d[0] + into[1]*d[1])/norm < math.cos(math.radians(45)):
-            d = (into[0]/norm, into[1]/norm)
-        beyond = (cu + d[0] * 12, cv + d[1] * 12)
+            push = (into[0]/norm, into[1]/norm)
+        beyond = (cu + push[0] * 12, cv + push[1] * 12)
         wb = self.projection.to_world(*beyond)
         wp = self.projection.to_world(*p)
         o, t = self.projection.to_world(0, 0), self.projection.to_world(*d)

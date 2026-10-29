@@ -479,7 +479,7 @@ class WalkTests(unittest.TestCase):
                                         (180.0 - body["bearing"]) % 360)
 
         class Exit:
-            label, bearing, beyond = "3", 0.0, (0.0, 650.0)
+            label, bearing, beyond, world = "3", 0.0, (0.0, 650.0), (0.0, 600.0)
 
         class Planner:
             def plan_to_exit(self, here, hint):

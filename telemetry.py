@@ -30,7 +30,7 @@ def parse(line, now=None):
     """A Sample from one feed line, or None for an error line or anything unreadable."""
     try:
         data = json.loads(line)
-        if not data.get("ok"):
+        if not isinstance(data, dict) or not data.get("ok"):
             return None
         return Sample(time.monotonic() if now is None else now, int(data["sector"]),
                       None if data.get("rotation") is None else float(data["rotation"]),
@@ -55,19 +55,24 @@ class Feed:
         except OSError as exc:
             self.error = f"NeocronSharp telemetry could not start: {exc}"
             return
-        threading.Thread(target=self._read, name="neocronsharp-telemetry", daemon=True).start()
+        threading.Thread(target=self._read, args=(self.process,), name="neocronsharp-telemetry", daemon=True).start()
 
-    def _read(self):
-        for line in self.process.stdout:
-            sample = parse(line)
-            with self.lock:
-                if sample is not None:
-                    self.sample, self.error = sample, None
-                else:
-                    try:
-                        self.error = json.loads(line).get("error") or self.error
-                    except ValueError:
-                        pass
+    def _read(self, process):
+        try:
+            for line in process.stdout:
+                sample = parse(line)
+                with self.lock:
+                    if sample is not None:
+                        self.sample, self.error = sample, None
+                    else:
+                        try:
+                            data = json.loads(line)
+                            if isinstance(data, dict):
+                                self.error = data.get("error") or self.error
+                        except ValueError:
+                            pass
+        except (OSError, ValueError, UnicodeDecodeError):  # the feed closed or sent something unreadable
+            pass
 
     def latest(self, max_age=FRESH, now=None):
         """The newest sample if it is at most `max_age` seconds old, else None."""

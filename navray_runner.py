@@ -449,7 +449,7 @@ class NavRayRunner(VisualRunner):
             height, width = bgr.shape[:2]
             self.banner_box = (now, (box[0]/width, box[1]/height, box[2]/width, box[3]/height))
             text = " ".join(words)
-            if "district" in text and ":" in text:     # "entering new district: pepper park sec-1"
+            if now >= self.zone_quiet_until and "district" in text and ":" in text:   # "...district: pepper park sec-1"
                 self.banner_name = navray._norm(text.split(":", 1)[1])
         # Just after crossing, the new district's own banner is still shown: that is not a zone line ahead.
         ahead = found and now >= self.zone_quiet_until
@@ -1064,14 +1064,20 @@ class NavRayRunner(VisualRunner):
         counts = round(max(-limit, min(limit, degrees/self.deg_per_count)))
         if not counts:
             return 0
+        moved = self.clock()
         self.backend.move_relative(counts, 0)
         self.wait(.15)
         after = self.feed.latest() if self.feed else None
-        if before is not None and after is not None and abs(counts) >= 15:
+        if before is not None and after is not None and abs(counts) >= 15 and after.when > moved:
             turned = (self.map_bearing(after) - self.map_bearing(before) + 180.0) % 360.0 - 180.0
             if abs(turned) >= 2:
                 measured = turned/counts
-                self.deg_per_count = measured if measured*self.deg_per_count < 0 else .5*self.deg_per_count + .5*measured
+                if measured*self.deg_per_count >= 0:
+                    self.deg_per_count, self.flip_votes = .5*self.deg_per_count + .5*measured, 0
+                else:
+                    self.flip_votes = getattr(self, "flip_votes", 0) + 1
+                    if self.flip_votes >= 2:              # the mouse really turns the other way
+                        self.deg_per_count, self.flip_votes = measured, 0
         return counts
 
     def map_walk(self, reader, state, why):
@@ -1087,9 +1093,9 @@ class NavRayRunner(VisualRunner):
         if got is None:
             return None
         exit_, path = got
-        ahead = np.radians(exit_.bearing)
-        path = list(path) + [exit_.beyond, (exit_.beyond[0] + MAP_PUSH*np.sin(ahead),
-                                            exit_.beyond[1] + MAP_PUSH*np.cos(ahead))]
+        lead = np.subtract(exit_.beyond, exit_.world)
+        lead = lead/max(1e-6, float(np.hypot(*lead)))
+        path = list(path) + [exit_.beyond, (exit_.beyond[0] + MAP_PUSH*lead[0], exit_.beyond[1] + MAP_PUSH*lead[1])]
         self.emit("status", f"Nav-Ray: {why}; walking the sector map to exit {exit_.label} ({len(path)} waypoints).")
         sector, started = sample.sector, self.clock()
         forward, moved_at, moved_from = False, self.clock(), (sample.x, sample.z)
@@ -1103,6 +1109,13 @@ class NavRayRunner(VisualRunner):
                     return "entered a new zone"
                 sample = self.feed.latest()
                 if sample is None:
+                    if state.get("zoned"):
+                        return "entered a new zone"
+                    if moved_from is not None and np.hypot(moved_from[0] - exit_.world[0],
+                                                           moved_from[1] - exit_.world[1]) < MAP_EXIT_NEAR:
+                        if self.clock() - moved_at < MAP_STUCK_SECONDS + ZONE_PUSH_SECONDS:
+                            self.sleep(.05)                  # the next zone is loading: no position for a moment
+                            continue
                     return "lost the live position"
                 if sample.sector != sector:
                     return "entered a new zone"
@@ -1228,7 +1241,8 @@ class NavRayRunner(VisualRunner):
                         self.emit("status", "Nav-Ray: the turn lost the dashes again; keeping this heading and "
                                             "stepping towards where they were.")
                         self.step_forward()
-                    if not scanning and seen_path and self.near_zone(self.clock()) and not state.get("zone_mapped"):
+                    if (not scanning and seen_path and self.near_zone(self.clock()) and not state.get("zone_mapped")
+                            and self.destination_is_elsewhere()):
                         state["zone_mapped"] = True
                         result = self.map_walk(reader, state, "the dashes ended at the zone line")
                         if result is not None:
@@ -1376,7 +1390,7 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
-                    if self.near_zone(self.clock()) and not state.get("stuck_mapped"):
+                    if self.near_zone(self.clock()) and not state.get("stuck_mapped") and self.destination_is_elsewhere():
                         # Live (28 Oct 23:46): a wall stopped the walk at the zone line and only the blind side push
                         # was tried. Walk the sector map first.
                         state["stuck_mapped"] = True
@@ -1385,7 +1399,7 @@ class NavRayRunner(VisualRunner):
                             state["map_result"] = result
                             track, lost, scanning = None, 0, False
                             continue
-                    open_side = self.corridor(_bgr(frame))[1] if self.near_zone(self.clock()) else 0
+                    open_side = self.corridor(_bgr(self.frame()))[1] if self.near_zone(self.clock()) else 0
                     if self.near_zone(self.clock()) and self.side_push(state, open_side or last_side, frame.shape[1]):
                         track, lost, scanning, wide, pushing = None, 0, False, 0, True
                         continue
@@ -1491,4 +1505,7 @@ class NavRayRunner(VisualRunner):
             self.emit("error", f"{exc}")
         finally:
             self.backend.release_all()
+            if self.feed is not None:                     # also when the walk never reached its own finally
+                self.feed.close()
+                self.feed = None
             self.save_blackbox()
