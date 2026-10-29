@@ -127,9 +127,9 @@ Sources: [Tech Haven Items DB](https://db.techhaven.org/en/item-lists/recyclable
 
 ## Skins and stop sound
 
-The bottom **Skin** selector offers Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance and Dome Control. It saves your choice. These are native control skins; the separate [interactive concept gallery](styling/skin-gallery.html) explores richer Winamp-inspired styling.
+The bottom **Skin** selector offers 15 skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control, Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer and Shade Mode. It saves your choice. The [interactive concept gallery](styling/skin-gallery.html) explores richer layouts.
 
-Dead Sector Terminal and Basic retain their original looks. The eight other skins now have their own native frame, button, field and tab artwork, caption fonts and header badges. CronAMP uses brushed metal, Fallen Circuit has circuit traces, Tangent Forge has rivets, PSI has geometric frames, and Pepper Park now uses burgundy/magenta neon. The gallery reuses the app's actual border artwork while keeping a separate concept layout.
+Winamp is the inspiration. Every skin but Basic (the original light style) has a Winamp-style title bar (ribbed strips either side of the caps title, the skin's badge, its name in a small display), its own code-drawn frame, button, field and tab artwork, and a status line and log that read like a player's display: lit text in a dark well. Dead Sector Terminal keeps its amber phosphor look with thin terminal frames. Pepper Park Signal follows Neocron's red-light district: dark brick, red neon, and a billboard above the tabs. The billboard shows `assets/local/pepper_park_billboard.png` when that picture is on the PC (it is game artwork, so it stays out of the public repository); without it a drawn billboard is shown. All nine tabs fit across the narrowest window in every skin.
 
 **Sound when stopped** is optional and off by default. A bundled tone plays once for completion, chosen-slot stopping, handled errors, focus loss or closure. Ordinary per-item completion does not beep while a batch continues.
 

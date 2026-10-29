@@ -23,3 +23,6 @@ NeocronSharp/.codex/
 # research copies: the game install (GBs) and third-party source trees stay local; notes are kept
 Research/*
 !Research/*.md
+
+# pictures kept on this PC only (game artwork; the repository is public)
+assets/local/

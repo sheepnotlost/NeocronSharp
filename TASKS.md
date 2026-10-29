@@ -4,6 +4,15 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Winamp-style skin polish and Pepper Park billboard — 28 October 2026
+
+- [x] Looked at the app in every skin. In the 13 drawn skins every button's text was hidden (a ttk "border" layout node is drawn after its children, so the button picture covered the label); corner details repeated across panels and fields as stray marks; tab names were cut (an image element is never narrower than its 100 px picture). Fixed, with a test that no drawn skin hides text or repeats marks.
+- [x] Winamp look (studied skins.webamp.org): a title bar with ribbed strips, caps title, badge and the skin name in a small display; status line and log as a lit display in a dark well; seek-bar progress, matching divider and Export menu. Dead Sector Terminal now gets the treatment in amber (terminal frames); Basic stays the original.
+- [x] Pepper Park Signal follows the game's red-light district (dark brick, red neon) with a billboard above the tabs, showing a Pepper Park picture kept on this PC only (assets/local, git-ignored) or a drawn one.
+- [x] All nine tabs fit at 960 px wide in all 15 skins (checked on screenshots).
+- [x] Every tab, sub-tab, button, checkbox, list, menu entry and dialog clicked through with no errors (scratch profile, dialogs cancelled, no game input); Start on Nav-Ray, Construction and Recycling reaches the countdown and stops cleanly with no game in front; the embedded Tracker, Quests, Loot library and Plugins pages, the coordinate recorder and point navigation windows open, and Build rebuilds NeocronSharp. 350 tests pass.
+- [ ] NeocronSharp's live position reading says "Unsupported client build. Position offsets must be revalidated after game updates" (Tracker, recorder, point navigation).
+
 ### Nav-Ray speed and zone lines — 28 October 2026
 
 - [x] The banner fades and breaks up: the OCR read it as "Entering.peygjstrict", and when only one or two of its letters showed they were not a row and were still chained as dashes. Parts of words now count, and the banner's place stays ignored for 5 s after it was read. Replayed on both clips through the walk's own finder: no banner letters chained; the remaining marks near it are real dashes.

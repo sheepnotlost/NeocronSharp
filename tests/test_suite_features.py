@@ -121,7 +121,7 @@ class RecyclingRunnerTests(unittest.TestCase):
 
 
 class AppearanceUiTests(unittest.TestCase):
-    def test_dead_sector_restores_original_layouts_and_fonts_after_other_skins(self):
+    def test_basic_restores_original_layouts_and_fonts_after_other_skins(self):
         from tkinter import ttk
         from appearance import apply_skin
         from skin_chrome import TREATMENTS
@@ -131,21 +131,57 @@ class AppearanceUiTests(unittest.TestCase):
             root=tk.Tk();root.withdraw();app=App(root,Path(folder)/"profile.json",NoInput())
             try:
                 style=ttk.Style(root)
-                apply_skin(root,"amber",app.heading)
+                apply_skin(root,"basic",app.heading)
                 names=("TLabelframe","TButton","TEntry","TCombobox","TNotebook.Tab")
                 baseline={name:style.layout(name) for name in names}
                 fonts={name:str(style.lookup(name,"font")) for name in ("TButton","TLabelframe.Label")}
+                self.assertEqual(len(TREATMENTS),14)                       # every skin but Basic, Dead Sector included
                 for key in TREATMENTS:
                     apply_skin(root,key,app.heading)
                     self.assertIn(f"Macro.{key}.panel",str(style.layout("TLabelframe")))
-                    self.assertTrue(app.heading.cget("image"))
+                    self.assertEqual(app.heading._titlebar.winfo_manager(),"grid")      # the Winamp title bar
+                    self.assertEqual(app.heading.winfo_manager(),"")
                     self.assertEqual(app.start_button.cget("style"),"Start.TButton")
-                apply_skin(root,"amber",app.heading)
+                apply_skin(root,"basic",app.heading)
                 self.assertEqual({name:style.layout(name) for name in names},baseline)
                 self.assertEqual({name:str(style.lookup(name,"font")) for name in fonts},fonts)
                 self.assertFalse(app.heading.cget("image"))
+                self.assertEqual(app.heading.winfo_manager(),"grid")
+                self.assertEqual(app.heading._titlebar.winfo_manager(),"")
                 self.assertEqual(app.start_button.cget("style"),"TButton")
             finally:app.close()
+
+    def test_skin_artwork_never_hides_text_or_leaves_stray_marks(self):
+        # Live (28 Oct): every button in the 13 drawn skins showed no text (a "border" layout node is drawn after
+        # its children, so the image covered the label), and corner details repeated across panels as stray marks.
+        from tkinter import ttk
+        from appearance import SKINS, apply_skin
+        from skin_chrome import TREATMENTS, BORDER, surface
+        root=tk.Tk();root.withdraw()
+        try:
+            style=ttk.Style(root);style.theme_use("clam")
+            for key,treatment in TREATMENTS.items():
+                apply_skin(root,key,None)
+                with self.subTest(skin=key):
+                    for name in ("TButton","TNotebook.Tab","TLabelframe","TEntry","TCombobox"):
+                        def nodes(layout):
+                            for element,options in layout:
+                                yield element,options
+                                yield from nodes(options.get("children",[]))
+                        image=[o for e,o in nodes(style.layout(name)) if e.startswith(f"Macro.{key}.")]
+                        self.assertEqual(len(image),1,name)
+                        self.assertNotIn("border",image[0],name)
+                    left,top,right,bottom=BORDER
+                    for role in ("panel","button","field","tab"):
+                        picture=surface(root,SKINS[key],treatment["kind"],role)
+                        w,h=picture.width(),picture.height()
+                        pixel=lambda x,y:picture.get(x,y)
+                        for y in list(range(top))+list(range(h-bottom,h)):            # edges: the same all along
+                            self.assertEqual({pixel(x,y) for x in range(left,w-right)}.__len__(),1,(role,y))
+                        for x in list(range(left))+list(range(w-right,w)):
+                            self.assertEqual({pixel(x,y) for y in range(top,h-bottom)}.__len__(),1,(role,x))
+                        self.assertEqual(len({pixel(x,y) for x in range(left,w-right,7) for y in range(top,h-bottom,5)}),1,role)
+        finally:root.destroy()
 
     def test_all_ten_skins_preserve_jobs_and_preferences_persist(self):
         class NoInput:

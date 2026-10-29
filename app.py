@@ -183,7 +183,7 @@ class App:
         skin.pack(side="right",padx=6);skin.bind("<<ComboboxSelected>>",lambda e:self.save_preferences());self.editable.append(skin)
         ttk.Label(actions,text="Skin").pack(side="right")
         self.status = tk.StringVar(value="Ready")
-        ttk.Label(workspace, textvariable=self.status, wraplength=980, font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="ew", pady=6)
+        ttk.Label(workspace, textvariable=self.status, wraplength=980, style="Status.TLabel").grid(row=2, column=0, sticky="ew", pady=6)
         self.log_panel = ttk.Frame(self.main_split)
         self.log_panel.columnconfigure(0, weight=1)
         self.log_panel.rowconfigure(1, weight=1)

@@ -70,7 +70,7 @@ def parse_destination(text):
     """"Faction HQs > Black Dragon" -> ("Faction HQs", "Black Dragon"). Raises ValueError."""
     parts = [part.strip() for part in (text or "").split(">")]
     if len(parts) != 2 or not all(parts):
-        raise ValueError("Nav-Ray: choose a category and a destination (or tick Read lists to fill them from the game).")
+        raise ValueError("Nav-Ray: choose a category and a destination.")
     return parts[0], parts[1]
 
 

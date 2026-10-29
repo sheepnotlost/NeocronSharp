@@ -10,7 +10,8 @@ SKINS={
     "clinic":{"name":"BioLab Workstation","bg":"#dbe6df","fg":"#173d3c","panel":"#c4d6ca","input":"#f2fff5","accent":"#2d7964","muted":"#3b665d","edge":"#7fa69b","font":"Segoe UI","heading":20},
     "iron":{"name":"Fallen Circuit","bg":"#293632","fg":"#e3e8d4","panel":"#46534b","input":"#15211c","accent":"#d8df70","muted":"#b6c4ae","edge":"#85937a","font":"Tahoma","heading":17},
     "forge":{"name":"Tangent Forge","bg":"#39282d","fg":"#f2d9c5","panel":"#633c3b","input":"#200f0b","accent":"#ffc18a","muted":"#d5ab93","edge":"#a57569","font":"Tahoma","heading":18},
-    "rain":{"name":"Pepper Park Signal","bg":"#29181f","fg":"#f7dce6","panel":"#4d2738","input":"#150b12","accent":"#ff83b3","muted":"#ce9dae","edge":"#a34b71","font":"Trebuchet MS","heading":18},
+    # Pepper Park is Neocron's red-light district: dark brick, red neon signs and billboards.
+    "rain":{"name":"Pepper Park Signal","bg":"#1a0b0b","fg":"#ffdcd2","panel":"#3c1613","input":"#0e0404","accent":"#ff3b30","muted":"#c98c82","edge":"#9e2a22","font":"Trebuchet MS","heading":18},
     "psi":{"name":"PSI Resonance","bg":"#302339","fg":"#ecdeed","panel":"#51415e","input":"#190d22","accent":"#d8b9f2","muted":"#c3a8d0","edge":"#91789f","font":"Segoe UI","heading":19},
     "dome":{"name":"Dome Control","bg":"#243541","fg":"#dae8df","panel":"#435864","input":"#0d211f","accent":"#a0dab5","muted":"#adc5c2","edge":"#7c999b","font":"Consolas","heading":17},
     # Five late-90s media-player inspired skins: LCD readouts, spectrum bars,
@@ -43,21 +44,34 @@ def apply_skin(root, key, heading=None):
     style.map("TCombobox",fieldbackground=[("readonly",field)],foreground=[("readonly",fg),("disabled",skin["muted"])])
     style.map("TCheckbutton",background=[("active",bg)],foreground=[("disabled",skin["muted"])])
     style.configure("TNotebook",background=bg,bordercolor=edge)
-    style.configure("TNotebook.Tab",background=panel,foreground=fg,padding=(12,5))
+    style.configure("TNotebook.Tab",background=panel,foreground=fg,padding=(8,5),font=font)
     style.map("TNotebook.Tab",background=[("selected",field)],foreground=[("selected",accent),("disabled",skin["muted"])])
     style.configure("Treeview",background=field,fieldbackground=field,foreground=fg,bordercolor=edge,rowheight=25)
     style.configure("Treeview.Heading",background=panel,foreground=fg,font=(skin["font"],10,"bold"))
     style.map("Treeview",background=[("selected",accent)],foreground=[("selected","#10201a")])
     style.configure("Vertical.TScrollbar",background=panel,troughcolor=bg,bordercolor=edge,arrowcolor=fg)
+    # A seek bar: the lit part in the accent colour inside a dark well.
+    style.configure("Horizontal.TProgressbar",troughcolor=field,background=accent,bordercolor=edge,
+                    lightcolor=accent,darkcolor=accent)
+    style.configure("TMenubutton",background=panel,foreground=fg,arrowcolor=accent,bordercolor=edge,font=font)
+    style.map("TMenubutton",background=[("active",edge)])
+    style.configure("Sash",background=panel,bordercolor=edge,lightcolor=edge,darkcolor=field,gripcount=10)
     root.configure(background=bg)
     root.option_add("*TCombobox*Listbox.background",field)
     root.option_add("*TCombobox*Listbox.foreground",fg)
     from skin_chrome import apply_chrome, TREATMENTS
     apply_chrome(root,style,key,skin,heading)
+    # The status line and the log read like a Winamp display: lit text in a dark well (Basic keeps its plain look).
+    lcd=key!="basic"
+    style.configure("Status.TLabel",background=field if lcd else bg,foreground=accent if lcd else fg,
+                    font=("Consolas",10,"bold") if lcd else (skin["font"],10,"bold"),padding=(8,3) if lcd else 0)
     def walk(widget):
-        if isinstance(widget,tk.Canvas) or (isinstance(widget,tk.PanedWindow) and not isinstance(widget,ttk.PanedWindow)):
+        if getattr(widget,"_titlebar_canvas",False):pass
+        elif isinstance(widget,tk.Canvas) or (isinstance(widget,tk.PanedWindow) and not isinstance(widget,ttk.PanedWindow)):
             widget.configure(background=bg)
-        elif isinstance(widget,tk.Text):widget.configure(background=panel,foreground=fg,insertbackground=accent)
+        elif isinstance(widget,tk.Text):
+            widget.configure(background=field if lcd else panel,foreground=accent if lcd else fg,insertbackground=accent,
+                             highlightthickness=1 if lcd else 0,highlightbackground=edge,highlightcolor=edge)
         elif isinstance(widget,ttk.Button) and widget.cget("text")=="Start in 3 seconds":
             widget.configure(style="Start.TButton" if key in TREATMENTS else "TButton")
         for child in widget.winfo_children():walk(child)

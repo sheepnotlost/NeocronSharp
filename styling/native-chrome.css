@@ -1,4 +1,4 @@
-/* Exported from the native app's code-drawn skins. Basic and Dead Sector are untouched. */
+/* Exported from the native app's code-drawn skins. Basic is untouched. */
 .skin-rpos .module{border:9px solid transparent;border-image:url("native-chrome/rpos-panel_normal.png") 9 10 8 10 fill;padding:4px}
 .skin-rpos .control{border:7px solid transparent;border-image:url("native-chrome/rpos-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
 .skin-rpos .field{border:6px solid transparent;border-image:url("native-chrome/rpos-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
@@ -13,6 +13,13 @@
 .skin-cronamp .tab.active{border-image-source:url("native-chrome/cronamp-tab_selected.png")}
 .skin-cronamp .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/cronamp-badge.png") center/contain no-repeat}
 .skin-cronamp .bar strong{flex:1;margin-left:5px}
+.skin-amber .module{border:9px solid transparent;border-image:url("native-chrome/amber-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-amber .control{border:7px solid transparent;border-image:url("native-chrome/amber-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-amber .field{border:6px solid transparent;border-image:url("native-chrome/amber-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-amber .tab{border:6px solid transparent;border-image:url("native-chrome/amber-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-amber .tab.active{border-image-source:url("native-chrome/amber-tab_selected.png")}
+.skin-amber .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/amber-badge.png") center/contain no-repeat}
+.skin-amber .bar strong{flex:1;margin-left:5px}
 .skin-clinic .module{border:9px solid transparent;border-image:url("native-chrome/clinic-panel_normal.png") 9 10 8 10 fill;padding:4px}
 .skin-clinic .control{border:7px solid transparent;border-image:url("native-chrome/clinic-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
 .skin-clinic .field{border:6px solid transparent;border-image:url("native-chrome/clinic-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
@@ -55,4 +62,39 @@
 .skin-dome .tab.active{border-image-source:url("native-chrome/dome-tab_selected.png")}
 .skin-dome .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/dome-badge.png") center/contain no-repeat}
 .skin-dome .bar strong{flex:1;margin-left:5px}
+.skin-lcd .module{border:9px solid transparent;border-image:url("native-chrome/lcd-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-lcd .control{border:7px solid transparent;border-image:url("native-chrome/lcd-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-lcd .field{border:6px solid transparent;border-image:url("native-chrome/lcd-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-lcd .tab{border:6px solid transparent;border-image:url("native-chrome/lcd-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-lcd .tab.active{border-image-source:url("native-chrome/lcd-tab_selected.png")}
+.skin-lcd .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/lcd-badge.png") center/contain no-repeat}
+.skin-lcd .bar strong{flex:1;margin-left:5px}
+.skin-spectrum .module{border:9px solid transparent;border-image:url("native-chrome/spectrum-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-spectrum .control{border:7px solid transparent;border-image:url("native-chrome/spectrum-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-spectrum .field{border:6px solid transparent;border-image:url("native-chrome/spectrum-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-spectrum .tab{border:6px solid transparent;border-image:url("native-chrome/spectrum-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-spectrum .tab.active{border-image-source:url("native-chrome/spectrum-tab_selected.png")}
+.skin-spectrum .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/spectrum-badge.png") center/contain no-repeat}
+.skin-spectrum .bar strong{flex:1;margin-left:5px}
+.skin-chrome .module{border:9px solid transparent;border-image:url("native-chrome/chrome-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-chrome .control{border:7px solid transparent;border-image:url("native-chrome/chrome-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-chrome .field{border:6px solid transparent;border-image:url("native-chrome/chrome-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-chrome .tab{border:6px solid transparent;border-image:url("native-chrome/chrome-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-chrome .tab.active{border-image-source:url("native-chrome/chrome-tab_selected.png")}
+.skin-chrome .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/chrome-badge.png") center/contain no-repeat}
+.skin-chrome .bar strong{flex:1;margin-left:5px}
+.skin-visualizer .module{border:9px solid transparent;border-image:url("native-chrome/visualizer-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-visualizer .control{border:7px solid transparent;border-image:url("native-chrome/visualizer-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-visualizer .field{border:6px solid transparent;border-image:url("native-chrome/visualizer-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-visualizer .tab{border:6px solid transparent;border-image:url("native-chrome/visualizer-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-visualizer .tab.active{border-image-source:url("native-chrome/visualizer-tab_selected.png")}
+.skin-visualizer .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/visualizer-badge.png") center/contain no-repeat}
+.skin-visualizer .bar strong{flex:1;margin-left:5px}
+.skin-shade .module{border:9px solid transparent;border-image:url("native-chrome/shade-panel_normal.png") 9 10 8 10 fill;padding:4px}
+.skin-shade .control{border:7px solid transparent;border-image:url("native-chrome/shade-button_normal.png") 9 10 8 10 fill;padding:2px 5px}
+.skin-shade .field{border:6px solid transparent;border-image:url("native-chrome/shade-field_normal.png") 9 10 8 10 fill;padding:2px 4px}
+.skin-shade .tab{border:6px solid transparent;border-image:url("native-chrome/shade-tab_normal.png") 9 10 8 10 fill;padding:2px 7px}
+.skin-shade .tab.active{border-image-source:url("native-chrome/shade-tab_selected.png")}
+.skin-shade .bar::before{content:"";display:block;flex:0 0 25px;height:22px;background:url("native-chrome/shade-badge.png") center/contain no-repeat}
+.skin-shade .bar strong{flex:1;margin-left:5px}
 .mini .module{border-width:4px!important;padding:3px!important}.mini .control,.mini .field{border-width:3px!important;padding:2px!important}.mini .bar::before{display:none!important}.mini .bar strong{margin-left:0}
