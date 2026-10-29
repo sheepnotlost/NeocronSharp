@@ -131,4 +131,5 @@ CoordinateRecordingTests.Run(Test, Check);
 TelemetryLineTests.Run(Test, Check);
 QuestTests.Run(Test, Check);
 PluginTests.Run(Test, Check);
+NavigationTests.Run(Test, Check);
 Console.WriteLine($"{passed} tests passed.");

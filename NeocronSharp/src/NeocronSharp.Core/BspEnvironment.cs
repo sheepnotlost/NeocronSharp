@@ -111,7 +111,9 @@ public sealed class EnvironmentCatalog
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.WorldId).ToArray();
         string pak = Path.Combine(install, "worlds.pak"); if (File.Exists(pak)) _archive = new(pak);
     }
-    public EnvironmentWorld Load(int worldId)
+    public EnvironmentWorld Load(int worldId) => Load(worldId, out _);
+    /// <summary>Loads a world and returns the SHA-256 (hex) of its decoded BSP bytes, e.g. to key a cache derived from the geometry.</summary>
+    public EnvironmentWorld Load(int worldId, out string sourceSha256)
     {
         var area = Areas.FirstOrDefault(a => a.WorldId == worldId) ?? throw new InvalidDataException("No world asset is defined for this area.");
         string full = Path.GetFullPath(Path.Combine(_install, area.AssetPath.Replace('/', Path.DirectorySeparatorChar)));
@@ -121,6 +123,7 @@ public sealed class EnvironmentCatalog
         else if (File.Exists(full)) bytes = File.ReadAllBytes(full);
         else if (_archive != null) bytes = _archive.ReadWorld(area.AssetPath.StartsWith("worlds/") ? area.AssetPath[7..] : area.AssetPath);
         else throw new FileNotFoundException("World BSP asset is unavailable.");
+        sourceSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
         var world = BspEnvironment.Read(bytes, area.WorldId, area.Name, area.AssetPath); _summaries[worldId] = world.Summary; return world;
     }
     public void ScanAll(Action<int, int, string>? progress = null, CancellationToken token = default)

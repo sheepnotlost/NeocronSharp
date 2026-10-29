@@ -8,15 +8,131 @@
     ".NETCoreApp,Version=v9.0": {
       "NeocronSharp/1.0.0": {
         "dependencies": {
-          "NeocronSharp.Core": "1.0.0"
+          "NeocronSharp.Core": "1.0.0",
+          "NeocronSharp.Navigation": "1.0.0"
         },
         "runtime": {
           "NeocronSharp.dll": {}
         }
       },
+      "DotRecast.Core/2025.2.1": {
+        "runtime": {
+          "lib/net9.0/DotRecast.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Detour/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Core": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Detour.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Detour.Crowd/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Detour": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Detour.Crowd.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Detour.Dynamic/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Detour": "2025.2.1",
+          "DotRecast.Recast": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Detour.Dynamic.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Detour.Extras/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Detour": "2025.2.1",
+          "DotRecast.Recast": "2025.2.1",
+          "Newtonsoft.Json": "13.0.3"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Detour.Extras.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Detour.TileCache/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Detour": "2025.2.1",
+          "DotRecast.Recast": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Detour.TileCache.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Recast/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Core": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Recast.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DotRecast.Recast.Toolset/2025.2.1": {
+        "dependencies": {
+          "DotRecast.Core": "2025.2.1",
+          "DotRecast.Detour": "2025.2.1",
+          "DotRecast.Detour.Crowd": "2025.2.1",
+          "DotRecast.Detour.Dynamic": "2025.2.1",
+          "DotRecast.Detour.Extras": "2025.2.1",
+          "DotRecast.Detour.TileCache": "2025.2.1",
+          "DotRecast.Recast": "2025.2.1"
+        },
+        "runtime": {
+          "lib/net9.0/DotRecast.Recast.Toolset.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Newtonsoft.Json/13.0.3": {
+        "runtime": {
+          "lib/net6.0/Newtonsoft.Json.dll": {
+            "assemblyVersion": "13.0.0.0",
+            "fileVersion": "13.0.3.27908"
+          }
+        }
+      },
       "NeocronSharp.Core/1.0.0": {
         "runtime": {
           "NeocronSharp.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "NeocronSharp.Navigation/1.0.0": {
+        "dependencies": {
+          "DotRecast.Recast.Toolset": "2025.2.1",
+          "NeocronSharp.Core": "1.0.0"
+        },
+        "runtime": {
+          "NeocronSharp.Navigation.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -30,7 +146,75 @@
       "serviceable": false,
       "sha512": ""
     },
+    "DotRecast.Core/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dGJJ4bnCQIn/rzY+8DegShPh5jdZEFm6Tc4uVMiWoP3gsw1cLn0CuM+Zr5sQ4bNajuEWfrymAoNM9gkh/ZayYQ==",
+      "path": "dotrecast.core/2025.2.1",
+      "hashPath": "dotrecast.core.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Detour/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-KSm2lTGIp0NoilYyHiJ15az178WAPkyUB5wk9ujw6P8tJvqnoCAwzxHoTAhjxWSdJZovrMjfzD7Lt4hh1TlHOg==",
+      "path": "dotrecast.detour/2025.2.1",
+      "hashPath": "dotrecast.detour.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Detour.Crowd/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-StohrxKrN/nM/2neR/BrIqeRQig4DCgnZqkVlVvUGMFbwBqBQVGejI6KLyVm/Fs8oNCzRiP+fVSi4vFAlWNTqQ==",
+      "path": "dotrecast.detour.crowd/2025.2.1",
+      "hashPath": "dotrecast.detour.crowd.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Detour.Dynamic/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bPF2SYlcF96xK1ZPKCX8ehKGvRDhHuOA7xsSdE/mRve0p0GAPXsnDiw2QzWE6Oq6gfcFdLMXjNdAtCTvWw+0Bw==",
+      "path": "dotrecast.detour.dynamic/2025.2.1",
+      "hashPath": "dotrecast.detour.dynamic.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Detour.Extras/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-pYsfgcHauk7C5V+h1PelRmEDbRftFlkWavhLPlsPQppiGnuDOYe5cHbwrBHB+1760937CCDk66jL3Ubk7MCcLg==",
+      "path": "dotrecast.detour.extras/2025.2.1",
+      "hashPath": "dotrecast.detour.extras.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Detour.TileCache/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-PqCzO0/n1pBpIUrlFldkPL06I1mqdOuRHuWHyUQrMmP0B6DvquO9byxrHYmJq7DbiSTzjN20g3wvgbdSwLulgw==",
+      "path": "dotrecast.detour.tilecache/2025.2.1",
+      "hashPath": "dotrecast.detour.tilecache.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Recast/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-LxJYYhAkFbS9UCIHKBub0/o8Q8hm5cH/jQguA1gCAJx82sdnQ3Zk9qHyuuZUaIZuLWlvxYHoX44WUgtOq/pq9Q==",
+      "path": "dotrecast.recast/2025.2.1",
+      "hashPath": "dotrecast.recast.2025.2.1.nupkg.sha512"
+    },
+    "DotRecast.Recast.Toolset/2025.2.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FiX6U52Q10u3x815/Hj+/wboHH6Ej0sVs5RQtx2PwWJI40EnsDRQrtTlsAkDPOreQjSNN9hF+dyh7qj4J+gEEw==",
+      "path": "dotrecast.recast.toolset/2025.2.1",
+      "hashPath": "dotrecast.recast.toolset.2025.2.1.nupkg.sha512"
+    },
+    "Newtonsoft.Json/13.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ==",
+      "path": "newtonsoft.json/13.0.3",
+      "hashPath": "newtonsoft.json.13.0.3.nupkg.sha512"
+    },
     "NeocronSharp.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "NeocronSharp.Navigation/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

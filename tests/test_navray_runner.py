@@ -586,6 +586,35 @@ class WalkTests(unittest.TestCase):
         runner.trail = []
         self.assertAlmostEqual(runner.travel_bearing(facing_back), runner.map_bearing(facing_back))
 
+    def test_the_navmesh_picks_the_exit_that_leads_to_the_destination(self):
+        import navmesh, telemetry
+        runner, _ = make_runner(lambda i: DARK)
+        runner.route_destination = "NEOCRON CITY SECTORS > PLAZA SEC-3"
+        asked = {}
+
+        def exit_(name, to, known=True, length=500.0):
+            return navmesh.Exit(name, 0, 0, 0, 1, None, to, 1 if known else 0, known, 0.0, 300.0, length, True)
+
+        class Planner:
+            def exits(self):
+                return [exit_("WorldChange4", "PLAZA SEC-2", length=200.0), exit_("WorldChange3", "PLAZA SEC-3"),
+                        exit_("WorldChange9", "PLAZA SEC-3", known=False)]
+
+            def plan_to_exit(self, name=None, bearing=None):
+                asked.update(name=name, bearing=bearing)
+                return navmesh.Plan(1, "PLAZA SEC-1", (0, 0), [(0.0, 0.0), (0.0, 400.0)], [0.0, 0.0], True, 400.0,
+                                    exit_(name or "WorldChange4", "PLAZA SEC-3"))
+        runner.navplanner = Planner()
+        sample = telemetry.Sample(0.0, 1, 270.0, 0.0, 0.0, 0.0, 90.0)
+        exit_found, path = runner.navmesh_route(sample)
+        self.assertEqual(asked["name"], "WorldChange3")                 # leads to the destination, though longer
+        self.assertEqual(path[-1], (0.0, 400.0))
+        self.assertGreater(exit_found.beyond[1], 400.0)                 # the push goes on past the exit
+        runner.route_destination = "NEOCRON CITY SECTORS > PEPPER PARK SEC-1"     # no exit leads straight there
+        runner.navmesh_route(sample)
+        self.assertIsNone(asked["name"])
+        self.assertIsNotNone(asked["bearing"])
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None

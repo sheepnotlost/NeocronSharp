@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 import navray
+import navmesh
 import navray_debug
 import pathtrack
 import pathvision
@@ -1121,12 +1122,16 @@ class NavRayRunner(VisualRunner):
         or None when there is no live position or map to walk by (then the walk carries on by sight)."""
         import mapplan
         sample = self.feed.latest() if self.feed else None
-        planner = self.planner_for(sample)
-        if planner is None:
+        if sample is None:
             return None
-        got = planner.plan_to_exit((sample.x, sample.z), self.travel_bearing(sample))
+        got = self.navmesh_route(sample)                   # the real level geometry first
         if got is None:
-            return None
+            planner = self.planner_for(sample)             # else the flat sector map
+            if planner is None:
+                return None
+            got = planner.plan_to_exit((sample.x, sample.z), self.travel_bearing(sample))
+            if got is None:
+                return None
         exit_, path = got
         lead = np.subtract(exit_.beyond, exit_.world)
         lead = lead/max(1e-6, float(np.hypot(*lead)))
@@ -1186,6 +1191,35 @@ class NavRayRunner(VisualRunner):
             if "w" in self.backend.held_keys:
                 self.backend.key("w", False)
 
+    navplanner = None            # navmesh.NavPlanner (NeocronSharp --navplan) while a walk runs
+
+    def navmesh_route(self, sample):
+        """(exit, path) on the navmesh baked from the level itself: the exit that leads straight to the destination
+        sector when there is one, else the zone exit the way the character was travelling. None without it."""
+        from types import SimpleNamespace
+        if self.navplanner is None:
+            return None
+        try:
+            wanted = navray._norm((getattr(self, "route_destination", "") or "").split(">")[-1])
+            exits = self.navplanner.exits() or []
+            direct = [e for e in exits if e.destination_known and e.complete is not False
+                      and navray._norm(e.next_level_name or "") == wanted]
+            if direct:
+                best = min(direct, key=lambda e: e.path_length if e.path_length is not None else e.distance)
+                plan = self.navplanner.plan_to_exit(name=best.name)
+            else:
+                heading = (180.0 - self.travel_bearing(sample)) % 360.0    # mapplan bearing -> NeocronSharp heading
+                plan = self.navplanner.plan_to_exit(bearing=heading)
+        except Exception:                                  # the navmesh is a help, never a reason to stop
+            return None
+        if plan is None or plan.exit is None or len(plan.path) < 2 or not plan.complete:
+            return None
+        end, before = np.array(plan.path[-1], float), np.array(plan.path[-2], float)
+        lead = (end - before)/max(1e-6, float(np.hypot(*(end - before))))
+        name = plan.exit.next_level_name or plan.exit.name
+        exit_ = SimpleNamespace(label=f"{name} (navmesh)", world=tuple(end), beyond=tuple(end + 60.0*lead))
+        return exit_, list(plan.path)
+
     def sector_name(self):
         """The game's name of the sector the live position is in (e.g. PEPPER PARK SEC-1), or ""."""
         sample = self.feed.latest() if self.feed else None
@@ -1240,6 +1274,11 @@ class NavRayRunner(VisualRunner):
         if self.feed is None and getattr(self, "use_telemetry", True):
             self.feed = telemetry.Feed()
         self.tracker = pathtrack.PathTracker() if self.feed is not None else None
+        if self.navplanner is None and self.feed is not None:
+            try:
+                self.navplanner = navmesh.NavPlanner()
+            except Exception:
+                self.navplanner = None
         self.walk_sector, self.trail = None, []
         self.px_per_count = self.calibrate_turn()
         if self.px_per_count:
@@ -1480,6 +1519,9 @@ class NavRayRunner(VisualRunner):
             if self.feed is not None:
                 self.feed.close()
                 self.feed = None
+            if self.navplanner is not None:
+                self.navplanner.close()
+                self.navplanner = None
 
     # ---- sequence ----
     def execute(self):
@@ -1606,4 +1648,7 @@ class NavRayRunner(VisualRunner):
             if self.feed is not None:                     # also when the walk never reached its own finally
                 self.feed.close()
                 self.feed = None
+            if self.navplanner is not None:
+                self.navplanner.close()
+                self.navplanner = None
             self.save_blackbox()

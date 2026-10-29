@@ -13,12 +13,12 @@ internal static class TelemetryStream
 {
     public const int DefaultIntervalMilliseconds = 100;
     private const int ReconnectMilliseconds = 1000;
-    private const int StdInput = -10, StdOutput = -11, AttachParent = -1;
+    internal const int StdInput = -10, StdOutput = -11, AttachParent = -1;
     [DllImport("kernel32.dll")] private static extern nint GetStdHandle(int which);
-    [DllImport("kernel32.dll")] private static extern nint GetConsoleWindow();
-    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool AttachConsole(int processId);
+    [DllImport("kernel32.dll")] internal static extern nint GetConsoleWindow();
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool AttachConsole(int processId);
 
-    private static bool HasHandle(int which) { nint handle = GetStdHandle(which); return handle != 0 && handle != -1; }
+    internal static bool HasHandle(int which) { nint handle = GetStdHandle(which); return handle != 0 && handle != -1; }
 
     public static int Run(string[] args)
     {

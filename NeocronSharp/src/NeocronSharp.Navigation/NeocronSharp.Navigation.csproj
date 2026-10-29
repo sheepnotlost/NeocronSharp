@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <!-- DotRecast (Recast/Detour in C#) is zlib-licensed. -->
+  <ItemGroup><PackageReference Include="DotRecast.Recast.Toolset" Version="2025.2.1" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../NeocronSharp.Core/NeocronSharp.Core.csproj" /></ItemGroup>
+</Project>

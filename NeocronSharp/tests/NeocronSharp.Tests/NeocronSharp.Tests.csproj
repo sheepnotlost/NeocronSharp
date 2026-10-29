@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../src/NeocronSharp.Core/NeocronSharp.Core.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/NeocronSharp.Core/NeocronSharp.Core.csproj" /><ProjectReference Include="../../src/NeocronSharp.Navigation/NeocronSharp.Navigation.csproj" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../../examples/HelloPlugin/HelloPlugin.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../PluginTelemetryFixture/PluginTelemetryFixture.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
   <Target Name="CopyPluginFixture" AfterTargets="Build">

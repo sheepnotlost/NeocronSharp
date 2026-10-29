@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PluginTelemetryFixture", "tests\PluginTelemetryFixture\PluginTelemetryFixture.csproj", "{0EEE2825-1E8B-45F4-9A38-FA014F302CF8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NeocronSharp.Navigation", "src\NeocronSharp.Navigation\NeocronSharp.Navigation.csproj", "{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -103,6 +105,18 @@ Global
 		{0EEE2825-1E8B-45F4-9A38-FA014F302CF8}.Release|x64.Build.0 = Release|Any CPU
 		{0EEE2825-1E8B-45F4-9A38-FA014F302CF8}.Release|x86.ActiveCfg = Release|Any CPU
 		{0EEE2825-1E8B-45F4-9A38-FA014F302CF8}.Release|x86.Build.0 = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|x64.Build.0 = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Debug|x86.Build.0 = Debug|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|Any CPU.Build.0 = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|x64.ActiveCfg = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|x64.Build.0 = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|x86.ActiveCfg = Release|Any CPU
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -114,5 +128,6 @@ Global
 		{ED320828-D6CE-4811-B0A9-FC56FCB8D192} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 		{6773B243-EEB0-411F-AD86-3A17E7191336} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 		{0EEE2825-1E8B-45F4-9A38-FA014F302CF8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{850C2AB8-E953-4CDC-91FA-51A51A8C8C11} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
