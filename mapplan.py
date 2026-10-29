@@ -389,6 +389,15 @@ def find_labels(gray: np.ndarray):
 _SQRT2 = math.sqrt(2.0)
 
 
+def supported_style(gray: np.ndarray) -> bool:
+    """The Plaza / Viarosso / Pepper Park map style: a light background (247) and a handful of flat grey levels. The
+    Industrial, Outzone, Canyon, Military Base and Secret Passage maps (and Dome of York) are drawn on black with a
+    hundred and more levels and outline-only floors; read as floor plans they give wrong floor and no exits (checked
+    by eye on all 24 city sector maps, 29 Oct)."""
+    counts = np.bincount(gray.ravel(), minlength=256)
+    return int(counts.argmax()) >= 200 and int((counts > gray.size*.002).sum()) <= 8
+
+
 class SectorPlanner:
     """A* planning on one sector map, in world coordinates (X, Z).
 
@@ -432,7 +441,10 @@ class SectorPlanner:
         sector = catalog.find(world_id)
         if sector is None:
             raise KeyError(f"No client map for world {world_id}.")
-        return cls(catalog.image(sector), sector.projection(rotation_deg), **kw)
+        gray = catalog.image(sector)
+        if not supported_style(gray):
+            raise ValueError(f"The map of {catalog.name(world_id) or world_id} is drawn in a style the planner cannot read.")
+        return cls(gray, sector.projection(rotation_deg), **kw)
 
     # -- helpers
     def _nearest_walkable(self, u: float, v: float, radius: float = 8.0):
@@ -458,6 +470,12 @@ class SectorPlanner:
         p = self._nearest_walkable(cu, cv, 12)
         if p is None:
             return
+        # Some arrows point across the corridor rather than along it (Viarosso 1 '1', Plaza 4 '1' and '2'): past
+        # such an exit, push on the way the corridor leads into the box, not the way the arrow points.
+        into = (cu - p[0], cv - p[1])
+        norm = (into[0]**2 + into[1]**2) ** .5
+        if norm > 1e-6 and (into[0]*d[0] + into[1]*d[1])/norm < math.cos(math.radians(45)):
+            d = (into[0]/norm, into[1]/norm)
         beyond = (cu + d[0] * 12, cv + d[1] * 12)
         wb = self.projection.to_world(*beyond)
         wp = self.projection.to_world(*p)
