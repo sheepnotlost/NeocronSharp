@@ -615,6 +615,61 @@ class WalkTests(unittest.TestCase):
         self.assertIsNone(asked["name"])
         self.assertIsNotNone(asked["bearing"])
 
+    def test_on_a_navmesh_path_it_aims_at_the_next_corner_and_a_long_halt_is_a_wall(self):
+        # Live (29 Oct 01:44): aiming 220 units on along an L-shaped path cut the corner into the wall, and the halt
+        # there was waited out for 12 s as if the zone were loading.
+        import telemetry
+        from types import SimpleNamespace
+        runner, _ = make_runner(lambda i: moving_dark(i))
+        runner.px_per_count = -4.0
+        aims = []
+        original = runner.map_turn
+        runner.map_turn = lambda degrees, width: aims.append(degrees) or 0
+
+        class Feed:                                                   # facing +Z (bearing 0), never moving: a wall
+            def latest(self, max_age=1.0, now=None):
+                return telemetry.Sample(runner.clock(), 101, 270.0, 0.0, 0.0, 0.0, 180.0)
+        runner.feed = Feed()
+        corner = SimpleNamespace(label="X (navmesh)", world=(300.0, 100.0), beyond=(360.0, 100.0), corners=True)
+        runner.navmesh_route = lambda sample: (corner, [(0.0, 0.0), (0.0, 100.0), (300.0, 100.0)])
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        started = runner.clock()
+        result = runner.map_walk(runner.detector.text_reader(), state, "test")
+        self.assertEqual(result, "stuck against something")
+        self.assertLess(runner.clock() - started, navray_runner.MAP_STUCK_SECONDS + navray_runner.MAP_LOAD_SECONDS + 2)
+        self.assertFalse([a for a in aims if abs(a) > 20])            # aimed at the corner straight ahead, not past it
+
+    def test_a_box_label_is_never_taken_for_a_door(self):
+        # Live (29 Oct 01:44): the walk right-clicked a ROTTEN BOX it was stuck against and looted it.
+        frame = rgb("navray_blocked_door_50s.png")
+        reads = {"words": [("ROTTEN", 0, 0, 1, 1), ("BOX", 0, 0, 1, 1)]}
+        reader = type("R", (), {"read_words": lambda self, image, up=3: reads["words"]})()
+        self.assertFalse(navray_runner.door_target(frame, 70, reader))
+        reads["words"] = [("TECH", 0, 0, 1, 1)]                            # a half-read door label: the picture decides
+        self.assertTrue(navray_runner.door_target(frame, 70, reader))
+        reads["words"] = [("DOOR", 0, 0, 1, 1)]
+        self.assertTrue(navray_runner.door_target(frame, 70, reader))
+
+    def test_stuck_is_seen_from_the_live_position_and_it_steps_round(self):
+        import telemetry
+        runner, events = make_runner(lambda i: AHEAD if i % 2 else np.roll(AHEAD, 9, axis=1))   # the picture keeps changing
+        runner.px_per_count = -4.0
+
+        class Feed:                                                    # but the character does not move
+            def latest(self, max_age=1.0, now=None):
+                return telemetry.Sample(runner.clock(), 1, 270.0, 100.0, 0.0, 200.0, 90.0)
+        runner.feed = Feed()
+        view = pathvision_find(AHEAD)
+        state = {"health": None, "health_checked": 0.0, "last_path": 0.0}
+        _, _, reason = runner.walk_leg(view, view, runner.detector.text_reader(), state, tether=True)
+        self.assertEqual(reason, "stuck against something")
+        self.assertLess(runner.clock(), 4.0)
+        self.assertTrue(runner.sidestep(-1, 2000))
+        rel = [e[1] for e in runner.backend.events if e[0] == "rel"]
+        self.assertEqual(rel[-2], -rel[-1])                                # turned aside, then back
+        self.assertNotIn(("key", "s", True), runner.backend.events)       # never backs away
+        self.assertNotIn("w", runner.backend.held_keys)
+
     def test_without_a_live_position_the_map_walk_steps_aside(self):
         runner, _ = make_runner(lambda i: DARK)
         runner.feed = None
@@ -790,6 +845,7 @@ class WalkTests(unittest.TestCase):
                 state["last_side"] = 1                     # the dashes bent right before they stopped
             runner.sleep(2.0)
             return view, 0, "stuck against something"
+        runner.sidestep = lambda side, width: False          # this test is about the pushes
         runner.walk_leg = leg
         runner.walk()
         quarter = round(navray_runner.ZONE_SIDE_TURN*2000/4.0)

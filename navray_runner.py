@@ -78,9 +78,15 @@ MAP_PUSH = 600.0         # world units on past an exit arrow (the zone changes t
 MAP_STUCK_UNITS = 25.0   # moved less than this (world units) ...
 MAP_STUCK_SECONDS = 1.6  # ...in this long with W held: a wall
 MAP_SECONDS = 120.0      # longest map walk
+MAP_CORNER_REACH = 45.0  # a navmesh corner this close is reached: on to the next
+MAP_LOAD_SECONDS = 3.0   # a halt at the exit longer than the stuck time plus this is a wall, not the zone loading
+                         # (live: loading froze the position for about 1.5 s)
 MAP_EXIT_NEAR = 450.0    # world units from the exit within which a halt means the next zone is loading
 TRAIL_SECONDS = 6.0       # the way the walk was going is judged over this much of the live position's past
 TRAIL_MIN_UNITS = 150.0   # ...when it moved at least this far; else by the heading
+STUCK_POSITION_UNITS = 20.0   # with W held, moving less than this (world units) ...
+STUCK_POSITION_SECONDS = 1.5  # ...for this long is stuck, whatever the screen shows
+SIDESTEP_DEGREES = 50.0       # stuck: turn this far towards the side the dashes were on, step, then go on
 TRACK_CONFIDENCE = .6    # the self-tracked route (orbs placed from the dashes) is followed through a gap when this sure
 TRACK_GAP_SECONDS = 2.5  # ...for at most this long without a dash in view
 TRACK_DAMP = .6          # share of the tracked route's heading error corrected per look
@@ -118,6 +124,24 @@ def door_target(frame, color="green", reader=None):
     hue, saturation, value = cv2.split(hsv)
     match_hue = (hue >= low) & (hue <= high) if low <= high else ((hue >= low) | (hue <= high))
     mask = (match_hue & (saturation >= 45) & (value >= 60)).astype(np.uint8)*255
+    if reader is not None:
+        # Read the label first. Live (29 Oct 01:44): the TECH DOOR picture matched a ROTTEN BOX label, the walk
+        # right-clicked it and looted the box. A readable label that is not a door is never clicked.
+        read_any = False
+        for image in (cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY), mask):
+            try:
+                words = reader.read_words(image, up=3)
+            except Exception:
+                continue
+            letters = [re.sub(r"[^A-Z]", "", str(word[0]).upper()) for word in words]
+            if "DOOR" in letters:
+                return True
+            if "TECH" in letters:                       # half a TECH DOOR label: let the picture decide
+                read_any = False
+                break
+            read_any = read_any or any(len(w) >= 3 and w not in ("HLT", "STA", "PSI") for w in letters)
+        if read_any:
+            return False
     template = cv2.imread(str(Path(__file__).parent / "assets" / "navray_tech_door.png"), cv2.IMREAD_GRAYSCALE)
     if template is not None:
         for adjustment in (.8, .9, 1.0, 1.1, 1.2):
@@ -127,14 +151,6 @@ def door_target(frame, color="green", reader=None):
                 score = cv2.minMaxLoc(cv2.matchTemplate(mask, sample, cv2.TM_CCOEFF_NORMED))[1]
                 if score >= .56:
                     return True
-    if reader is not None:
-        for image in (cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY), mask):
-            try:
-                words = reader.read_words(image, up=3)
-            except Exception:
-                continue
-            if any(re.sub(r"[^A-Z]", "", str(word[0]).upper()) == "DOOR" for word in words):
-                return True
     return False
 
 
@@ -945,6 +961,16 @@ class NavRayRunner(VisualRunner):
                     state["still_time"] = 0.0
                     reason = "stuck against something"
                     break
+                if pose is not None:
+                    # Live (29 Oct 01:44): 27 s running into a box while the scenery behind still changed on screen.
+                    mark = state.get("pos_mark")
+                    if (not forward or mark is None
+                            or np.hypot(pose.x - mark[1], pose.z - mark[2]) >= STUCK_POSITION_UNITS):
+                        state["pos_mark"] = (now, pose.x, pose.z)
+                    elif now - mark[0] >= STUCK_POSITION_SECONDS:
+                        state.pop("pos_mark", None)
+                        reason = "stuck against something"
+                        break
                 if not forward:
                     # Turning in place is intentional and cannot establish lack of walking progress.
                     scene_history, next_scene = [], now
@@ -1153,14 +1179,19 @@ class NavRayRunner(VisualRunner):
                         return "entered a new zone"
                     if moved_from is not None and np.hypot(moved_from[0] - exit_.world[0],
                                                            moved_from[1] - exit_.world[1]) < MAP_EXIT_NEAR:
-                        if self.clock() - moved_at < MAP_STUCK_SECONDS + ZONE_PUSH_SECONDS:
+                        if self.clock() - moved_at < MAP_STUCK_SECONDS + MAP_LOAD_SECONDS:
                             self.sleep(.05)                  # the next zone is loading: no position for a moment
                             continue
                     return "lost the live position"
                 if sample.sector != sector:
                     return "entered a new zone"
                 here = (sample.x, sample.z)
-                _, target = mapplan.next_waypoint(here, path, lookahead=MAP_LOOKAHEAD)
+                if getattr(exit_, "corners", False):
+                    # Detour's corners are exact: aim at the next one. Live (29 Oct 01:44): aiming 220 units on along
+                    # the path cut the corner of an L-turn and walked into its wall.
+                    _, target = mapplan.next_waypoint(here, path, reach=MAP_CORNER_REACH)
+                else:
+                    _, target = mapplan.next_waypoint(here, path, lookahead=MAP_LOOKAHEAD)
                 want = mapplan.bearing_of(target[0] - here[0], target[1] - here[1])
                 off = (want - self.map_bearing(sample) + 180.0) % 360.0 - 180.0
                 self.look(frame, None, f"map to exit {exit_.label}", off/MAP_FOV)
@@ -1183,7 +1214,7 @@ class NavRayRunner(VisualRunner):
                     # Live (28 Oct 23:55): at the exit the position stops while the next zone loads; that is not a
                     # wall. Keep walking on there until the sector changes.
                     near_exit = np.hypot(here[0] - exit_.world[0], here[1] - exit_.world[1]) < MAP_EXIT_NEAR
-                    if not near_exit or self.clock() - moved_at > MAP_STUCK_SECONDS + ZONE_PUSH_SECONDS:
+                    if not near_exit or self.clock() - moved_at > MAP_STUCK_SECONDS + MAP_LOAD_SECONDS:
                         return "stuck against something"
                 self.sleep(.05)
             return "map walk time limit"
@@ -1217,7 +1248,7 @@ class NavRayRunner(VisualRunner):
         end, before = np.array(plan.path[-1], float), np.array(plan.path[-2], float)
         lead = (end - before)/max(1e-6, float(np.hypot(*(end - before))))
         name = plan.exit.next_level_name or plan.exit.name
-        exit_ = SimpleNamespace(label=f"{name} (navmesh)", world=tuple(end), beyond=tuple(end + 60.0*lead))
+        exit_ = SimpleNamespace(label=f"{name} (navmesh)", world=tuple(end), beyond=tuple(end + 60.0*lead), corners=True)
         return exit_, list(plan.path)
 
     def sector_name(self):
@@ -1250,6 +1281,20 @@ class NavRayRunner(VisualRunner):
         category, _, name = (getattr(self, "route_destination", "") or "").partition(">")
         sector = "SECTOR" in category.upper() or "SEC-" in name.upper()
         return sector and bool(self.current_area) and navray._norm(name) != self.current_area
+
+    def sidestep(self, side, width):
+        """Round an obstacle the navmesh does not know (a box, a crate): turn towards the side the dashes were on, walk
+        a step, and turn back (never backing away: an earlier rule). False without a calibrated turn."""
+        if not self.px_per_count or not side:
+            return False
+        self.emit("status", f"Nav-Ray: something in the way; stepping round it to the {'right' if side > 0 else 'left'}.")
+        counts = round(side*SIDESTEP_DEGREES*width/(MAP_FOV*abs(self.px_per_count))*np.sign(-self.px_per_count))
+        self.backend.move_relative(counts, 0)
+        self.wait(.15)
+        self.step_forward(.9)
+        self.backend.move_relative(-counts, 0)
+        self.wait(.15)
+        return True
 
     def step_forward(self, seconds=STEP_SECONDS):
         """Walk a short way straight on, without steering."""
@@ -1491,6 +1536,9 @@ class NavRayRunner(VisualRunner):
                     stuck += 1
                     if stuck > MAX_STUCK:
                         raise Interrupted("Not moving (the view has not changed) after several tries round it. Something blocks the way. Stopped.")
+                    if stuck % 2 == 1 and self.sidestep(last_side, frame.shape[1]):   # every other time, so the other ways round still get their turn
+                        track, lost, scanning, self.last_turn = None, 0, False, 0
+                        continue
                     if self.near_zone(self.clock()) and not state.get("stuck_mapped") and self.destination_is_elsewhere():
                         # Live (28 Oct 23:46): a wall stopped the walk at the zone line and only the blind side push
                         # was tried. Walk the sector map first.
