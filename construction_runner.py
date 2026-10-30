@@ -25,6 +25,7 @@ class ConstructionRunner(VisualRunner):
         self.job_label=None
         self.job_built=0
         self.job_target=0
+        self.job_row=0  # This job's row in the saved queue: finished rows leave it, skipped ones stay.
         self.loaded_index=1
         emit=self.emit
         def labelled(kind,payload=None):
@@ -588,18 +589,23 @@ class ConstructionRunner(VisualRunner):
                 else:self.slot_unread+=1
                 event.update(slot_counts=self.slot_counts.copy(),slot_unread=self.slot_unread,slot_na=self.slot_na)
             self.emit("construction_cycle", event)
+            if self.job_label and self.job_target:
+                self.emit("queue_update",{"index":self.job_row,"count":target-self.job_built or None})
             if self.stop_at_slots is not None and slots is not None and slots>=self.stop_at_slots:
                 return self.job_built,slots
         return self.job_built,"finished"
 
     def run_queue(self):
-        """Each queued (recipe, count) runs as its own job; one short of blueprints or materials is reported and skipped."""
+        """Each queued (recipe, count) runs as its own job; one short of blueprints or materials is reported and skipped.
+
+        queue_update events keep the saved queue to what is left, so Start after a stop picks up where this one ended.
+        """
         skipped=[]
         for number,row in enumerate(self.queue,1):
             self.start_job(row["recipe"])
             self.job_number,self.job_target,self.job_built=number,row["count"],0
             self.job_label=f"Item {number} of {len(self.queue)}: {self.name}"
-            self.emit("queue_job",{"index":number-1,"recipe":self.recipe})
+            self.emit("queue_job",{"index":self.job_row,"recipe":self.recipe})
             self.emit("status","Scrolling Inventory to the top.")
             try:
                 try:self.scroll_inventory_to_top()
@@ -610,6 +616,7 @@ class ConstructionRunner(VisualRunner):
                 skipped.append(f"{self.name} (out of materials, {self.job_progress().rsplit(', ',1)[1]})")
                 self.emit("status",f"{self.job_progress()}: skipped, out of materials. {exc}")
                 self.return_blueprint()
+                self.job_row+=1
                 continue
             except RuntimeError as exc:  # Stops from the detector too (NotFound, Ambiguous) say where the queue was.
                 raise Interrupted(f"{self.job_progress()}: {exc}") from None
@@ -617,12 +624,17 @@ class ConstructionRunner(VisualRunner):
                 skipped.append(f"{self.name} (out of blueprints, {self.job_progress().rsplit(', ',1)[1]})")
                 hint=" If its icon is unusual, choose Thorough under Inventory search." if self.search_mode=="fast" else ""
                 self.emit("status",f"{self.job_progress()}: skipped, out of blueprints.{hint}")
-            elif type(reason) is int:
+                self.job_row+=1
+                continue
+            if type(reason) is int:
                 self.emit("status",f"{self.job_progress()}: stopped at {reason} slots; going on.")
+            # A counted row that ran its full count has already left the queue.
+            if not row["count"] or built<row["count"]:
+                self.emit("queue_update",{"index":self.job_row,"count":None})
         self.job_label=None
         complete=len(self.queue)-len(skipped)
         self.emit("done",f"Queue finished: {complete} of {len(self.queue)} jobs complete, {self.completed} builds."
-                  +(" Skipped: "+"; ".join(skipped)+"." if skipped else "")+" Final result remains in the Processor.")
+                  +(" Skipped, still queued: "+"; ".join(skipped)+"." if skipped else "")+" Final result remains in the Processor.")
 
     def execute(self):
         config=self.profile["construction"]

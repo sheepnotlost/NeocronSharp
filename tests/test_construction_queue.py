@@ -68,6 +68,14 @@ class ConstructionQueueTests(unittest.TestCase):
     def kinds(self, kind):
         return [v for k, v in self.events if k == kind]
 
+    def left(self):
+        """The saved queue after the run's queue_update events, as the app applies them."""
+        rows = [(r["recipe"], r["count"]) for r in self.profile["construction"]["queue"]]
+        for update in self.kinds("queue_update"):
+            if update["count"] is None:rows.pop(update["index"])
+            else:rows[update["index"]] = (rows[update["index"]][0], update["count"])
+        return rows
+
     def test_jobs_run_in_order_each_from_the_top_of_inventory(self):
         self.setup_queue(["weaponpart_7", "holy_heal"], [("weaponpart_7", 2), ("holy_heal", 3), ("weaponpart_7", 1)])
         self.runner.run()
@@ -80,7 +88,8 @@ class ConstructionQueueTests(unittest.TestCase):
         # Holy Heal is a page down; the next Weaponpart 7 job scrolled back up before searching.
         self.assertEqual(self.backend.page, 0)
         self.assertIn(1, self.backend.scrolls)
-        self.assertEqual([e["index"] for e in self.kinds("queue_job")], [0, 1, 2])
+        self.assertEqual([e["index"] for e in self.kinds("queue_job")], [0, 0, 0])
+        self.assertEqual(self.left(), [])
         self.assertIn("Item 2 of 3: Crahn Holy Heal, 2 of 3 built", " | ".join(self.kinds("status")))
         self.assertIn("Queue finished: 3 of 3 jobs complete, 6 builds.", self.kinds("done")[-1])
 
@@ -92,7 +101,8 @@ class ConstructionQueueTests(unittest.TestCase):
         self.assertIn("Item 1 of 2: Tangent Weaponpart 9, 0 of 3 built: skipped, out of blueprints.", self.kinds("status"))
         done = self.kinds("done")[-1]
         self.assertIn("1 of 2 jobs complete", done)
-        self.assertIn("Skipped: Tangent Weaponpart 9 (out of blueprints, 0 of 3 built).", done)
+        self.assertIn("Skipped, still queued: Tangent Weaponpart 9 (out of blueprints, 0 of 3 built).", done)
+        self.assertEqual(self.left(), [("weaponpart_9", 3)])
 
     def test_a_job_out_of_materials_returns_its_blueprint_and_is_skipped(self):
         self.setup_queue(["weaponpart_7", "holy_heal"], [("holy_heal", 2), ("weaponpart_7", 2)])
@@ -103,7 +113,8 @@ class ConstructionQueueTests(unittest.TestCase):
         self.assertEqual([r for r, _ in self.backend.returned], ["holy_heal"])
         self.assertEqual(self.runner.completed, 2)
         self.assertFalse(self.backend.loaded)
-        self.assertIn("Skipped: Crahn Holy Heal (out of materials, 0 of 2 built).", self.kinds("done")[-1])
+        self.assertIn("Skipped, still queued: Crahn Holy Heal (out of materials, 0 of 2 built).", self.kinds("done")[-1])
+        self.assertEqual(self.left(), [("holy_heal", 2)])
 
     def test_a_count_of_zero_builds_until_that_blueprint_runs_out(self):
         self.setup_queue(["weaponpart_7"], [("weaponpart_7", 0), ("weaponpart_9", 1)])
@@ -120,6 +131,7 @@ class ConstructionQueueTests(unittest.TestCase):
         self.assertIn("1 of 2 jobs complete, 3 builds", done)
         self.assertNotIn("Weaponpart 7 (", done)
         self.assertIn("Tangent Weaponpart 9 (out of blueprints, 0 of 1 built)", done)
+        self.assertEqual(self.left(), [("weaponpart_9", 1)])
 
     def test_any_other_stop_ends_the_queue_and_says_where(self):
         self.setup_queue(["weaponpart_7"], [("weaponpart_7", 2), ("weaponpart_7", 2)])
@@ -128,6 +140,23 @@ class ConstructionQueueTests(unittest.TestCase):
         error = self.kinds("error")[0]
         self.assertIn("Item 2 of 2: Tangent Weaponpart 7, 0 of 2 built", error)
         self.assertIn("Game lost focus", error)
+        self.assertEqual(self.left(), [("weaponpart_7", 2)])
+
+    def test_a_stop_partway_through_a_row_keeps_only_what_is_left(self):
+        self.setup_queue(["weaponpart_7"], [("weaponpart_7", 3), ("weaponpart_9", 1)])
+        self.clock.on_sleep = lambda: setattr(self.backend, "focus", False) if len(self.backend.starts) >= 2 else None
+        self.runner.run()
+        self.assertEqual(self.runner.completed, 1)
+        self.assertEqual(self.left(), [("weaponpart_7", 2), ("weaponpart_9", 1)])
+
+    def test_a_row_stopped_by_its_slot_rule_is_finished(self):
+        self.setup_queue(["holy_heal"], [("holy_heal", 3), ("holy_heal", 1)], stop_at_slots=4)
+        self.backend.settle_result = True
+        self.backend.result_slots = [1, 5, 0]
+        self.runner.run()
+        self.assertFalse(self.kinds("error"), self.events)
+        self.assertEqual(self.runner.completed, 3)
+        self.assertEqual(self.left(), [])
 
     def test_a_detector_stop_also_says_which_item(self):
         self.setup_queue(["weaponpart_7"], [("weaponpart_7", 1), ("weaponpart_7", 1)])
@@ -276,6 +305,14 @@ class QueueUiTests(unittest.TestCase):
                 app.poll()
                 self.assertEqual(app.status.get(), "Item 3 of 10: Crahn Holy Heal, 2 of 5 built.")
                 self.assertEqual(app.queue_tree.selection(), ("2",))
+                app.profile["construction"]["queue"][0]["count"] = 5
+                app.events.put(("queue_update", {"index": 0, "count": 4}))
+                app.events.put(("queue_update", {"index": 1, "count": None}))
+                app.poll()
+                saved = load_profile(path)["construction"]["queue"]
+                self.assertEqual(len(saved), 2)
+                self.assertEqual(saved[0]["count"], 4)
+                self.assertEqual(len(app.queue_tree.get_children()), 2)
                 app.clear_queue()
                 self.assertEqual(load_profile(path)["construction"]["queue"], [])
                 self.assertIn("Queue empty", app.queue_note.get())

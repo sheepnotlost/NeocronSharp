@@ -1097,6 +1097,15 @@ class App:
             elif kind == "queue_job":
                 if self.queue_tree.exists(str(payload["index"])):
                     self.queue_tree.selection_set(str(payload["index"]));self.queue_tree.see(str(payload["index"]))
+            elif kind == "queue_update":
+                # Built items leave their row, so Start after a stop picks up where this run ended.
+                rows=self.construction_queue()
+                if payload["index"]<len(rows):
+                    if payload["count"] is None:rows.pop(payload["index"])
+                    else:rows[payload["index"]]["count"]=payload["count"]
+                    self.show_queue(payload["index"])
+                    try:save_profile(self.profile_path,self.profile)
+                    except (ValueError,OSError) as exc:self.report("Could not save the queue: "+str(exc))
             elif kind == "construction_cycle":
                 self.construction_available.set(str(payload["available"]))
                 self.profile["construction"]["available"]=payload["available"]
