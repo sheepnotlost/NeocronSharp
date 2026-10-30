@@ -546,7 +546,8 @@ class Detector:
         a,b = runs[0]
         return {"position":(a+b)/(2*inventory.scale),
                 "thumb":inventory.point(419,66+(a+b)/(2*inventory.scale)),
-                "bottom":inventory.point(419,333)[1],
+                "top":inventory.point(419,66)[1],"bottom":inventory.point(419,333)[1],
+                "thumb_top":inventory.point(419,66+a/inventory.scale)[1],
                 "thumb_bottom":inventory.point(419,66+b/inventory.scale)[1]}
 
     def tooltip_recipe(self, frame, point, scale):

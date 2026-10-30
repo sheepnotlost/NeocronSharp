@@ -9,6 +9,10 @@ from vision_runner import VisualRunner
 from inventory_tracking import snapshot,checked_overlap
 
 
+class OutOfMaterials(Interrupted):
+    """Start was refused for missing materials, or GoGuardian could not supply them."""
+
+
 class ConstructionRunner(VisualRunner):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -16,6 +20,19 @@ class ConstructionRunner(VisualRunner):
         self.detector.recipes=self.recipes
         self.recipe = self.profile["construction"]["recipe"]
         self.name = self.recipes[self.recipe]["name"]
+        # Queued jobs (recipe, count) run one after another through the same single-job flow.
+        self.queue=list(self.profile["construction"].get("queue") or [])
+        self.job_label=None
+        self.job_built=0
+        self.job_target=0
+        self.loaded_index=1
+        emit=self.emit
+        def labelled(kind,payload=None):
+            # While a queue runs, every status line says where it is: "Item 3 of 10: Holy Heal, 2 of 5 built · ...".
+            if kind=="status" and self.job_label and not payload.startswith("Item "):
+                payload=f"{self.job_progress()} · {payload.removeprefix(self.name+': ')}"
+            emit(kind,payload)
+        self.emit=labelled
         self.stop_at_slots=self.profile["construction"].get("stop_at_slots")
         self.count_slots=self.profile["construction"].get("count_slots",False) or self.stop_at_slots is not None
         self.slot_counts={i:0 for i in range(6)}
@@ -25,6 +42,9 @@ class ConstructionRunner(VisualRunner):
         self.source_cell=None
         self.search_mode=self.profile["construction"].get("search_mode","fast")
         self.last_inventory=None
+
+    def job_progress(self):
+        return f"{self.job_label}, {self.job_built}{f' of {self.job_target}' if self.job_target else ''} built"
 
     @staticmethod
     def same_window(a,b):
@@ -104,6 +124,47 @@ class ConstructionRunner(VisualRunner):
                 if after<before-.5:break
         raise Interrupted(f"No verified {self.name} blueprint found in the remaining Inventory rows. "
                           "Inventory reached the bottom or did not respond to scrolling.")
+
+    def scroll_inventory_to_top(self):
+        """Wheel Inventory up until it stops moving, so a queued job searches all of it (search runs downward)."""
+        self.move((24,80))
+        self.wait(.04)
+        frame=self.frame()
+        inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        position=self.detector.inventory_scroll_position(frame,inventory)
+        for _ in range(128):
+            self.move(inventory.point(395,310))
+            self.wait(.05)
+            self.guard();self.backend.scroll(1)
+            moved=False
+            for _ in range(3):
+                self.wait(.06)
+                frame=self.inventory_frame(inventory)
+                current=self.detector.current_inventory(frame,inventory,checkpoint=self.guard)
+                after=self.detector.inventory_scroll_position(frame,current)
+                inventory=current
+                if after<position-.5:
+                    position=after;moved=True;break
+                if after>position+.5:
+                    raise Interrupted("Inventory scrolled down while scrolling to the top. Check it before restarting.")
+            if not moved:break
+        # At the top, or the game ignores the wheel: drag a thumb that is not at the top of its rail up to it.
+        if hasattr(self.detector,"inventory_scrollbar"):
+            self.move((24,80));self.wait(.04)
+            frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
+            bar=self.detector.inventory_scrollbar(frame,inventory)
+            if bar["thumb_top"]>bar["top"]+2:
+                start=bar["thumb"];end=[start[0],start[1]-(bar["thumb_top"]-bar["top"])]
+                self.move(start);self.guard();self.backend.button("left",True)
+                try:
+                    self.wait(.04);self.move(end);self.wait(.08)
+                finally:self.backend.button("left",False)
+                self.move((24,80));self.wait(.06)
+                frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
+                bar=self.detector.inventory_scrollbar(frame,inventory)
+                if bar["thumb_top"]>bar["top"]+2:
+                    self.emit("status",f"{self.name}: Inventory did not scroll to the top; searching down from here.")
+        self.move((24,80))
 
     def locate_blueprint(self):
         self.emit("status", f"{self.name}: {'fast datacube search' if self.search_mode=='fast' else 'thorough every-cell search'}.")
@@ -242,7 +303,7 @@ class ConstructionRunner(VisualRunner):
                 raise Interrupted("A quantity dialog appeared during inventory search. No transfer was attempted.")
             if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
                 raise Interrupted("Processor is already working. Finish the current job before starting a construction batch.")
-            index=self.detector.construction_input(frame,processor)
+            index=self.loaded_index=self.detector.construction_input(frame,processor)
             self.emit("detected", {"processor":[processor.x,processor.y],"scale":processor.scale,"stacks":{}})
             self.source_cell=match["cell"]
             return match["point"],self.detector.input_point(processor,index)
@@ -384,7 +445,7 @@ class ConstructionRunner(VisualRunner):
                     self.profile.setdefault("materials",{})[self.recipe]=dict(codes)
                     self.emit("materials",{"recipe":self.recipe,"codes":dict(codes)})
         try:plan=gogo.plan_refill(self.recipe,cells,codes)
-        except LookupError as exc:raise Interrupted(str(exc)) from None
+        except LookupError as exc:raise OutOfMaterials(str(exc)) from None
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
         for name,code,point,amount in plan:
             destination=self.inventory_destination(self.frame(),inventory,code)
@@ -412,7 +473,8 @@ class ConstructionRunner(VisualRunner):
             if polls%4==1 or (seen_busy and not state["busy"] and idle>=2):
                 if self.detector.quantity(frame,checkpoint=self.guard) is not None:
                     raise Interrupted("Unexpected quantity dialog during construction.")
-            if (self.gogo_enabled() and not seen_busy and not state["busy"]
+            # A queue needs to know a refused Start too, to skip that job even without GoGuardian refills.
+            if ((self.gogo_enabled() or getattr(self,"queue",None)) and not seen_busy and not state["busy"]
                     and self.clock()-started>=self.settings.get("refused_start_seconds",5.0)
                     and self.detector.has_loaded_blueprint(frame,processor)):
                 return "refused"
@@ -451,26 +513,40 @@ class ConstructionRunner(VisualRunner):
         self.move((24,80))
         return None
 
-    def execute(self):
-        config=self.profile["construction"]
-        target=config["count"] or config["available"]
-        # Fail before any inventory scan when a previous interrupted transfer
-        # left an unprocessed item behind. Do not spend a whole search finding
-        # the same stack only to discover that the Processor cannot accept it.
+    def return_blueprint(self):
+        """Drag a blueprint whose Start was refused back to a free Inventory cell, so the next job can load its own."""
+        self.move((24,80))
         frame,processor=self.processor_state()
-        if self.detector.quantity(frame,checkpoint=self.guard) is not None:
-            raise Interrupted("A quantity dialog is already open. Resolve it before starting construction.")
-        if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
-            raise Interrupted("Processor is already working. Finish the current job before starting construction.")
-        self.detector.construction_input(frame,processor)
-        stack_unknown=config["available"]>=10000
+        if not self.detector.has_loaded_blueprint(frame,processor):return
+        inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        destination=self.inventory_destination(frame,inventory,None)
+        if destination is None:
+            raise Interrupted(f"No free Inventory cell for the unbuilt {self.name} blueprint. Make room and restart.")
+        self.emit("status",f"{self.name}: taking the unbuilt blueprint back to Inventory.")
+        self.drag(self.detector.input_point(processor,self.loaded_index),destination)
+        self.move((24,80))
+        frame,processor=self.processor_state()
+        if self.detector.quantity(frame,checkpoint=self.guard) is not None or self.detector.has_loaded_blueprint(frame,processor):
+            raise Interrupted(f"The unbuilt {self.name} blueprint could not be taken back from the Processor. Check it before restarting.")
+
+    def start_job(self, recipe):
+        """Point the single-job flow at a queued recipe: its own name, blueprint stack and slot totals."""
+        self.recipe=recipe
+        self.name=self.recipes[recipe]["name"]
+        self.source_cell=None
+        self.slot_counts={i:0 for i in range(6)};self.slot_unread=0;self.slot_na=0
+
+    def build_job(self, target, stack_unknown):
+        """Build up to `target` of the current recipe. Returns (built, "finished" / "out_of_blueprints" / slots reached)."""
+        config=self.profile["construction"]
+        self.job_built=0
         for _ in range(target):
             try:source,destination=self.locate_blueprint()
             except Interrupted as exc:
                 # With no stack size entered, running out of blueprints is how a batch ends.
-                if stack_unknown and self.completed>0 and str(exc).startswith("No verified"):
-                    self.emit("done",f"Out of {self.name} blueprints after {self.completed} builds. Final result remains in the Processor.")
-                    return
+                # A queued job that runs out is reported and the queue goes on.
+                if str(exc).startswith("No verified") and (self.queue or stack_unknown and self.job_built>0):
+                    return self.job_built,"out_of_blueprints"
                 raise
             self.emit("status", f"{self.name}: transferring one blueprint; ingredients stay untouched.")
             self.drag(source,destination)
@@ -486,17 +562,23 @@ class ConstructionRunner(VisualRunner):
             self.emit("status", f"{self.name}: building; following Processor progress.")
             refills=0
             while self.await_construction()=="refused":
+                if not self.gogo_enabled():
+                    raise OutOfMaterials(f"Start was refused for {self.name}; its materials ran out.")
                 refills+=1
                 if refills>2:
-                    raise Interrupted("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
+                    raise OutOfMaterials("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
                 self.refill_from_gogo()
                 frame,processor=self.processor_state()
                 self.click(processor.start_point());self.move((24,80))
                 self.emit("status", f"{self.name}: building; following Processor progress.")
             self.completed+=1
-            config["available"]-=1
-            event={"completed":self.completed,"available":config["available"],
-                   "remaining":target-self.completed,"recipe":self.recipe}
+            self.job_built+=1
+            if not self.queue:config["available"]-=1
+            event={"completed":self.job_built,"available":config["available"],
+                   "remaining":target-self.job_built,"recipe":self.recipe}
+            if self.job_label:
+                event.update(job=self.job_number,jobs=len(self.queue),target=self.job_target)
+            slots=None
             if self.count_slots:
                 slots=self.output_details.get("slots") if self.output_details else None
                 if slots is not None:self.slot_counts[slots]+=1
@@ -505,7 +587,55 @@ class ConstructionRunner(VisualRunner):
                 event.update(slot_counts=self.slot_counts.copy(),slot_unread=self.slot_unread,slot_na=self.slot_na)
             self.emit("construction_cycle", event)
             if self.stop_at_slots is not None and slots is not None and slots>=self.stop_at_slots:
-                self.emit("done",f"Stopped on {self.name} with {slots} slots after {self.completed} builds. "
-                          "The matching result remains in the Processor.")
-                return
-        self.emit("done", f"Finished {self.completed} builds of {self.name}. Final result remains in the Processor.")
+                return self.job_built,slots
+        return self.job_built,"finished"
+
+    def run_queue(self):
+        """Each queued (recipe, count) runs as its own job; one short of blueprints or materials is reported and skipped."""
+        skipped=[]
+        for number,row in enumerate(self.queue,1):
+            self.start_job(row["recipe"])
+            self.job_number,self.job_target,self.job_built=number,row["count"],0
+            self.job_label=f"Item {number} of {len(self.queue)}: {self.name}"
+            self.emit("queue_job",{"index":number-1,"recipe":self.recipe})
+            self.emit("status","Scrolling Inventory to the top.")
+            try:
+                self.scroll_inventory_to_top()
+                built,reason=self.build_job(row["count"] or 10000,True)
+            except OutOfMaterials as exc:
+                skipped.append(f"{self.name} (out of materials, {self.job_progress().rsplit(', ',1)[1]})")
+                self.emit("status",f"{self.job_progress()}: skipped, out of materials. {exc}")
+                self.return_blueprint()
+                continue
+            except Interrupted as exc:
+                raise Interrupted(f"{self.job_progress()}: {exc}") from None
+            if reason=="out_of_blueprints" and (row["count"] or not built):
+                skipped.append(f"{self.name} (out of blueprints, {self.job_progress().rsplit(', ',1)[1]})")
+                self.emit("status",f"{self.job_progress()}: skipped, out of blueprints.")
+            elif type(reason) is int:
+                self.emit("status",f"{self.job_progress()}: stopped at {reason} slots; going on.")
+        self.job_label=None
+        complete=len(self.queue)-len(skipped)
+        self.emit("done",f"Queue finished: {complete} of {len(self.queue)} jobs complete, {self.completed} builds."
+                  +(" Skipped: "+"; ".join(skipped)+"." if skipped else "")+" Final result remains in the Processor.")
+
+    def execute(self):
+        config=self.profile["construction"]
+        # Fail before any inventory scan when a previous interrupted transfer
+        # left an unprocessed item behind. Do not spend a whole search finding
+        # the same stack only to discover that the Processor cannot accept it.
+        frame,processor=self.processor_state()
+        if self.detector.quantity(frame,checkpoint=self.guard) is not None:
+            raise Interrupted("A quantity dialog is already open. Resolve it before starting construction.")
+        if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
+            raise Interrupted("Processor is already working. Finish the current job before starting construction.")
+        self.detector.construction_input(frame,processor)
+        if self.queue:return self.run_queue()
+        built,reason=self.build_job(config["count"] or config["available"],config["available"]>=10000)
+        if reason=="out_of_blueprints":
+            self.emit("done",f"Out of {self.name} blueprints after {built} builds. Final result remains in the Processor.")
+        elif type(reason) is int:
+            self.emit("done",f"Stopped on {self.name} with {reason} slots after {built} builds. "
+                      "The matching result remains in the Processor.")
+        else:
+            self.emit("done", f"Finished {built} builds of {self.name}. Final result remains in the Processor.")

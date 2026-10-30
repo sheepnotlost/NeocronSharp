@@ -221,7 +221,7 @@ profile.json version 1 remains backward compatible. Validate ranges/types and sa
 | research_operation | Saved independent research mode |
 | stacks | T/E/A/L available/requested integers |
 | blueprints.count | Finite copies or zero continuous |
-| construction | Recipe id, available, count, search_mode (fast/all_cells; missing=fast), count_slots, optional stop_at_slots |
+| construction | Recipe id, available, count, search_mode (fast/all_cells; missing=fast), count_slots, optional stop_at_slots, optional queue ([{recipe, count}], at most 100; run in order by Start, a job short of blueprints or materials is skipped) |
 | custom_recipes | Stable ids, names, alias arrays |
 | hidden_recipes | Built-in recipe ids removed from Job; default empty; re-adding restores them |
 | materials | {recipe id: {ingredient: GoGuardian label}}; optional per-recipe override of the built-in table |

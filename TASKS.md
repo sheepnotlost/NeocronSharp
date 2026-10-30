@@ -4,6 +4,16 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Construction queue — 29 October 2026
+
+- [x] Construction → Job has a Queue: rows of (recipe, count) added from the job form (its Materials saved as that recipe's GoGuardian labels), removed, moved up/down, cleared; selecting a row fills the form. Saved in the profile (`construction.queue`, at most 100 rows; removing a recipe drops its rows).
+- [x] Start runs the queue in order through the existing single-job flow (`ConstructionRunner.build_job`), with status such as "Item 3 of 10: Crahn Holy Heal, 2 of 5 built" and the current row selected; an empty queue keeps the old single job. Count 0 = until that blueprint runs out.
+- [x] A job out of blueprints, or refused for materials (GoGuardian refill failing or off), is reported and skipped (user's choice); the refused blueprint is dragged back to a free Inventory cell first. The final message lists skipped jobs. Other stops end the queue and name the item.
+- [x] Each job scrolls Inventory to the top first (wheel up until it stops; thumb drag if the wheel is ignored), since the search only runs downward.
+- [x] Fixed in passing: the Add / update recipe button was hidden behind its own button row.
+- [x] Looked at the tab on screen in Basic, Dead Sector Terminal and Pepper Park Signal. New tests: tests/test_construction_queue.py (simulated runs, profile, UI). 477 Python and 115 C# tests pass.
+- [ ] Not verified live: scrolling Inventory up, the refused-start check without GoGuardian, taking a refused blueprint back out of the Processor.
+
 ### Pale dashes, zone lines, live viewer, game update — 28 October 2026
 
 - [x] Live, both directions on the navmesh (29 Oct): Plaza 1 -> Pepper Park 1 in 160 s and Pepper Park 1 -> Plaza 1 in 110 s, arrivals recognised. On the way back the navmesh walk carried the whole Plaza 3 stretch (30 s) to the Plaza 1 exit, and the new sidestep got round an obstacle. Route names now come from the live sector.

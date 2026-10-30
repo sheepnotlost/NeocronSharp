@@ -99,6 +99,8 @@ def remove_recipe(profile,key):
     else:profile["custom_recipes"].pop(key)
     if profile.get("construction",{}).get("recipe")==key:
         profile["construction"]["recipe"]=next(iter(catalog(profile)),None)
+    if profile.get("construction",{}).get("queue"):
+        profile["construction"]["queue"]=[row for row in profile["construction"]["queue"] if row.get("recipe")!=key]
     return name
 
 

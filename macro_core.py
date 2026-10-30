@@ -71,6 +71,11 @@ def validate_profile(profile, require_ready=True):
     book=catalog(profile)
     if not isinstance(construction, dict) or (construction.get("recipe") is not None and construction.get("recipe") not in book):
         raise ValueError("Choose a supported construction recipe.")
+    queue=construction.get("queue",[])
+    if not isinstance(queue,list) or len(queue)>100 or any(
+            not isinstance(row,dict) or set(row)!={"recipe","count"} or row["recipe"] not in book
+            or type(row["count"]) is not int or not 0<=row["count"]<=10000 for row in queue):
+        raise ValueError("Each queued construction job needs a saved recipe and a count from 0 to 10000 (at most 100 jobs).")
     if type(construction.get("count_slots",False)) is not bool:
         raise ValueError("Slot counter must be enabled or disabled.")
     materials = profile.get("materials", {})

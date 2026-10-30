@@ -15,7 +15,7 @@ Requested alongside implementation on 26 October 2026. This list is a roadmap, n
 
 1. **Real detection preview.** Highlight the current source, free destination, quantity confirmation and Start before any input. Show decoded name and why a candidate was rejected. The existing photo is only a mockup.
 2. **Batch ledger.** Save completed quantities, failures, elapsed time, slot histogram and user-entered costs by recipe/character/date. Export CSV; keep unread values distinct.
-3. **Build queues.** Construct missing weapon parts, then use them for Holy Heal or another spell. The user's Holy Heal chain includes Weaponparts 9/7/6/5/4/1. Verify every phase rather than assuming tools/inputs carry over.
+3. **Build queues.** Construct missing weapon parts, then use them for Holy Heal or another spell. The user's Holy Heal chain includes Weaponparts 9/7/6/5/4/1. Verify every phase rather than assuming tools/inputs carry over. (Delivered 29 Oct 2026 as the Construction queue: jobs run in order; chaining a built part into the next recipe is up to the order you give.)
 4. **Supply preflight.** Read tool condition, grease/fluid availability and free inventory capacity before a batch and explain the limiting resource. Requires actual game fixtures for each indicator.
 5. **Materials calculator.** Store user-confirmed ingredient quantities and stock, estimate build capacity and produce a shopping list. Do not invent missing source quantities.
 6. **Recipe import/export.** Share a plain JSON recipe book with names, aliases, notes and presets. Validate it as data; no scripts or remote actions.

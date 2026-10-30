@@ -532,8 +532,9 @@ class App:
         materials=ttk.Entry(form,textvariable=self.materials_text,width=1)
         materials.grid(row=5,column=1,sticky="ew",padx=(10,0),pady=(8,4));self.editable.append(materials)
         ttk.Label(form,text="Name=LABEL, ...  (for GoGuardian)").grid(row=4,column=1,sticky="w",padx=(10,0))
-        save=ttk.Button(form,text="Add / update recipe",command=self.save_custom_recipe)
+        # The row frame comes first: a widget created before it would be drawn underneath it.
         actions=ttk.Frame(form);actions.grid(row=6,column=0,columnspan=2,sticky="ew",pady=4)
+        save=ttk.Button(form,text="Add / update recipe",command=self.save_custom_recipe)
         save.grid(in_=actions,row=0,column=0,sticky="w")
         self.editable.append(save)
         remove=self.remove_recipe_button=ttk.Button(form,text="Remove recipe",command=self.remove_job_recipe)
@@ -559,14 +560,117 @@ class App:
         stop_value.pack(side="left",padx=6)
         ttk.Label(stop_row,text="or more slots").pack(side="left")
         self.editable.extend((stop_check,stop_value))
+        self.build_construction_queue(body)
         settings=ttk.LabelFrame(body,text="Search",padding=12)
-        settings.grid(row=1,column=0,sticky="new",pady=(12,0))
+        settings.grid(row=2,column=0,sticky="new",pady=(12,0))
         settings.columnconfigure(1,weight=1)
         self.search_mode=tk.StringVar(value=SEARCH_LABELS["fast"])
         ttk.Label(settings,text="Inventory search").grid(row=0,column=0,sticky="w",pady=4)
         search=ttk.Combobox(settings,textvariable=self.search_mode,values=list(SEARCH_LABELS.values()),state="readonly",width=1)
         search.grid(row=0,column=1,padx=10,pady=4,sticky="ew");self.editable.append(search)
         self.build_construction_catalog()
+
+    def build_construction_queue(self,body):
+        """Jobs (recipe, count) built one after another by Start; the job form above fills each row."""
+        box=ttk.LabelFrame(body,text="Queue",padding=12)
+        box.grid(row=1,column=0,sticky="new",pady=(12,0))
+        box.columnconfigure(0,weight=1)
+        table=ttk.Frame(box);table.grid(row=0,column=0,sticky="nsew");table.columnconfigure(0,weight=1)
+        self.queue_tree=ttk.Treeview(table,columns=("count",),selectmode="browse",height=5)
+        self.queue_tree.heading("#0",text="Recipe");self.queue_tree.column("#0",width=260,minwidth=150)
+        self.queue_tree.heading("count",text="Build");self.queue_tree.column("count",width=90,stretch=False,anchor="center")
+        self.queue_tree.grid(row=0,column=0,sticky="nsew")
+        scroll=ttk.Scrollbar(table,orient="vertical",command=self.queue_tree.yview);scroll.grid(row=0,column=1,sticky="ns")
+        self.queue_tree.configure(yscrollcommand=scroll.set)
+        self.queue_tree.bind("<<TreeviewSelect>>",lambda e:self.show_queue_job())
+        self.queue_tree.bind("<Button-1>",lambda e:"break" if self.locked() else None)
+        buttons=ttk.Frame(box);buttons.grid(row=0,column=1,sticky="n",padx=(10,0))
+        for text,command in (("Add job",self.add_queue_job),("Remove",self.remove_queue_job),
+                             ("Move up",lambda:self.move_queue_job(-1)),("Move down",lambda:self.move_queue_job(1)),
+                             ("Clear",self.clear_queue)):
+            button=ttk.Button(buttons,text=text,command=command);button.pack(fill="x",pady=(0,4))
+            self.editable.append(button)
+        self.queue_note=tk.StringVar()
+        ttk.Label(box,textvariable=self.queue_note,wraplength=485).grid(row=1,column=0,columnspan=2,sticky="w",pady=(6,0))
+
+    def construction_queue(self):
+        return self.profile["construction"].get("queue") or []
+
+    def show_queue(self,select=None):
+        self.queue_tree.delete(*self.queue_tree.get_children())
+        queue=self.construction_queue()
+        for index,row in enumerate(queue):
+            name=self.recipes.get(row["recipe"],{}).get("name",row["recipe"])
+            self.queue_tree.insert("","end",iid=str(index),text=f"{index+1}. {name}",
+                                   values=(row["count"] if row["count"] else "Until out",))
+        if select is not None and queue:
+            self.queue_tree.selection_set(str(min(select,len(queue)-1)));self.queue_tree.see(str(min(select,len(queue)-1)))
+        self.queue_note.set(f"Start builds these {len(queue)} jobs in order. A job short of blueprints or materials is skipped."
+                            if queue else "Queue empty: Start builds the job above. Add job queues it.")
+
+    def show_queue_job(self):
+        """A selected row fills the job form, so its materials can be checked or changed."""
+        selection=self.queue_tree.selection()
+        if self.locked() or not selection:return
+        row=self.construction_queue()[int(selection[0])]
+        if row["recipe"] in self.recipes:
+            self.construction_recipe.set(self.recipes[row["recipe"]]["name"]);self.construction_count.set(str(row["count"]))
+            self.select_recipe()
+
+    def save_queue(self,profile,select=None):
+        save_profile(self.profile_path,profile)
+        self.profile=profile;self.recipes=catalog(profile)
+        self.construction_choice.configure(values=[r["name"] for r in self.recipes.values()])
+        self.show_queue(select)
+
+    def add_queue_job(self):
+        """Queue the form's recipe and count; its typed materials are saved for that recipe."""
+        if self.locked():return
+        try:
+            try:count=int(self.construction_count.get())
+            except ValueError:raise ValueError("Enter a whole number to build (0 = until blueprints run out).") from None
+            profile=deepcopy(self.profile)
+            key=find_recipe(self.construction_recipe.get(),catalog(profile))
+            if key is None:key=add_recipe(profile,self.construction_recipe.get(),self.typed_aliases())
+            self.store_materials(profile,key)
+            queue=profile["construction"].setdefault("queue",[])
+            queue.append({"recipe":key,"count":count})
+            self.save_queue(profile,len(queue)-1)
+            self.report(f"Queued job {len(queue)}: {self.recipes[key]['name']}, {count or 'until blueprints run out'}.")
+        except (ValueError,OSError) as exc:self.report(str(exc))
+
+    def edit_queue(self,change):
+        """Apply change(queue, index) -> index to select, to a copy of the queue, and save it."""
+        if self.locked():return
+        selection=self.queue_tree.selection()
+        profile=deepcopy(self.profile)
+        queue=profile["construction"].setdefault("queue",[])
+        index=int(selection[0]) if selection else None
+        try:self.save_queue(profile,change(queue,index))
+        except (ValueError,OSError) as exc:self.report(str(exc))
+
+    def remove_queue_job(self):
+        def remove(queue,index):
+            if index is None:return None
+            queue.pop(index);return index
+        self.edit_queue(remove)
+
+    def move_queue_job(self,step):
+        def move(queue,index):
+            if index is None or not 0<=index+step<len(queue):return index
+            queue[index],queue[index+step]=queue[index+step],queue[index];return index+step
+        self.edit_queue(move)
+
+    def clear_queue(self):
+        self.edit_queue(lambda queue,index:queue.clear())
+
+    def store_materials(self,profile,key):
+        """Save the Materials row as the recipe's GoGuardian labels (or drop a cleared list)."""
+        typed=gogo.parse_materials(self.materials_text.get())
+        if typed and typed!=(gogo.INGREDIENT_CODES.get(key) or {}):
+            profile.setdefault("materials",{})[key]=typed
+        elif key in profile.get("materials",{}) and not typed:
+            profile["materials"].pop(key)
 
     def refresh_recipe(self):
         try:key=find_recipe(self.construction_recipe.get(),self.recipes)
@@ -738,6 +842,7 @@ class App:
             self.construction_choice.configure(values=[r["name"] for r in remaining.values()])
             self.construction_recipe.set(remaining[selected]["name"] if selected else "")
             self.select_recipe()
+            self.show_queue()  # Queued jobs of the removed recipe went with it.
             self.report(f"Removed {name} from Job. You can add it again by name or from Catalog.")
         except (ValueError,OSError) as exc:self.report(str(exc))
 
@@ -761,6 +866,7 @@ class App:
         self.stop_on_slots.set(construction.get("stop_at_slots") is not None)
         self.minimum_slots.set(str(construction.get("stop_at_slots") if construction.get("stop_at_slots") is not None else 4))
         self.refresh_recipe()
+        self.show_queue()
         # A profile saved on the old Nav-Ray tab opens on Research: Start cannot walk any more.
         self.tabs.select(self.recycling_tab if operation=="recycling" else self.construction_tab if operation=="construction" else self.research_tab)
         recycle_id=self.profile.get("recycling",{}).get("recipe")
@@ -798,15 +904,15 @@ class App:
                 profile["recycling"]={"recipe":selection[0] if selection else None}
             elif self.tabs.select()==str(self.construction_tab):
                 profile["operation"]="construction"
+                queue=deepcopy(profile["construction"].get("queue") or [])
                 key=find_recipe(self.construction_recipe.get(),catalog(profile))
-                if key is None:
-                    key=add_recipe(profile,self.construction_recipe.get(),self.typed_aliases())
-                typed=gogo.parse_materials(self.materials_text.get())
-                if typed and typed!=(gogo.INGREDIENT_CODES.get(key) or {}):
-                    profile.setdefault("materials",{})[key]=typed
-                elif key in profile.get("materials",{}) and not typed:
-                    profile["materials"].pop(key)
-                profile["construction"]={"recipe":key,
+                if key is None and queue and not self.construction_recipe.get().strip():
+                    key=queue[0]["recipe"]  # A queue needs no recipe in the form.
+                else:
+                    if key is None:
+                        key=add_recipe(profile,self.construction_recipe.get(),self.typed_aliases())
+                    self.store_materials(profile,key)
+                profile["construction"]={"recipe":key,"queue":queue,
                                          # The stack size is no longer asked for; 10000 means "unknown"
                                          # and the batch ends when no blueprint can be found.
                                          "available":10000,
@@ -988,10 +1094,18 @@ class App:
             elif kind == "blueprint_cycle":
                 remaining = "repeating until stopped" if payload["continuous"] else f"{payload['count']} copies remaining"
                 self.report(f"Blueprint: completed {payload['completed']}; {remaining}.")
+            elif kind == "queue_job":
+                if self.queue_tree.exists(str(payload["index"])):
+                    self.queue_tree.selection_set(str(payload["index"]));self.queue_tree.see(str(payload["index"]))
             elif kind == "construction_cycle":
                 self.construction_available.set(str(payload["available"]))
                 self.profile["construction"]["available"]=payload["available"]
-                self.report(f"{self.recipes[payload['recipe']]['name']}: completed {payload['completed']}; {payload['remaining']} builds remaining.")
+                name=self.recipes[payload['recipe']]['name']
+                if "job" in payload:
+                    wanted=f" of {payload['target']}" if payload["target"] else ""
+                    self.report(f"Item {payload['job']} of {payload['jobs']}: {name}, {payload['completed']}{wanted} built.")
+                else:
+                    self.report(f"{name}: completed {payload['completed']}; {payload['remaining']} builds remaining.")
                 if "slot_counts" in payload:
                     self.slot_summary.set("Slot totals: "+" · ".join(f"{i}: {payload['slot_counts'].get(i,0)}" for i in range(6))
                                           +f" · unread: {payload['slot_unread']} · N/A: {payload['slot_na']}")
@@ -1044,7 +1158,10 @@ def main():
             validate_profile(profile)
             if profile["operation"] == "construction":
                 job=profile["construction"]
-                print(f"Configuration valid: {job['count'] or job['available']} builds of {catalog(profile)[job['recipe']]['name']}. No input sent.")
+                if job.get("queue"):
+                    print(f"Configuration valid: a queue of {len(job['queue'])} construction jobs. No input sent.")
+                else:
+                    print(f"Configuration valid: {job['count'] or job['available']} builds of {catalog(profile)[job['recipe']]['name']}. No input sent.")
             elif profile["operation"]=="navray":
                 print("Configuration valid: an old Nav-Ray job; walks run from the Traversal tab now. No input sent.")
             elif profile["operation"]=="recycling":
