@@ -2,8 +2,8 @@
 
 One program, three engines, started from **Launch.cmd**:
 
-- **Screen automation (Python, this folder):** Research, Construction, Recycling, Nav-Ray auto-walk and Tech Counter
-  tabs. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
+- **Screen automation (Python, this folder):** Research, Construction, Recycling and Tech Counter
+  tabs, plus the older Nav-Ray walker. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
 - **NeocronSharp pages (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map, quest browser, loot
   library, player inspector, coordinate recorder, point navigation, environment/BSP export and plugins, shown inside the
   suite's **Tracker**, **Quests**, **Loot library**, **Tools** and **Plugins** tabs (one embedded NeocronSharp process;
@@ -39,7 +39,7 @@ The Git repository contains everything needed to run: source, the bundled `runti
 
 ## Nav-Ray
 
-In game press Tab and open Nav-Ray (F9). In the Nav-Ray tab pick a Category and Destination from the lists (all 23 categories and 239 destinations are included, compiled from the in-game window) and press Start in 3 seconds. The macro picks the destination, presses Start in Nav-Ray, then walks the dashed path (W plus mouse steering). Switch away from the game to stop. If blocked by a recognized door, it tries a right-click; this door handling has not yet been verified live. It stops when the path ends, it cannot move after recovery attempts, health drops or a loading screen appears. One route has been completed in a recorded live run; other routes and sector transitions remain unverified.
+Walks now run from the **Traversal** tab; the suite has no Nav-Ray tab any more, and the screen-reading walker described here is kept for `tools/run_navray.py`. In game press Tab and open Nav-Ray (F9), then give it a Category and Destination (all 23 categories and 239 destinations are included, compiled from the in-game window). The macro picks the destination, presses Start in Nav-Ray, then walks the dashed path (W plus mouse steering). Switch away from the game to stop. If blocked by a recognized door, it tries a right-click; this door handling has not yet been verified live. It stops when the path ends, it cannot move after recovery attempts, health drops or a loading screen appears. One route has been completed in a recorded live run; other routes and sector transitions remain unverified.
 
 ## Construction
 
@@ -58,7 +58,7 @@ The **Queue** box under the job form chains jobs, e.g. 5 each of 10 different th
 
 While the queue has rows, **Start in 3 seconds** builds them in order, each with the normal single-job flow and its own GoGuardian labels; with an empty queue, Start builds the job in the form as before. The status line says where it is (`Item 3 of 10: Crahn Holy Heal, 2 of 5 built`) and the row being built is selected. Each job first scrolls Inventory to the top (the search runs downward). A job that runs out of blueprints, or whose Start is refused for missing materials (and GoGuardian, if ticked, cannot supply them), is reported and skipped; a refused job's blueprint is dragged back to a free Inventory cell first so the next job can load its own. The final message lists what was skipped. Any other problem (focus loss, an unclear Processor or dialog, a missing GoGuardian window) stops the whole queue and says which item it was on. Stop at N slots ends that job and the queue goes on. Not yet tested live: scrolling Inventory back up and taking a refused blueprint back.
 
-**Inventory search defaults to Fast — datacube icons**, under Construction → Job → Transfer controls. A screenshot pass finds possible datacubes using color/body and edge-shape proposals. The macro hovers those candidates only, verifies their BLUEPRINT names, and scrolls onward when no match is found. It avoids hovering every ingredient and empty square. The 21:55 recording's views produce two candidates each, rather than 48 hover targets. This count is recorded-image analysis, not a measured live speedup.
+**Inventory search defaults to Fast — datacube icons**, under Construction → Job → Search. A screenshot pass finds possible datacubes using color/body and edge-shape proposals. The macro hovers those candidates only, verifies their BLUEPRINT names, and scrolls onward when no match is found. It avoids hovering every ingredient and empty square. The 21:55 recording's views produce two candidates each, rather than 48 hover targets. This count is recorded-image analysis, not a measured live speedup.
 
 If an unusual icon is missed, choose **Thorough — every cell** in the same selector. This retains the earlier exhaustive method, with overlap reuse and short reads. The choice saves with the construction settings; profiles without a choice use Fast. Both modes clear and re-hover a matching blueprint before dragging. Local Windows OCR reads recipe names; shipped references also verify the three built-ins. Item numbers remain exact; a visual candidate alone never authorizes a transfer.
 
@@ -140,7 +140,7 @@ Sources: [Tech Haven Items DB](https://db.techhaven.org/en/item-lists/recyclable
 
 The bottom **Skin** selector offers 15 skins: Basic, RPOS Classic, CronAMP 97, Dead Sector Terminal, BioLab Workstation, Fallen Circuit, Tangent Forge, Pepper Park Signal, PSI Resonance, Dome Control, Graphite LCD, Spectrum Bars, Chrome Equalizer, Neon Visualizer and Shade Mode. It saves your choice. The [interactive concept gallery](styling/skin-gallery.html) explores richer layouts.
 
-Winamp is the inspiration. Every skin but Basic (the original light style) has a Winamp-style title bar (ribbed strips either side of the caps title, the skin's badge, its name in a small display), its own code-drawn frame, button, field and tab artwork, and a status line and log that read like a player's display: lit text in a dark well. Dead Sector Terminal keeps its amber phosphor look with thin terminal frames. Pepper Park Signal follows Neocron's red-light district: dark brick, red neon, and a billboard above the tabs. The billboard shows `assets/local/pepper_park_billboard.png` when that picture is on the PC (it is game artwork, so it stays out of the public repository); without it a drawn billboard is shown. All nine tabs fit across the narrowest window in every skin.
+Winamp is the inspiration. Every skin but Basic (the original light style) has a Winamp-style title bar (ribbed strips either side of the caps title, the skin's badge, its name in a small display), its own code-drawn frame, button, field and tab artwork, and a status line and log that read like a player's display: lit text in a dark well. Dead Sector Terminal keeps its amber phosphor look with thin terminal frames. Pepper Park Signal follows Neocron's red-light district: dark brick, red neon, and a billboard above the tabs. The billboard shows `assets/local/pepper_park_billboard.png` when that picture is on the PC (it is game artwork, so it stays out of the public repository); without it a drawn billboard is shown. All ten tabs fit across the narrowest window in every skin.
 
 **Sound when stopped** is optional and off by default. A bundled tone plays once for completion, chosen-slot stopping, handled errors, focus loss or closure. Ordinary per-item completion does not beep while a batch continues.
 

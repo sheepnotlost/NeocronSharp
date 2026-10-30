@@ -10,7 +10,7 @@ from macro_core import Control, default_profile, load_profile, save_profile, val
 from recipes import remove_recipe
 from test_construction import ConstructionBackend, ConstructionDetector
 from test_macro import FakeClock
-from vision import Anchor, Detector
+from vision import Ambiguous, Anchor, Detector, NotFound, cv2, np
 
 
 class QueueBackend(ConstructionBackend):
@@ -129,6 +129,25 @@ class ConstructionQueueTests(unittest.TestCase):
         self.assertIn("Item 2 of 2: Tangent Weaponpart 7, 0 of 2 built", error)
         self.assertIn("Game lost focus", error)
 
+    def test_a_detector_stop_also_says_which_item(self):
+        self.setup_queue(["weaponpart_7"], [("weaponpart_7", 1), ("weaponpart_7", 1)])
+        construction_input = self.runner.detector.construction_input
+        def pending(frame, anchor):
+            if self.backend.starts:raise Ambiguous("Processor contains a pending item.")
+            return construction_input(frame, anchor)
+        self.runner.detector.construction_input = pending
+        self.runner.run()
+        self.assertIn("Item 2 of 2: Tangent Weaponpart 7, 0 of 1 built: Processor contains a pending item.", self.kinds("error")[0])
+
+    def test_no_readable_scrollbar_still_searches_the_rows_on_show(self):
+        self.setup_queue(["weaponpart_7"], [("weaponpart_7", 2)])
+        def hidden(frame, inventory):raise NotFound("Inventory scrollbar is hidden or unrecognized.")
+        self.runner.detector.inventory_scroll_position = hidden
+        self.runner.run()
+        self.assertFalse(self.kinds("error"), self.events)
+        self.assertEqual(self.runner.completed, 2)
+        self.assertTrue(any("Searching down from here" in s for s in self.kinds("status")))
+
     def test_single_job_without_a_queue_is_unchanged(self):
         self.setup_queue(["weaponpart_7"], [("weaponpart_7", 1)])
         self.profile["construction"]["queue"] = []
@@ -139,6 +158,60 @@ class ConstructionQueueTests(unittest.TestCase):
         self.assertEqual(self.kinds("done"), ["Finished 2 builds of Tangent Weaponpart 7. Final result remains in the Processor."])
         self.assertFalse(self.backend.scrolls)
         self.assertNotIn("job", self.kinds("construction_cycle")[0])
+
+
+class ScrollToTopOnRealCapturesTests(unittest.TestCase):
+    """The real Detector on a recorded Inventory: the thumb at rest is at the top, whatever the UI scale."""
+    def runner(self, scale, thumb_down=0):
+        crop = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / "fixtures/construction_inventory_wp7.png")), cv2.COLOR_BGR2RGB)
+        image = cv2.resize(crop, None, fx=scale, fy=scale)
+        top = np.zeros((1000, 1700, 3), np.uint8)
+        top[100:100 + image.shape[0], 200:200 + image.shape[1]] = image
+        detector = Detector();detector.inventory_scale = scale
+        inventory = detector.inventory(top)
+        low = top.copy()
+        if thumb_down:  # The same thumb further down its rail, as after a search scrolled the list.
+            patch = detector.region(low, inventory, (415, 66, 423, 333))
+            mask = (patch[:, :, 1] > 150) & (patch[:, :, 1] > patch[:, :, 0].astype(float) * 1.4)
+            thumb = patch.copy();patch[mask] = [25, 70, 40]
+            shift = round(thumb_down * scale)
+            patch[shift:][mask[:-shift]] = thumb[:-shift][mask[:-shift]]
+        class Replay:
+            position = None
+            def __init__(self):self.frame = low;self.drags = []
+            def check_focus(self, size):pass
+            def capture(self):return self.frame
+            def move(self, point):self.position = list(point)
+            def scroll(self, notches):pass  # This game ignores the wheel.
+            def release_all(self):pass
+            def button(self, name, down):
+                if down:self.held = self.position
+                else:self.drags.append((self.held, self.position));self.frame = top
+        replay = Replay()
+        profile = default_profile();profile["operation"] = "construction"
+        profile["client_size"] = [1700, 1000]
+        clock = FakeClock();events = []
+        runner = ConstructionRunner(profile, replay, Control(), lambda k, v: events.append((k, v)), clock.clock, clock.sleep, detector=detector)
+        return runner, replay, events
+
+    def test_a_thumb_already_at_the_top_is_left_alone(self):
+        for scale in (1, 4/3, 1.7):
+            with self.subTest(scale=scale):
+                runner, replay, events = self.runner(scale)
+                runner.scroll_inventory_to_top()
+                self.assertEqual(replay.drags, [])
+                self.assertFalse([v for k, v in events if k == "status"])
+
+    def test_a_thumb_down_the_rail_is_dragged_to_the_top_when_the_wheel_is_ignored(self):
+        for scale in (1, 4/3, 1.7):
+            with self.subTest(scale=scale):
+                runner, replay, events = self.runner(scale, thumb_down=160)
+                runner.scroll_inventory_to_top()
+                self.assertEqual(len(replay.drags), 1)
+                start, end = replay.drags[0]
+                self.assertEqual(start[0], end[0])
+                self.assertAlmostEqual(start[1] - end[1], 160 * scale, delta=4 * scale)
+                self.assertFalse([v for k, v in events if k == "status"])
 
 
 class QueueProfileTests(unittest.TestCase):

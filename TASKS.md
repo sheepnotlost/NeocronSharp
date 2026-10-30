@@ -12,6 +12,7 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 - [x] Each job scrolls Inventory to the top first (wheel up until it stops; thumb drag if the wheel is ignored), since the search only runs downward.
 - [x] Fixed in passing: the Add / update recipe button was hidden behind its own button row.
 - [x] Looked at the tab on screen in Basic, Dead Sector Terminal and Pepper Park Signal. New tests: tests/test_construction_queue.py (simulated runs, profile, UI). 477 Python and 115 C# tests pass.
+- [x] Debug pass (30 Oct), found on recorded captures: the scrollbar thumb rests 3-5 px inside its rail at UI scale 1.3-1.8, so at the real top every queued job dragged it and reported it could not scroll up (the check now allows for this). A detector stop now names the queue item too, a job with no readable scrollbar still searches the rows on show, and a job skipped under Fast search suggests Thorough. Ten tabs checked at 960 px in all 15 skins; stale Nav-Ray tab and Transfer controls wording fixed in the docs.
 - [ ] Not verified live: scrolling Inventory up, the refused-start check without GoGuardian, taking a refused blueprint back out of the Processor.
 
 ### Pale dashes, zone lines, live viewer, game update — 28 October 2026

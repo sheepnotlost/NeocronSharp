@@ -153,7 +153,9 @@ class ConstructionRunner(VisualRunner):
             self.move((24,80));self.wait(.04)
             frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
             bar=self.detector.inventory_scrollbar(frame,inventory)
-            if bar["thumb_top"]>bar["top"]+2:
+            # The thumb rests a little inside its rail (2 px at scale 1, 3-5 px at 1.3-1.8).
+            inset=4*inventory.scale
+            if bar["thumb_top"]>bar["top"]+inset:
                 start=bar["thumb"];end=[start[0],start[1]-(bar["thumb_top"]-bar["top"])]
                 self.move(start);self.guard();self.backend.button("left",True)
                 try:
@@ -162,7 +164,7 @@ class ConstructionRunner(VisualRunner):
                 self.move((24,80));self.wait(.06)
                 frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
                 bar=self.detector.inventory_scrollbar(frame,inventory)
-                if bar["thumb_top"]>bar["top"]+2:
+                if bar["thumb_top"]>bar["top"]+inset:
                     self.emit("status",f"{self.name}: Inventory did not scroll to the top; searching down from here.")
         self.move((24,80))
 
@@ -600,18 +602,21 @@ class ConstructionRunner(VisualRunner):
             self.emit("queue_job",{"index":number-1,"recipe":self.recipe})
             self.emit("status","Scrolling Inventory to the top.")
             try:
-                self.scroll_inventory_to_top()
+                try:self.scroll_inventory_to_top()
+                # No readable scrollbar proves nothing about the rows on show; the search decides.
+                except NotFound as exc:self.emit("status",f"{exc} Searching down from here.")
                 built,reason=self.build_job(row["count"] or 10000,True)
             except OutOfMaterials as exc:
                 skipped.append(f"{self.name} (out of materials, {self.job_progress().rsplit(', ',1)[1]})")
                 self.emit("status",f"{self.job_progress()}: skipped, out of materials. {exc}")
                 self.return_blueprint()
                 continue
-            except Interrupted as exc:
+            except RuntimeError as exc:  # Stops from the detector too (NotFound, Ambiguous) say where the queue was.
                 raise Interrupted(f"{self.job_progress()}: {exc}") from None
             if reason=="out_of_blueprints" and (row["count"] or not built):
                 skipped.append(f"{self.name} (out of blueprints, {self.job_progress().rsplit(', ',1)[1]})")
-                self.emit("status",f"{self.job_progress()}: skipped, out of blueprints.")
+                hint=" If its icon is unusual, choose Thorough under Inventory search." if self.search_mode=="fast" else ""
+                self.emit("status",f"{self.job_progress()}: skipped, out of blueprints.{hint}")
             elif type(reason) is int:
                 self.emit("status",f"{self.job_progress()}: stopped at {reason} slots; going on.")
         self.job_label=None
