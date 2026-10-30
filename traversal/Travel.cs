@@ -629,7 +629,7 @@ internal sealed partial class Travel(string install, Func<int, NavWorld> bake, H
         // A trip into the wasteland crosses a cell edge every few minutes: allow more legs than a city trip needs.
         for (int leg = 0; leg < 80; leg++)
         {
-            var sample = reader.ReadSample();
+            var sample = reader.ReadSteady();
             int here = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("Still zoning.");
             if (here != lastSector) { obstaclesThisLeg = 0; lastSector = here; }
             if (here == targetSector && targetSpec == Arrive)
@@ -669,7 +669,7 @@ internal sealed partial class Travel(string install, Func<int, NavWorld> bake, H
                 // 200 units, since many stand behind counters or on furniture.
                 if (targetSpec.Count(c => c == ',') == 2)
                 {
-                    var near = nav.RouteNear(reader.ReadSample().Position, target, out bool reachable);
+                    var near = nav.RouteNear(reader.ReadSteady().Position, target, out bool reachable);
                     // RouteNear measures the miss on the ground plane; a CityCom on a balcony is not
                     // reached from the street under it, so check the height too.
                     if (!reachable || MathF.Abs(near[^1].Y - target.Y) > 150)

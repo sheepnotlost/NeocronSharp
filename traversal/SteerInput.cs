@@ -9,7 +9,7 @@ namespace NavmeshPrototype;
 /// </summary>
 internal sealed class SteerInput : IDisposable
 {
-    private const ushort W = 0x11, Shift = 0x2a;   // keys.ini: W = Forward, SHIFT = Run
+    private const ushort W = 0x11, Shift = 0x2a, Space = 0x39;   // keys.ini: W = Forward, SHIFT = Run, SPACE = Jump
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
@@ -68,6 +68,18 @@ internal sealed class SteerInput : IDisposable
                 throw new InvalidOperationException("Windows rejected the use click.");
             Thread.Sleep(60);
         }
+    }
+
+    /// <summary>
+    /// One tap of Space (keys.ini: SPACE = Jump). Seated in the subway train it leaves the car, which
+    /// is the only thing it is used for.
+    /// </summary>
+    public void Jump()
+    {
+        _reader.RequireForeground();
+        Key(Space, false);
+        Thread.Sleep(60);
+        Key(Space, true);
     }
 
     /// <summary>Run (Shift held) or walk while moving; only matters when <see cref="Run"/> is on.</summary>

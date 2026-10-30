@@ -72,7 +72,7 @@ internal sealed class LiveSteer
         using var log = new StreamWriter(_logPath) { AutoFlush = true };
         using var input = new SteerInput(_reader, _pulse, _run);
         var clock = Stopwatch.StartNew();
-        var origin = _reader.ReadSample();
+        var origin = _reader.ReadSteady();
         var previous = origin;
         double deadline = double.MaxValue;
         double previousAt = 0;
@@ -92,7 +92,8 @@ internal sealed class LiveSteer
             _reader.RequireForeground();
             if (clock.Elapsed.TotalSeconds > deadline) throw new InvalidOperationException("Steering exceeded its time limit.");
             PlayerSample s;
-            try { s = _reader.ReadSample(); }
+            // One-off bad reads (a torn orientation, e.g. as a train pulls in) are retried for up to 1 s first.
+            try { s = _reader.ReadSteady(); }
             catch (InvalidOperationException e) when (_zoneExit)
             {
                 // Unreadable while the client swaps worlds; one bad read alone proves nothing.
@@ -162,7 +163,7 @@ internal sealed class LiveSteer
             if (_countdown) Console.WriteLine();
             // The jump guard is for steering, not the countdown: re-anchor on a fresh
             // sample now (the player may have moved, or the game caught up on focus).
-            var fresh = _reader.ReadSample();
+            var fresh = _reader.ReadSteady();
             if (Vector3.Distance(fresh.Position, previous.Position) > 1)
                 Console.WriteLine($"Position changed during the countdown by {Vector3.Distance(fresh.Position, previous.Position):F0} units; re-planning from here.");
             previous = fresh;

@@ -83,6 +83,28 @@ try
             Console.WriteLine($"sector {reader.ReadSectorId(s0.World)} at {s0.Position} facing {s0.Forward}; map rotation {reader.ReadMapRotation(s0.World)?.ToString() ?? "unknown"}");
             return 0;
         }
+        case "actors":
+        {
+            // Read-only: every actor-registry node (class, position), e.g. to find the subway train.
+            var procs = Process.GetProcessesByName("neocronclient");
+            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client.");
+            foreach (var p in procs) p.Dispose();
+            using var reader = new PlayerReader(exe);
+            var me = reader.ReadSample();
+            foreach (var a in reader.ReadRegistryActors().OrderBy(a => a.Position is { } q ? PointNavigation.Distance(q, me.Position) : 1e9f))
+                Console.WriteLine($"key {a.Key,8} class {a.TableRva:x8} physics {a.Physics:x}" + (a.Position is { } q
+                    ? $" at {q.X:F0},{q.Y:F0},{q.Z:F0} ({PointNavigation.Distance(q, me.Position):F0} away)" + (a.Forward is { } f ? $" facing {f.X:F2},{f.Z:F2}" : "")
+                    : ""));
+            Console.WriteLine($"player at {me.Position}");
+            if (rest.Count >= 1 && int.TryParse(rest[0], out int dumpKey))
+                foreach (var a in reader.ReadRegistryActors().Where(a => a.Key == dumpKey))
+                {
+                    var f = reader.ReadActorFloats(a.Physics, 0x10, 0x200 / 4);
+                    for (int i = 0; i < f.Length; i += 8)
+                        Console.WriteLine($"+{0x10 + i * 4:x3}: " + string.Join(" ", f.Skip(i).Take(8).Select(v => float.IsFinite(v) && MathF.Abs(v) < 1e7 && (v == 0 || MathF.Abs(v) > 1e-6) ? v.ToString("G6") : "~")));
+                }
+            return 0;
+        }
         case "toward":
         {
             // toward <sector> x,z x,z : offline, where the walkable floor toward the second point ends.

@@ -12,53 +12,188 @@ internal static class SubwayTests
 
     public static void Run(Action<string, Action> test, string install)
     {
-        test("Subway ride: waits, boards, rides past other stops, steps off at its own", () =>
+        // Made-up geometry: the boarding spot at the origin, its track 220 out (z = 220); platforms 0, 1, 2 round
+        // x = 0, 5000, 10000 (|z| < 100); the car's middle stands 240 out from the spot, as live at Plaza.
+        var board = new Vector3(0, -600, 0);
+        var track = new Vector3(0, -646, 220);
+        int PlatformAt(Vector3 p) => MathF.Abs(p.Z) < 100 ? (int)MathF.Round(p.X / 5000) is var i && MathF.Abs(p.X - i * 5000) < 400 ? i : -1 : -1;
+        bool Beside(Vector3 p) => MathF.Abs(p.X - 10000) < 400 && MathF.Abs(p.Z - 220) < 300;
+        SubwayRideLogic NewRide(Func<Vector3, bool>? beside = null) => new(board, track, 2, "PLAZA", "OUTZONE", PlatformAt, beside ?? Beside);
+        (int, Vector3)[] Trains(params (int Key, Vector3 P)[] t) => t;
+
+        test("Subway boarding: waits for a train standing on its track, walks up within reach, right-clicks", () =>
         {
-            var board = new Vector3(0, -600, 0);
-            // Platform 0 round the origin, platform 1 round x = 5000, platform 2 round x = 10000; the track 220 to the side (z = 220).
-            int PlatformAt(Vector3 p) => MathF.Abs(p.Z) < 100 ? (int)MathF.Round(p.X / 5000) is var i && MathF.Abs(p.X - i * 5000) < 400 ? i : -1 : -1;
-            bool Beside(Vector3 p) => MathF.Abs(p.X - 10000) < 400 && MathF.Abs(p.Z - 220) < 300;
-            var logic = new SubwayRideLogic(board, 2, "PLAZA", "OUTZONE", PlatformAt, Beside);
+            var logic = NewRide();
+            double t = 0;
+            var me = board;
+            // The far side's train stands 450 the other way: never ours.
+            var far = (8, new Vector3(0, -600, -450));
+            SubwayRideLogic.Act At(Vector3? p, params (int, Vector3)[] trains) { var a = logic.Step(t, p, trains); t += 0.1; return a; }
+            // Ours pulls in along the track (z = 240), 50 units a tick, and stops 30 along from the spot.
+            for (float x = -3000; x < 30; x += 50) Check(At(me, (7, new Vector3(x, -600, 240)), far) == SubwayRideLogic.Act.Wait, "waits while the train is moving");
+            var car = new Vector3(30, -600, 240);
+            var acts = Enumerable.Range(0, 12).Select(_ => At(me, (7, car), far)).ToList();
+            Check(acts[^1] == SubwayRideLogic.Act.Approach && logic.Train == 7 && logic.Goal == car && !acts.Contains(SubwayRideLogic.Act.Use),
+                $"after it stands 1 s: walks up to it, not the far side's train (phase {logic.Phase}, train {logic.Train})");
+            // 241 from the car's middle is beyond reach: walk on, 30 a tick, until within 190.
+            var act = SubwayRideLogic.Act.Approach;
+            int steps = 0;
+            while (act == SubwayRideLogic.Act.Approach && steps++ < 40) { me += new Vector3(0, 0, 30); act = At(me, (7, car), far); }
+            float d = PointNavigation.Distance(me, car);
+            Check(act == SubwayRideLogic.Act.Use && d <= SubwayRideLogic.Reach && d > SubwayRideLogic.Reach - 31 && logic.UseDistance == d,
+                $"right-clicks once within reach ({d:F0} units from its middle, act {act})");
+            // Not aboard ("You cannot reach that!"): after 2.5 s it walks on and clicks again.
+            acts = Enumerable.Range(0, 24).Select(_ => At(me, (7, car), far)).ToList();
+            Check(!acts.Contains(SubwayRideLogic.Act.Use) && acts[^1] == SubwayRideLogic.Act.Wait, "waits 2.5 s for the click to take");
+            acts = Enumerable.Range(0, 12).Select(_ => At(me, (7, car), far)).ToList();
+            int walked = acts.IndexOf(SubwayRideLogic.Act.Approach), clicked = acts.IndexOf(SubwayRideLogic.Act.Use);
+            Check(walked >= 0 && clicked > walked && logic.Uses == 2, $"then walks on and clicks again ({logic.Uses} uses)");
+            // Seated: the position joins the car's middle.
+            At(car with { Y = -595 }, (7, car), far);
+            Check(logic.Phase == "riding" && logic.Train == 7, $"aboard train 7 (phase {logic.Phase})");
+
+            // A car standing farther out (320): blocked at the edge, 260 from its middle, it clicks from there.
+            logic = NewRide(); t = 0; me = board with { Z = 60 };
+            var wide = new Vector3(0, -600, 320);
+            acts = Enumerable.Range(0, 30).Select(_ => At(me, (5, wide))).ToList();
+            int first = acts.IndexOf(SubwayRideLogic.Act.Approach), use = acts.IndexOf(SubwayRideLogic.Act.Use);
+            Check(first >= 0 && use - first is >= 6 and <= 9 && MathF.Abs(logic.UseDistance - 260) < 1, $"blocked: clicks after 0.6 s of no progress ({use - first} ticks, from {logic.UseDistance:F0})");
+        });
+
+        test("Subway ride: rides past other stops on the train's position, Space at its own, done on the platform", () =>
+        {
+            var logic = NewRide();
+            double t = 0;
+            SubwayRideLogic.Act At(Vector3? p, Vector3 car) { var a = logic.Step(t, p, Trains((7, car), (9, new Vector3(-8000, -600, 900)))); t += 0.2; return a; }
+            var spot = new Vector3(30, -600, 240);
+            for (int i = 0; i < 8; i++) At(board, spot);
+            for (int i = 0; i < 20 && logic.Phase != "using"; i++) At(board with { Z = 60 }, spot);
+            At(null, spot); At(null, spot); At(null, spot); At(null, spot); At(null, spot); At(null, spot);
+            Check(logic.Phase == "riding", $"aboard once the position stops reading after the click (phase {logic.Phase})");
+            // Seated, the position does not read: the train's tells where we are. Platform 1's stop: not ours.
+            for (float x = 0; x < 5000; x += 100) Check(At(null, new Vector3(x, -600, 240)) == SubwayRideLogic.Act.Wait, "riding");
+            for (int i = 0; i < 50; i++) Check(At(null, new Vector3(5000, -600, 240)) == SubwayRideLogic.Act.Wait, "no Space at another stop");
+            for (float x = 5000; x < 10000; x += 100) At(null, new Vector3(x, -600, 240));
+            var stop = new Vector3(10000, -600, 240);
+            var acts = Enumerable.Range(0, 12).Select(_ => At(null, stop)).ToList();
+            Check(acts.Count(a => a == SubwayRideLogic.Act.Jump) == 1 && !acts.Contains(SubwayRideLogic.Act.Use) && logic.Phase == "leaving",
+                $"one Space (no right-click) once the train stands 1.5 s at the stop wanted (phase {logic.Phase})");
+            // Put on the platform 220 to the side.
+            var last = SubwayRideLogic.Act.Wait;
+            for (int i = 0; i < 10 && last != SubwayRideLogic.Act.Done; i++) last = At(new Vector3(10000, -600, 20), stop);
+            Check(last == SubwayRideLogic.Act.Done && logic.Landed == 2, $"done on the Outzone platform (landed {logic.Landed})");
+        });
+
+        test("Subway ride: Space once more if still aboard, then a clear failure", () =>
+        {
+            var logic = NewRide();
+            double t = 0;
+            SubwayRideLogic.Act At(Vector3? p, Vector3 car) { var a = logic.Step(t, p, Trains((7, car))); t += 0.2; return a; }
+            var spot = new Vector3(30, -600, 240);
+            for (int i = 0; i < 8; i++) At(board, spot);
+            for (int i = 0; i < 20 && logic.Phase != "using"; i++) At(board with { Z = 60 }, spot);
+            At(spot, spot);
+            Check(logic.Phase == "riding", $"aboard (phase {logic.Phase})");
+            var stop = new Vector3(10000, -600, 240);
+            for (float x = 0; x < 10000; x += 200) At(new Vector3(x, -600, 240), new Vector3(x, -600, 240));
+            var acts = Enumerable.Range(0, 60).Select(_ => At(stop, stop)).ToList();
+            Check(acts.Count(a => a == SubwayRideLogic.Act.Jump) == 2 && acts[^1] == SubwayRideLogic.Act.Fail && logic.Message!.Contains("pressed Space 2 times"),
+                $"two Spaces, then fails: {logic.Message}");
+        });
+
+        test("Subway boarding: clear failures (no train, out of reach, off the edge) and a train that pulls out", () =>
+        {
+            var logic = NewRide();
+            var act = SubwayRideLogic.Act.Wait;
+            // Only the far side's train stands; ours never comes.
+            for (double t = 0; t < SubwayRideLogic.BoardTimeout + 2 && act != SubwayRideLogic.Act.Fail; t += 0.2)
+                act = logic.Step(t, board, Trains((8, new Vector3(0, -600, -450))));
+            Check(act == SubwayRideLogic.Act.Fail && logic.Message!.Contains("No train stopped") && logic.Uses == 0, $"no train: {logic.Message}");
+
+            // Never aboard: four clicks on each of three trains, then a failure naming the distance.
+            logic = NewRide();
+            int key = 1;
+            double t2 = 0;
+            act = SubwayRideLogic.Act.Wait;
+            for (int round = 0; round < 3 && act != SubwayRideLogic.Act.Fail; round++, key++)
+            {
+                var car = new Vector3(0, -600, 240);
+                int before = logic.Uses;
+                for (int i = 0; i < 200 && act != SubwayRideLogic.Act.Fail && !(logic.Phase == "waiting" && logic.Uses > before); i++, t2 += 0.1)
+                    act = logic.Step(t2, board with { Z = 60 }, Trains((key, car)));
+                // It pulls out; the next one comes 30 s later.
+                for (int i = 0; i < 20 && act != SubwayRideLogic.Act.Fail; i++, t2 += 0.1) act = logic.Step(t2, board with { Z = 60 }, Trains((key, new Vector3(i * 100, -600, 240))));
+            }
+            Check(act == SubwayRideLogic.Act.Fail && logic.Message!.Contains("Could not board") && logic.Uses == 12 && logic.Message.Contains("180 units"),
+                $"out of reach: {logic.Message} ({logic.Uses} uses)");
+
+            // Walking up, the floor drops away: stop with a failure, not on down the track.
+            logic = NewRide();
+            act = SubwayRideLogic.Act.Wait;
+            for (double t = 0; t < 1.5; t += 0.1) act = logic.Step(t, board, Trains((7, new Vector3(30, -600, 240))));
+            Check(act == SubwayRideLogic.Act.Approach, "walking up to the train");
+            act = logic.Step(1.6, board with { Z = 80, Y = -646 }, Trains((7, new Vector3(30, -600, 240))));
+            Check(act == SubwayRideLogic.Act.Fail && logic.Message!.Contains("edge"), $"off the edge: {logic.Message}");
+
+            // The train pulls out while we walk up: back to waiting, for the next.
+            logic = NewRide();
+            for (double t = 0; t < 1.5; t += 0.1) logic.Step(t, board, Trains((7, new Vector3(30, -600, 240))));
+            logic.Step(1.6, board, Trains((7, new Vector3(200, -600, 240))));
+            Check(logic.Phase == "waiting" && logic.Uses == 0, $"pulled out before the click: waiting again (phase {logic.Phase})");
+        });
+
+        test("Subway ride without train readings: uses straight ahead, rides on the position, put off elsewhere", () =>
+        {
+            var logic = NewRide();
             double t = 0;
             SubwayRideLogic.Act At(Vector3? p) { var a = logic.Step(t, p); t += 0.2; return a; }
             int uses = 0;
             for (int i = 0; i < 50; i++) if (At(board) == SubwayRideLogic.Act.Use) uses++;
-            Check(logic.Phase == "waiting" && uses == 4, $"uses every 3 s while waiting (phase {logic.Phase}, {uses} uses in 10 s)");
-            // Aboard: seated 220 units out, over the track.
+            Check(logic.Phase == "waiting" && uses == 3, $"after 2 s, uses every 3 s while waiting (phase {logic.Phase}, {uses} uses in 10 s)");
             At(new Vector3(0, -595, 220));
             Check(logic.Phase == "riding", $"aboard once the position moves to the train (phase {logic.Phase})");
-            // Through platform 1: the train stands there 10 s; not ours, no use.
-            for (float x = 0; x < 5000; x += 100) Check(At(new Vector3(x, -595, 220)) == SubwayRideLogic.Act.Wait, "riding");
-            for (int i = 0; i < 50; i++) Check(At(new Vector3(5000, -595, 220)) == SubwayRideLogic.Act.Wait, "no use at another stop");
-            for (float x = 5000; x < 10000; x += 100) At(new Vector3(x, -595, 220));
-            // At ours: still for 1.5 s, then use to step off.
+            for (float x = 0; x < 10000; x += 100) At(new Vector3(x, -595, 220));
             var acts = Enumerable.Range(0, 12).Select(_ => At(new Vector3(10000, -595, 220))).ToList();
-            Check(acts.Contains(SubwayRideLogic.Act.Use) && logic.Phase == "leaving", $"uses the train to step off at the stop wanted (phase {logic.Phase})");
-            // Put on the platform 220 to the side.
-            SubwayRideLogic.Act last = SubwayRideLogic.Act.Wait;
+            Check(acts.Contains(SubwayRideLogic.Act.Jump) && logic.Phase == "leaving", $"Space to leave at the stop wanted (phase {logic.Phase})");
+            var last = SubwayRideLogic.Act.Wait;
             for (int i = 0; i < 10 && last != SubwayRideLogic.Act.Done; i++) last = At(new Vector3(10000, -600, 0));
             Check(last == SubwayRideLogic.Act.Done && logic.Landed == 2, $"done on the Outzone platform (landed {logic.Landed})");
-        });
 
-        test("Subway ride: clear failures (no train, position unreadable aboard) and being put off elsewhere", () =>
-        {
-            var board = new Vector3(0, -600, 0);
-            int PlatformAt(Vector3 p) => MathF.Abs(p.Z) < 100 ? (int)MathF.Round(p.X / 5000) is var i && MathF.Abs(p.X - i * 5000) < 400 ? i : -1 : -1;
-            var logic = new SubwayRideLogic(board, 2, "PLAZA", "OUTZONE", PlatformAt, _ => false);
-            var act = SubwayRideLogic.Act.Wait;
-            for (double t = 0; t < SubwayRideLogic.BoardTimeout + 2 && act != SubwayRideLogic.Act.Fail; t += 0.2) act = logic.Step(t, board);
-            Check(act == SubwayRideLogic.Act.Fail && logic.Message!.Contains("No train"), $"no train: {logic.Message}");
-
-            logic = new SubwayRideLogic(board, 2, "PLAZA", "OUTZONE", PlatformAt, _ => false);
-            act = logic.Step(0, board);   // the first use
-            for (double t = 0.2; t < SubwayRideLogic.RideTimeout + 10 && act != SubwayRideLogic.Act.Fail; t += 0.2) act = logic.Step(t, null);
+            logic = NewRide(_ => false);
+            var act = logic.Step(0, board);
+            for (double s = 0.2; s < 2.2; s += 0.2) act = logic.Step(s, board);   // the first use, after 2 s
+            for (double s = 2.2; s < SubwayRideLogic.RideTimeout + 20 && act != SubwayRideLogic.Act.Fail; s += 0.2) act = logic.Step(s, null);
             Check(act == SubwayRideLogic.Act.Fail && logic.Message!.Contains("Could not read the position"), $"unreadable aboard: {logic.Message}");
 
-            logic = new SubwayRideLogic(board, 2, "PLAZA", "OUTZONE", PlatformAt, _ => false);
-            logic.Step(0, board); logic.Step(0.2, new Vector3(0, -595, 220));
+            logic = NewRide(_ => false);
+            for (double s = 0; s < 2.2; s += 0.2) logic.Step(s, board);
+            logic.Step(2.2, new Vector3(0, -595, 220));
             act = SubwayRideLogic.Act.Wait;
-            for (double t = 0.4; t < 20 && act == SubwayRideLogic.Act.Wait; t += 0.2) act = logic.Step(t, new Vector3(5000, -600, 0));
+            for (double s = 2.4; s < 20 && act == SubwayRideLogic.Act.Wait; s += 0.2) act = logic.Step(s, new Vector3(5000, -600, 0));
             Check(act == SubwayRideLogic.Act.Done && logic.Landed == 1, $"put off at platform 1: reported, to plan again from there (landed {logic.Landed})");
+        });
+
+        test("Live reads: one-off failures retried for up to 1 s; zone changes and lasting faults still fail", () =>
+        {
+            double now = 0;
+            int calls = 0;
+            Func<double> clock = () => now;
+            void Sleep(int ms) => now += ms / 1000.0;
+            const string torn = "Player orientation is not a valid rotation transform.";
+            int value = NeocronSharp.ReadTolerance.Retry(() => ++calls < 4 ? throw new InvalidOperationException(torn) : 42, clock, Sleep);
+            Check(value == 42 && calls == 4 && now < 0.1, $"a torn orientation for three reads passes ({calls} reads, {now:F2} s)");
+            calls = 0; now = 0;
+            try { NeocronSharp.ReadTolerance.Retry<int>(() => { calls++; throw new InvalidOperationException(torn); }, clock, Sleep); Check(false, "should fail"); }
+            catch (InvalidOperationException e) { Check(e.Message == torn && now is >= 0.95 and < 1.1, $"lasting: fails after about 1 s with the same message ({now:F2} s, {calls} reads)"); }
+            foreach (string zone in new[] { "A verified in-world player is unavailable. Log in and finish zoning.", "Player physics identity changed. Finish zoning and restart the test.",
+                         "Player coordinates are not initialized.", "The game closed." })
+            {
+                calls = 0; now = 0;
+                try { NeocronSharp.ReadTolerance.Retry<int>(() => { calls++; throw new InvalidOperationException(zone); }, clock, Sleep); Check(false, "should fail"); }
+                catch (InvalidOperationException e) { Check(e.Message == zone && calls == 1, $"not retried: {zone} ({calls} reads)"); }
+            }
+            foreach (string glitch in new[] { torn, "Player changed during telemetry sampling.", "Client telemetry became unreadable.", "Invalid player coordinates." })
+                Check(NeocronSharp.ReadTolerance.IsTransient(new InvalidOperationException(glitch)), $"transient: {glitch}");
         });
 
         if (!Directory.Exists(install)) return;

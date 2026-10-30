@@ -316,7 +316,7 @@ The step logs (`logs/steer-*.jsonl`, `follow-*.jsonl`) record `lift-*` and `use`
 
 ## The subway (29 Oct, offline)
 
-**Not ridden live yet.** A trip may ride the subway, mainly to leave the city for the wasteland by Outzone Station. The first live try (Plaza 1 → Tech Haven, 29 Oct) walked to Pepper Park 1's entrance and could not get in; both problems are fixed offline below.
+**Not ridden live yet.** The second try (below) reached the platform; boarding and leaving are now reworked offline. A trip may ride the subway, mainly to leave the city for the wasteland by Outzone Station. The first live try (Plaza 1 → Tech Haven, 29 Oct) walked to Pepper Park 1's entrance and could not get in; both problems are fixed offline below.
 
 ### What the files say
 
@@ -387,32 +387,75 @@ The step logs (`logs/steer-*.jsonl`, `follow-*.jsonl`) record `lift-*` and `use`
 - **No floor below the record** (Outzone Station): it walks to the record and on past it, as before.
 - `wasteplan` names these legs "subway stairs".
 
+### The second live try (29 Oct, Plaza 1 → subway)
+
+- The walk entered the subway and reached the Plaza platform (log `steer-20261029-232855-leg2.jsonl`, ending at -5505,-600,-4007).
+- Then it stopped on one bad read, "Player orientation is not a valid rotation transform", as a train pulled in. The ride never started.
+- A train stood at the platform; a right-click on it from the boarding spot got "You cannot reach that!".
+
+### Reading the trains (live, read-only, 29 Oct)
+
+- The trains are in the world's actor registry, which EntityReader skips (it keeps NPCs and characters).
+  - Class (vtable RVA) `0x592c38`; 11 of them, keys 245-255, as the 11 `SubwayTrain` spawns.
+  - Position at `+0xd8`, through the same getter as the player's. Their orientation does not read as a rotation.
+  - The position is the car's middle over the track. Standing at Plaza it was 240 from the boarding spot, toward the track.
+  - The Outzone hall has trains on both sides of its platform (about 400 apart); each boarding spot uses its own side only.
+- `traversal.exe actors` lists every registry node (key, class, position), nearest first. `actors <key>` also dumps that node's floats. It is read-only.
+
+### Reads that fail once (`ReadTolerance`, `LiveReader.cs`)
+
+- Walks, follows and rides now retry one-off read failures for up to 1 s before stopping:
+  - "Player orientation is not a valid rotation transform"
+  - "Player changed during telemetry sampling"
+  - "Client telemetry became unreadable"
+  - "Invalid player coordinates"
+- Zone changes are not retried: they fail with their own messages (player unavailable, physics identity changed, coordinates not initialized). A real teleport still reads, so the jump and sector checks still catch it.
+- On the train, only the position is read (`ReadPosition`), not the orientation.
+
 ### How it rides (`SubwayRide.cs`)
 
 1. Walk to the boarding spot and face the track.
-2. Press "use" (right-click) every 3 s until the train takes you aboard: the position jumps, moves on its own, or stops reading. It gives up after 150 s.
-3. Ride. When the train stands still for 1.5 s beside the platform wanted, press "use" to step off (4 tries at most). Other stops are ignored.
-4. Done when standing on that platform's floor. Put off at another platform: it plans again from there (at most 4 rides a trip).
-5. It gives up after 8 min aboard (a wrong-way train goes to the end of the line and back).
-- Failures start with "Subway:", for example "No train took us aboard", "Could not read the position while on the train".
-- F8 and focus loss stop it, as on a walk. Each ride logs to `logs/steer-*-ride.jsonl`.
+2. **Wait** for a train standing on this platform's track:
+   - its middle is 40-450 units out from the boarding spot, toward the track, and within 700 along it;
+   - it has stood still for 1 s.
+3. **Walk up to it:** face the car's middle and walk toward it until one of these:
+   - within reach: 190 units of the car's middle on the flat;
+   - blocked (under 10 units of progress in 0.5 s);
+   - 300 units walked or 4 s gone.
+   - About the reach: the click from the boarding spot (about 245 from the middle) was too far. 190 is about 100 from the car's side, taking the car to be some 90 each side of its middle. Each click logs its distance and whether it boarded, to refine this.
+4. **Right-click once** (Use), facing the car's middle.
+5. **Aboard** when the position joins the car (within 80 of its middle), moves 90 away, or stops reading for 1 s.
+   - If not aboard within 2.5 s, it walks closer and clicks again. That is 4 clicks a train.
+   - It then waits for the next train. After 3 trains it fails with the distance of the last click.
+   - If the train pulls out first, it waits for the next.
+   - If the floor drops 30 below where it set off (off the edge), it stops with a failure.
+6. **Ride.** The train's own position shows where we are, so it works even when the seated position does not read. Other stops are ignored.
+7. **Leave:** when our train has stood still 1.5 s beside the platform wanted, press **Space** once (keys.ini: SPACE = Jump; scan code 0x39). No right-click.
+   - It is off when the position is on that platform's floor, over 120 from the car's middle, and still.
+   - Not off after 3 s: Space once more. Still not off, or the train moves on: it fails.
+8. Put off at another platform: it plans again from there (at most 4 rides a trip). It gives up after 2.5 min with no train, or 8 min aboard.
+- **Without train readings** (the registry never shows one, after 2 s), it falls back to right-clicking straight ahead every 3 s from where it stands.
+- Failures start with "Subway:", for example "Could not board the train", "No train stopped", "Could not leave the train".
+- F8 and focus loss stop it, as on a walk. Each ride logs to `logs/steer-*-ride.jsonl`: phases, every `use` (with its distance to the car), and `jump`.
 
-### Watch on the first live ride
+### Watch on the next live ride
 
-- **The way in:** where the game changes sector on the way down the stairs or in the room at the bottom. Once it zones, the crossing is learned and used next time.
-- **Boarding:** whether "use" while facing the track boards a standing train. The facing direction comes from the navmesh.
-- **Reading aboard:** whether the position reads while seated and moves with the train. If not, it cannot see the stop and fails after 8 min.
-- **Stepping off:** whether "use" steps off, or the game puts you off by itself (both are handled).
-- **Right-click on the platform:** if a window opens (a box, a terminal), press F8.
+- **Reach:** whether a click from 190 or less (or blocked at the edge) boards. The ride log's `use` lines give each click's distance.
+- **Facing:** the click must land on the car. It faces the car's middle on the flat; the camera's pitch is left as it is.
+- **Reading aboard:** whether the seated position reads. If not, the train's position is used.
+- **Space:** whether one tap leaves the car and puts you 220 to the side on the platform.
 
 ### Offline checks
 
 - `traversal.exe subway`: the halls, boarding spots, track lengths, ride times and the timetable.
 - `traversal.exe wasteplan 500 1 --at -869,-256,790`: the Plaza 1 → Tech Haven trip above.
-- **Engine tests** (`traversal/tests/SubwayTests.cs`, 7 subway tests):
-  - The ride's decisions on made-up readings.
+- **Engine tests** (`traversal/tests/SubwayTests.cs`, 11 subway tests):
+  - Boarding on made-up train readings: waits for a train standing on its own side (not the far side's, not a moving one); walks up and clicks once within 190; clicks again closer; clicks when blocked at the edge.
+  - Riding on the train's position with the seated position unreadable: past another stop, one Space at its own, done on the platform; a second Space, then a clear failure.
+  - Failures: no train, out of reach after 3 trains, off the edge; a train pulling out first. The fallback without train readings.
+  - One-off read failures: retried for up to 1 s; zone-change messages are not.
   - The four halls, and the plans.
   - The timetable: 8 stops, a 329 s loop, Plaza → Outzone 137 s and Pepper Park → Outzone 51 s.
   - The entrances: in Plaza 1 and Pepper Park 1, the walk ends on the room's floor 128 below the landing. It is reached only going down, about 1,000 units from the record, with no right-click. In Pepper Park 1 it is not the corridor where the live push failed.
   - The choice: Plaza 1's own entrance from the live start and from its door, and Pepper Park 1 from the line into Plaza 3.
-- **Results:** 53 of 53 tests pass, and `simcity` passes 36 of 36.
+- **Results:** 57 of 57 tests pass, and `simcity` passes 36 of 36.

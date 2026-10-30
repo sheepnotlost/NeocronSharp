@@ -3,3 +3,14 @@
 1	WorldChange3	ok
 101	WorldChange6	ok
 5	WorldChange9	Walked through the exit point but the game did not change sector.
+1	WorldChange1	ok
+1000	WorldChange13	no walkable route on the navmesh
+1000	worldchange20	no walkable route on the navmesh
+1000	WorldChange8	no walkable route on the navmesh
+1000	WorldChange15	no walkable route on the navmesh
+1000	WorldChange12	no walkable route on the navmesh
+1000	WorldChange10	no walkable route on the navmesh
+1000	WorldChange9	no walkable route on the navmesh
+1000	WorldChange11	no walkable route on the navmesh
+1000	WorldChange15	Walked through the exit point but the game did not change sector.
+2008	WorldChange1@outzone_st2t	Walked through the exit point but the game did not change sector.

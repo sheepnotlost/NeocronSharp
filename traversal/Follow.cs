@@ -98,7 +98,7 @@ internal static class FollowCommand
         if (id.StartsWith("0x")) id = id[2..];
 
         using var reader = new PlayerReader(ClientExecutable());
-        var sample = reader.ReadSample();
+        var sample = reader.ReadSteady();
         int sector = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
         var target = Followable(ReadSnapshot(reader)).FirstOrDefault(n => Id(n.Entity) == id)?.Entity
             ?? throw new InvalidOperationException($"Nobody with id {id} is nearby any more. Press Refresh and pick again.");
@@ -150,7 +150,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         using var input = new SteerInput(reader, pulse, run);
         var clock = Stopwatch.StartNew();
         string title = $"FOLLOW  {target.Name}";
-        var origin = reader.ReadSample();
+        var origin = reader.ReadSteady();
         var previous = origin;
         double previousAt = 0;
         bool riding = false;   // in a gravity lift: only a sideways jump is a teleport
@@ -166,7 +166,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             if ((Native.GetAsyncKeyState(0x77) & 0x8000) != 0) throw new OperationCanceledException("F8 stop pressed.");
             reader.RequireForeground();
             PlayerSample s;
-            try { s = reader.ReadSample(); }
+            try { s = reader.ReadSteady(); }
             catch (InvalidOperationException) { throw new InvalidOperationException("Your character could not be read (zoning?). Follow stopped."); }
             if (s.Player != origin.Player || s.World != origin.World || s.Physics != origin.Physics)
                 throw new InvalidOperationException("You changed zone (the player or world changed). Follow stopped; following through zones is not supported yet.");
