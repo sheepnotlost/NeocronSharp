@@ -459,3 +459,7 @@ The step logs (`logs/steer-*.jsonl`, `follow-*.jsonl`) record `lift-*` and `use`
   - The entrances: in Plaza 1 and Pepper Park 1, the walk ends on the room's floor 128 below the landing. It is reached only going down, about 1,000 units from the record, with no right-click. In Pepper Park 1 it is not the corridor where the live push failed.
   - The choice: Plaza 1's own entrance from the live start and from its door, and Pepper Park 1 from the line into Plaza 3.
 - **Results:** 57 of 57 tests pass, and `simcity` passes 36 of 36.
+
+## Camera follow (Target Acquisition tab)
+
+`traversal camera <entity id from nearby> [--pulse N]` keeps the view on an actor without walking: the same target reading as Follow (`TargetWatch`) and the same steering (`Steering.Decide`, `TurnController`), aimed at the target itself. It sends mouse pulses only, left and right, never a movement key or a click, so the player keeps moving by hand. Mouse gain comes from one small turn; there is no test step. Guards: F8, focus, identity and sector; it ends when the target dies, goes, or is out of range. Steps are logged to `logs/camera-*.jsonl`. **Not tried live.** Up and down is not followed.

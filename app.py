@@ -52,8 +52,8 @@ class App:
         self.editable = []
         self.root.title("NeocronSharp")
         self.root.iconbitmap(str(ROOT / "assets" / "research-tool.ico"))
-        self.root.geometry("1040x840")
-        self.root.minsize(960, 800)
+        self.root.geometry("1160x840")
+        self.root.minsize(1140, 800)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         load_error = None
         if self.profile_path.exists():
@@ -109,6 +109,7 @@ class App:
         self.construction_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
         self.traversal_tab = ttk.Frame(self.tabs)
+        self.target_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
         from neocronsharp_link import TABS as SHARP_TABS
         self.sharp_tabs = {name: ttk.Frame(self.tabs) for name, _ in SHARP_TABS}
@@ -116,6 +117,7 @@ class App:
         self.tabs.add(self.construction_tab, text="Construction")
         self.tabs.add(self.recycling_tab, text="Recycling")
         self.tabs.add(self.traversal_tab, text="Traversal")
+        self.tabs.add(self.target_tab, text="Target Acquisition")
         self.tabs.add(self.counter_tab, text="Tech Counter")
         for page, tab in self.sharp_tabs.items():
             self.tabs.add(tab, text=page)
@@ -326,6 +328,10 @@ class App:
         Without a tracker (the tests) it does not read the game until Refresh is pressed."""
         from traversal_tab import TraversalTab
         self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
+        from target_tab import TargetTab
+        self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
+                              other_live=lambda:self.traversal.process is not None)
+        self.traversal.other_live=lambda:self.target.process is not None
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -789,7 +795,7 @@ class App:
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
         browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
-                 or self.selected_sharp_page() is not None or self.tabs.select()==str(self.traversal_tab))
+                 or self.selected_sharp_page() is not None or self.tabs.select() in (str(self.traversal_tab),str(self.target_tab)))
         self.start_button.configure(state="disabled" if browser else "normal")
 
     def materials_for(self,key):
@@ -892,6 +898,8 @@ class App:
             raise ValueError(f"{self.selected_sharp_page()} shows NeocronSharp; Start is for the macro tabs.")
         if self.tabs.select()==str(self.traversal_tab):
             raise ValueError("Traversal walks with its own buttons; Start is for the macro tabs.")
+        if self.tabs.select()==str(self.target_tab):
+            raise ValueError("Target Acquisition uses its own buttons; Start is for the macro tabs.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
@@ -1142,6 +1150,7 @@ class App:
 
     def close(self):
         if hasattr(self,"traversal"):self.traversal.close()  # F8 any walk it started
+        if hasattr(self,"target"):self.target.close()
         self.cancel_work()
         if self.active():
             self.root.after(50, self.close)

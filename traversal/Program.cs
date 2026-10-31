@@ -39,6 +39,7 @@ try
         case "steer": return Live(rest, steer: true);
         case "nearby": return FollowCommand.Nearby(rest);
         case "follow": return FollowCommand.Follow(rest, root, pulse, run);
+        case "camera": return FollowCommand.Camera(rest, root, pulse);
         case "places":
         {
             var procs = Process.GetProcessesByName("neocronclient");

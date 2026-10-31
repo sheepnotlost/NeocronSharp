@@ -10,7 +10,7 @@ The application is named NeocronSharp. The primary folder, local shortcut, porta
 
 ## Shared interface and controls
 
-- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button.
+- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal and Target Acquisition use their own buttons (traversal.exe; Target Acquisition's `camera` command sends left/right mouse movement only, and only one of them may steer at a time).
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
 
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.

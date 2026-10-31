@@ -1,13 +1,56 @@
 using System.Numerics;
 using NavmeshPrototype;
+using NeocronSharp.Core;
 
 /// <summary>Offline tests for following an actor: the distance band, the gap and the replan decision (<see cref="FollowLogic"/>).</summary>
 internal static class FollowTests
 {
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 
+    private static WorldEntity Actor(string name, Vector3 at, EntityKind kind = EntityKind.Player, PlayerDetails? player = null) =>
+        new(new EntityIdentity(1, 2, 3, 4, 0, kind), name, at, "test", Player: player);
+
     public static void Run(Action<string, Action> test)
     {
+        test("Target watch: follows the actor, and rides out misses and a registry caught mid-update", () =>
+        {
+            long now = 0;
+            var buddy = Actor("Buddy", new Vector3(1, 0, 1));
+            IReadOnlyList<WorldEntity> seen = [buddy with { Position = new Vector3(50, 0, 60) }];
+            bool torn = false;
+            var watch = new TargetWatch(buddy, () => torn ? throw new InvalidOperationException("mid-update") : seen, () => now, 100, "Stopped.");
+            Check(watch.Read() == null && watch.SeenAt.X == 50, "its new position is read");
+            seen = [buddy with { Position = new Vector3(70, 0, 60) }];
+            now = 50;
+            Check(watch.Read() == null && watch.SeenAt.X == 50, "not read again before the interval");
+            now = 100;
+            torn = true;
+            Check(watch.Read() == null, "a torn read is not the end");
+            torn = false;
+            seen = [];
+            for (int i = 0; i < 3; i++) { now += 100; Check(watch.Read() == null, "three misses are not the end"); }
+            seen = [buddy];
+            now += 100;
+            Check(watch.Read() == null, "back again: the misses start over");
+            seen = [];
+            for (int i = 0; i < 3; i++) { now += 100; watch.Read(); }
+            now += 100;
+            Check(watch.Read() == "Buddy is gone (out of range, logged off, despawned, or went through a door). Stopped.", "the fourth miss in a row ends it");
+        });
+
+        test("Target watch: another actor at a reused address is not the target, a nameless read is", () =>
+        {
+            long now = 0;
+            var buddy = Actor("Buddy", default);
+            IReadOnlyList<WorldEntity> seen = [Actor("?", new Vector3(9, 0, 9), EntityKind.UnclassifiedCharacter)];
+            var watch = new TargetWatch(buddy, () => seen, () => now, 100, "Stopped.", at => $"crossed from {at.X}");
+            Check(watch.Read() == null && watch.SeenAt.X == 9, "a name that failed to read is still them");
+            seen = [Actor("Stranger", new Vector3(500, 0, 500))];
+            for (int i = 0; i < 3; i++) { now += 100; Check(watch.Read() == null && watch.SeenAt.X == 9, "a stranger never moves the aim"); }
+            now += 100;
+            Check(watch.Read() == "crossed from 9", "and counts as gone, with the zone-exit reason when there is one");
+        });
+
         test("Follow band: stops inside the distance and only sets off again past the resume line", () =>
         {
             var band = new FollowBand(150);

@@ -193,6 +193,7 @@ class TraversalTab:
     def __init__(self, parent, root, autoload=True):
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
+        self.other_live = lambda: False     # the Target Acquisition tab is steering the same mouse
         self.queue = queue.Queue()
         self.process = None                 # the live walk or follow
         self.live_kind = None
@@ -522,6 +523,9 @@ class TraversalTab:
         place = self.selected_place()
         if self.busy or self.process is not None or not walkable(place):
             return
+        if self.other_live():
+            self.append("The camera is following someone on the Target Acquisition tab. Stop it first.")
+            return
         where = place["zoneName"] if place["kind"] == "Zone" else f"{title(place['name'])} in {place['zoneName']}"
         args = ["travel", str(place["zone"]), place["target"], "--pulse", "12"] + (["--run"] if self.run.get() else [])
         self.clear_log()
@@ -615,6 +619,9 @@ class TraversalTab:
     def follow(self):
         actor = self.selected_actor()
         if self.busy or self.process is not None or actor is None or actor["dead"]:
+            return
+        if self.other_live():
+            self.append("The camera is following someone on the Target Acquisition tab. Stop it first.")
             return
         distance = self.follow_distance()
         self.distance.set(str(distance))

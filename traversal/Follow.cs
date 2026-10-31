@@ -94,15 +94,11 @@ internal static class FollowCommand
             rest.RemoveRange(d, 2);
         }
         if (rest.Count < 1) throw new InvalidOperationException("Usage: follow <entity id from 'nearby'> [--distance 150] [--run]");
-        string id = rest[0].Trim().ToLowerInvariant();
-        if (id.StartsWith("0x")) id = id[2..];
 
         using var reader = new PlayerReader(ClientExecutable());
         var sample = reader.ReadSteady();
         int sector = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
-        var target = Followable(ReadSnapshot(reader)).FirstOrDefault(n => Id(n.Entity) == id)?.Entity
-            ?? throw new InvalidOperationException($"Nobody with id {id} is nearby any more. Press Refresh and pick again.");
-        if (Dead(target)) throw new InvalidOperationException($"{target.Name} is dead.");
+        var target = Pick(reader, rest[0]);
         var band = new FollowBand(distance);
         Console.WriteLine($"Following {target.Name} ({Kind(target)}) at {band.Distance:F0} units{(band.Distance != distance ? $" (asked {distance:F0}; allowed {FollowBand.MinDistance:F0}-{FollowBand.MaxDistance:F0})" : "")}.");
 
@@ -131,6 +127,30 @@ internal static class FollowCommand
         Console.WriteLine(why);
         return 0;
     }
+
+    /// <summary>The living, nearby actor with this id from 'nearby'.</summary>
+    private static WorldEntity Pick(PlayerReader reader, string idText)
+    {
+        string id = idText.Trim().ToLowerInvariant();
+        if (id.StartsWith("0x")) id = id[2..];
+        var target = Followable(ReadSnapshot(reader)).FirstOrDefault(n => Id(n.Entity) == id)?.Entity
+            ?? throw new InvalidOperationException($"Nobody with id {id} is nearby any more. Press Refresh and pick again.");
+        if (Dead(target)) throw new InvalidOperationException($"{target.Name} is dead.");
+        return target;
+    }
+
+    /// <summary>camera &lt;entity id&gt; [--pulse N]: live, turns the camera to keep facing the target; never walks or clicks.</summary>
+    public static int Camera(List<string> rest, string root, int pulse)
+    {
+        if (rest.Count < 1) throw new InvalidOperationException("Usage: camera <entity id from 'nearby'>");
+        using var reader = new PlayerReader(ClientExecutable());
+        var target = Pick(reader, rest[0]);
+        string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+        using var hud = new Hud();
+        Travel.FocusGame(reader.Window);
+        Console.WriteLine(new CameraWatch(reader, target, pulse, hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        return 0;
+    }
 }
 
 /// <summary>The live follow loop. Ends by returning why it stopped, or by throwing (F8, focus, zone change, stuck).</summary>
@@ -138,7 +158,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
     LiveSteer.Calibration calibration, int pulse, bool run, Hud hud, string logPath,
     IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName)
 {
-    private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150, MissesToLose = 4;
+    private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
     private const int MaxStalls = 3, MaxOffRoutePer20s = 6;
 
@@ -196,52 +216,21 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         }
 
         // ---- the target ----
-        Vector3 seenAt = target.Position;
-        long readAt = -ReadEveryMs;
-        int misses = 0, unreadable = 0;
-        // Returns why the target is gone, or null while it is still there.
-        string? ReadTarget()
-        {
-            if (clock.ElapsedMilliseconds - readAt < ReadEveryMs) return null;
-            readAt = clock.ElapsedMilliseconds;
-            WorldEntity? live = null;
-            try
-            {
-                live = reader.ReadEntities().Entities.FirstOrDefault(e => e.Identity.Node == target.Identity.Node && e.Identity.Physics == target.Identity.Physics);
-            }
-            catch (InvalidOperationException e)
-            {
-                // Caught the registry mid-update: try again next time. For seconds on end, give up.
-                if (++unreadable >= 20) throw new InvalidOperationException($"The actors around you could not be read for 3 s ({e.Message}). Follow stopped.");
-                return null;
-            }
-            unreadable = 0;
-            // A different actor at a reused address is not the target. (A player's name can fail to
-            // read for a moment, showing as an unclassified character; that is still them.)
-            if (live != null && live.Name != target.Name && live.Identity.Kind != EntityKind.UnclassifiedCharacter) live = null;
-            if (live == null)
-            {
-                if (++misses < MissesToLose) return null;
-                var exit = FollowLogic.NearestExit(seenAt, exits);
-                return exit is { } x
-                    ? $"{target.Name} crossed the zone line toward {sectorName(x.To)} (last seen {PointNavigation.Distance(seenAt, x.Position):F0} units from that exit). Follow stopped; following through zones is not supported yet."
-                    : $"{target.Name} is gone (out of range, logged off, despawned, or went through a door). Follow stopped.";
-            }
-            misses = 0;
-            if (live.Stats?.Dead == true || live.Player?.Dead == true) return $"{target.Name} died. Follow stopped.";
-            seenAt = live.Position;
-            return null;
-        }
+        // Vanished near a zone exit: it most likely crossed.
+        string? Crossed(Vector3 seenAt) => FollowLogic.NearestExit(seenAt, exits) is { } x
+            ? $"{target.Name} crossed the zone line toward {sectorName(x.To)} (last seen {PointNavigation.Distance(seenAt, x.Position):F0} units from that exit). Follow stopped; following through zones is not supported yet."
+            : null;
+        var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Follow stopped.", Crossed);
 
         // ---- the route ----
         Plan? plan = null;
         double unreachableSince = -1, retryAt = 0;
         Plan? MakePlan(Vector3 from)
         {
-            var corners = nav.RouteNear(from, seenAt, out bool complete);
+            var corners = nav.RouteNear(from, watch.SeenAt, out bool complete);
             // On the target's floor, not the one under it (gravity lifts join stacked floors).
-            if (corners.Count < 2 || !complete || MathF.Abs(corners[^1].Y - seenAt.Y) > 150) return null;
-            return new(new RouteFollower(corners), seenAt, PointNavigation.Distance(corners[^1], seenAt), clock.Elapsed.TotalSeconds);
+            if (corners.Count < 2 || !complete || MathF.Abs(corners[^1].Y - watch.SeenAt.Y) > 150) return null;
+            return new(new RouteFollower(corners), watch.SeenAt, PointNavigation.Distance(corners[^1], watch.SeenAt), clock.Elapsed.TotalSeconds);
         }
 
         try
@@ -254,7 +243,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             var first = Guard();
             Vector3 lastForward = first.Forward;
             plan = MakePlan(first.Position);
-            float startGap = FollowLogic.Gap(FollowLogic.Straight(first.Position, seenAt), plan?.Route.Remaining, plan?.Miss ?? 0);
+            float startGap = FollowLogic.Gap(FollowLogic.Straight(first.Position, watch.SeenAt), plan?.Route.Remaining, plan?.Miss ?? 0);
             band.Start(startGap);
             Record("start", first, new { target = target.Name, id = FollowCommand.Id(target), distance = band.Distance, resume = band.Resume, calibration.Speed, calibration.Gain });
             Console.WriteLine($"Following. Stops within {band.Distance:F0} units and sets off again past {band.Resume:F0}. F8 stops.");
@@ -267,12 +256,12 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             {
                 var s = Guard();
                 double now = clock.Elapsed.TotalSeconds;
-                if (ReadTarget() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { seenAt.X, seenAt.Y, seenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
+                if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
 
-                float straight = FollowLogic.Straight(s.Position, seenAt);
+                float straight = FollowLogic.Straight(s.Position, watch.SeenAt);
                 float off = plan?.Route.Update(s.Position) ?? 0;
                 float gap = FollowLogic.Gap(straight, plan?.Route.Remaining, plan?.Miss ?? 0);
-                var why = FollowLogic.Decide(plan != null, plan == null ? 0 : PointNavigation.Distance(plan.Goal, seenAt), gap, band.Moving ? off : 0,
+                var why = FollowLogic.Decide(plan != null, plan == null ? 0 : PointNavigation.Distance(plan.Goal, watch.SeenAt), gap, band.Moving ? off : 0,
                     plan?.Route.Remaining ?? 0, plan == null ? 0 : now - plan.At);
                 // With no route, retry twice a second rather than every tick.
                 if (why == FollowReplan.First && now < retryAt) why = FollowReplan.None;
@@ -295,7 +284,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     else
                     {
                         retryAt = now + 0.5;
-                        if (unreachableSince < 0) { unreachableSince = now; Record("unreachable", s, new { seenAt = new[] { seenAt.X, seenAt.Y, seenAt.Z } }); }
+                        if (unreachableSince < 0) { unreachableSince = now; Record("unreachable", s, new { seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); }
                     }
                 }
 
@@ -328,7 +317,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     try { rider.Ride(l.Link); }
                     finally { riding = false; }
                     s = Guard();
-                    ReadTarget();
+                    watch.Read();
                     plan = MakePlan(s.Position);
                     Record("replan", s, new { why = "lift", corners = plan?.Route.Corners.Count ?? 0 });
                     stallFrom = s.Position; stallMark = clock.Elapsed.TotalSeconds; stalls = 0; turningSince = -1; lastPixels = 0;
@@ -348,7 +337,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 lastPixels = sent;
                 hud.Show(Hud.Green, title, $"{gap:F0} units away, stopping at {band.Distance:F0}",
                     $"{(decision.Walk ? (run ? "running" : "walking") : "turning in place")}   F8 stops");
-                Record("steer", s, new { aim = new[] { aim.X, aim.Y, aim.Z }, decision.Angle, pixels = sent, off, gap, target = new[] { seenAt.X, seenAt.Z } });
+                Record("steer", s, new { aim = new[] { aim.X, aim.Y, aim.Z }, decision.Angle, pixels = sent, off, gap, target = new[] { watch.SeenAt.X, watch.SeenAt.Z } });
                 if (!decision.Walk)
                 {
                     if (turningSince < 0) turningSince = now;

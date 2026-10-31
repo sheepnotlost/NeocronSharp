@@ -4,6 +4,12 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ## Implementation and fixes
 
+### Target Acquisition tab — 31 October 2026
+
+- [x] New suite tab: Follow's list of players and NPCs, with Track, Stop (F8), Refresh and its own log. traversal.exe's new `camera <id>` command keeps the view on the target with Follow's steering: mouse pulses only, left and right, no movement keys and no clicks, and no navmesh or test step (mouse gain comes from one small turn).
+- [x] Follow's target reading moved into `TargetWatch` (traversal/CameraFollow.cs), shared by the walk and the camera, with tests. Traversal and Target Acquisition refuse to start while the other is steering. Window minimum is now 1140 px wide so the eleven tabs fit in every skin (checked on screen in all 15).
+- [ ] Not tried live: the camera follow itself. Up and down is not followed.
+
 ### Construction queue — 29 October 2026
 
 - [x] Construction → Job has a Queue: rows of (recipe, count) added from the job form (its Materials saved as that recipe's GoGuardian labels), removed, moved up/down, cleared; selecting a row fills the form. Saved in the profile (`construction.queue`, at most 100 rows; removing a recipe drops its rows).
