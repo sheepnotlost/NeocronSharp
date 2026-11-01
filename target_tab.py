@@ -51,7 +51,7 @@ class TargetTab:
         self.heal_name = None               # the fighter a healer alone keeps going back to
         self.heal_retry = None              # its next look
         self.last_line = ""                 # the engine's latest words
-        self.measured = []                  # the first follow's calibration and gains, so a retry needs no test moves
+        self.measured = {}                  # what the first follow measured, so a retry needs no test moves
         self.looting = None                 # the running hunt's Control
         self.loot_start = None              # its 5 s countdown
         self.queue = queue.Queue()
@@ -354,12 +354,13 @@ class TargetTab:
         self.update_buttons()
 
     def start_alone(self, fighter_id):
-        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", "--run", *self.measured])
+        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", "--run",
+                          *[word for pair in self.measured.items() for word in pair]])
 
     def remember(self, line):
         found = re.match(r"\s*(calibration|gains) (\S+) (\S+)\s*$", line)
         if found:
-            self.measured += [f"--{found.group(1)}", f"{found.group(2)},{found.group(3)}"]
+            self.measured[f"--{found.group(1)}"] = f"{found.group(2)},{found.group(3)}"
 
     def find_fighter(self):
         """A healer alone, some time after its follow ended: is the fighter here and alive?"""
@@ -465,7 +466,7 @@ class TargetTab:
             self.update_buttons()
             return
         self.heal_name = None
-        self.measured = []
+        self.measured = {}
         self.track_button.configure(text="Track")
         self.heal_button.configure(text="Follow and heal")
         self.update_buttons()

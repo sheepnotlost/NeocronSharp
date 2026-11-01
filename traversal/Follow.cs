@@ -127,7 +127,8 @@ internal static class FollowCommand
         string stamp = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}";
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        var calibration = known;
+        // A healer does without the test step: in a VM slow frames failed it three runs in three (1 Nov). TurnController learns the gain as it walks.
+        var calibration = known ?? (heal ? FollowWalk.Typical : null);
         if (calibration == null)
         {
             // LiveSteer's own countdown and calibration (test step + turn probe), then nothing else.
@@ -142,7 +143,6 @@ internal static class FollowCommand
             var measure = new CameraWatch(reader, target, pulse, new CameraPlan(Now: true, MeasureOnly: true), hud, Path.Combine(logs, $"camera-{stamp}-gain.jsonl"));
             measure.Run();
             aim = measure.Measured;
-            if (aim is { } measured) Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {measured.Yaw} {measured.Pitch}"));
         }
 
         var exits = nav.World.Summary.Features.Where(f => f.Kind == "WorldChange"
@@ -239,6 +239,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
     private const int MaxStalls = 3, MaxOffRoutePer20s = 6;
     private const float RouteRanOut = 20;
+    /// <summary>Measured live on 29 Oct.</summary>
+    public static readonly LiveSteer.Calibration Typical = new(190, 0.0024f);
 
     private sealed record Plan(RouteFollower Route, Vector3 Goal, float Miss, double At);
 
@@ -272,7 +274,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             int? now = reader.ReadSectorId(s.World);
             if (now != sector)
                 throw new InvalidOperationException($"You changed zone, to {(now is { } n ? sectorName(n) : "a loading screen")}. Follow stopped; following through zones is not supported yet.");
-            double t = clock.Elapsed.TotalSeconds, dt = previousAt == 0 ? 0 : t - previousAt;
+            // Timed from the position's last change: at a few frames a second it stands still, then moves a whole frame's worth.
+            double t = clock.Elapsed.TotalSeconds, dt = t - previousAt;
             float jump = riding ? PointNavigation.Distance(s.Position, previous.Position) : Vector3.Distance(s.Position, previous.Position);
             if (jump > 60 + 900 * (float)Math.Min(dt, 2))
             {
@@ -280,7 +283,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 if (jumps.TooMany(t)) throw new InvalidOperationException($"Unexpected position jumps ({jump:F0} units in {dt:F2} s, the third in {PositionJumps.WithinSeconds:F0} s). Stopped.");
                 Record("jump", s, new { jump, dt });
             }
-            previous = s; previousAt = t;
+            if (s.Position != previous.Position) previousAt = t;
+            previous = s;
             return s;
         }
 
