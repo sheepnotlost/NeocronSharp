@@ -4,13 +4,16 @@ Follow's target list without the walk: the work is done by traversal.exe's "came
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 The loot sequence (loot_runner.py) repeats fight, run and loot on the NPC names you add.
+Follow and heal runs without focus: traversal.exe's "heal" keeps your place beside a player, casting every 30 s.
 """
+import os
 import queue
 import subprocess
 import threading
 import tkinter as tk
 from tkinter import ttk
 
+import clients
 import traversal_tab as tt
 from macro_core import Control
 
@@ -50,6 +53,12 @@ class TargetTab:
         self.hold_left = tk.BooleanVar(value=False)
         self.hold_check = ttk.Checkbutton(top, text="Hold left mouse button (NPCs only)", variable=self.hold_left)
         self.hold_check.pack(side="left", padx=(12, 0))
+        ttk.Label(top, text="Client:").pack(side="left", padx=(12, 0))
+        self.client = tk.StringVar()
+        self.client_box = ttk.Combobox(top, textvariable=self.client, state="readonly", width=30)
+        self.client_box.pack(side="left", padx=6)
+        self.client_box.bind("<<ComboboxSelected>>", lambda e: self.client_chosen())
+        self.clients = []
         self.status = tk.StringVar(value="Press Refresh to see who is around you.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
             row=1, column=0, sticky="ew", pady=(8, 4))
@@ -73,7 +82,8 @@ class TargetTab:
         self.track_button = ttk.Button(buttons, text="Track", command=self.track)
         self.stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
         self.refresh_button = ttk.Button(buttons, text="Refresh", command=self.refresh)
-        for button in (self.track_button, self.stop_button, self.refresh_button):
+        self.heal_button = ttk.Button(buttons, text="Follow and heal", command=self.heal)
+        for button in (self.track_button, self.stop_button, self.refresh_button, self.heal_button):
             button.pack(side="left", padx=(0, 6))
         ttk.Label(buttons, text="Tab in-game first. You do the walking; F8 stops.").pack(side="left", padx=(6, 0))
         loot = ttk.Frame(host)
@@ -123,6 +133,7 @@ class TargetTab:
         self.loot_button.configure(state="normal" if idle and names and self.loot_runner else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
+        self.heal_button.configure(state="normal" if idle and actor is not None and actor["kind"] == "player" and not actor["dead"] else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
         self.stop_button.configure(state="normal" if self.steering() else "disabled")
 
@@ -140,6 +151,8 @@ class TargetTab:
                 kind, payload = self.queue.get_nowait()
                 if kind == "log":
                     self.append(payload)
+                elif kind == "clients":
+                    self.show_clients(payload)
                 elif kind == "nearby":
                     self.busy = False
                     self.show_nearby(payload)
@@ -163,11 +176,26 @@ class TargetTab:
                 problem = tt.build_tool(lambda text: self.queue.put(("log", text)))
                 if problem:
                     raise RuntimeError(problem)
+                found = clients.list_clients()
+                # Keep a choice that is still open; with no choice to make, there is nothing to name.
+                if os.environ.get("NEOCRON_PID") not in [str(c["pid"]) for c in found]:
+                    clients.choose(found[0]["pid"] if len(found) > 1 else None)
+                self.queue.put(("clients", found))
                 result = ("ok", tt.run_tool(["nearby"], track=self.offline))
             except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
                 result = ("error", str(exc))
             self.queue.put(("nearby", result))
         threading.Thread(target=work, daemon=True, name="target-nearby").start()
+
+    def show_clients(self, found):
+        self.clients = found
+        self.client_box.configure(values=[c["label"] for c in found])
+        chosen = os.environ.get("NEOCRON_PID")
+        self.client.set(next((c["label"] for c in found if str(c["pid"]) == chosen), found[0]["label"] if found else ""))
+
+    def client_chosen(self):
+        clients.choose(next(c["pid"] for c in self.clients if c["label"] == self.client.get()))
+        self.refresh()
 
     def show_nearby(self, result):
         state, data = result
@@ -211,6 +239,23 @@ class TargetTab:
         try:
             self.start_live(["camera", actor["id"], "--pulse", "24", *(["--hold-left"] if hold else [])])
             self.track_button.configure(text="Tracking...")
+        except (OSError, RuntimeError) as exc:
+            self.process = None
+            self.append("Could not start: " + str(exc))
+        self.update_buttons()
+
+    def heal(self):
+        """The client chosen above is the healer. It needs no focus: put the crosshair on the player, then start."""
+        actor = self.selected()
+        if self.busy or self.steering() or actor is None or actor["dead"] or actor["kind"] != "player":
+            return
+        if self.other_live():
+            self.append("A walk or follow is running on the Traversal tab. Stop it first.")
+            return
+        self.append(f"Following {actor['name']} from where you stand now. Casting every 30 s.")
+        try:
+            self.start_live(["heal", actor["id"]])
+            self.heal_button.configure(text="Healing...")
         except (OSError, RuntimeError) as exc:
             self.process = None
             self.append("Could not start: " + str(exc))
@@ -282,7 +327,8 @@ class TargetTab:
     def finished(self):
         self.process = None
         self.track_button.configure(text="Track")
-        self.append("Camera follow ended.")
+        self.heal_button.configure(text="Follow and heal")
+        self.append("Ended.")
         self.update_buttons()
         self.refresh()
 

@@ -1,10 +1,12 @@
 """Target Acquisition tab: the actor list and the camera command, from canned engine JSON (no engine, no input)."""
+import os
 from pathlib import Path
 import tempfile
 import tkinter as tk
 import unittest
 from unittest.mock import patch
 
+import clients
 import target_tab
 from test_traversal_tab import NEARBY
 
@@ -66,6 +68,33 @@ class TargetTabTests(unittest.TestCase):
         start.assert_called_once_with(["camera", "p1", "--pulse", "24"])
         self.assertNotIn("left mouse button", self.log())
 
+    def test_follow_and_heal_is_for_living_players(self):
+        children = self.tab.tree.get_children()
+        self.tab.tree.selection_set(children[3])
+        self.root.update()
+        self.assertEqual(str(self.tab.heal_button.cget("state")), "disabled")
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.heal()
+        start.assert_not_called()
+        self.tab.tree.selection_set(children[0])
+        self.root.update()
+        self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.heal()
+        start.assert_called_once_with(["heal", "p1"])
+
+    def test_two_clients_are_told_apart_and_the_choice_reaches_the_engine(self):
+        found = [{"pid": 11, "label": "HLT 768, PSI 433 (11)"}, {"pid": 22, "label": "HLT 913, PSI 7 (22)"}]
+        self.addCleanup(clients.choose, None)
+        clients.choose(22)
+        self.tab.show_clients(found)
+        self.assertEqual(self.tab.client.get(), found[1]["label"])
+        self.tab.client.set(found[0]["label"])
+        with patch.object(self.tab, "refresh") as refresh:
+            self.tab.client_chosen()
+        refresh.assert_called_once()
+        self.assertEqual(os.environ["NEOCRON_PID"], "11")
+
     def test_will_not_start_while_a_walk_steers_the_same_mouse(self):
         self.walking = True
         self.tab.tree.selection_set(self.tab.tree.get_children()[0])
@@ -84,6 +113,17 @@ class TargetTabTests(unittest.TestCase):
         self.assertFalse(self.tab.tree.get_children())
         self.tab.show_nearby(("error", "The engine printed nothing."))
         self.assertEqual(self.tab.status.get(), "The engine printed nothing.")
+
+
+class ClientTests(unittest.TestCase):
+    def test_labels(self):
+        self.assertEqual(clients.label(30132, {"HLT": 768, "PSI": 433}), "HLT 768, PSI 433 (30132)")
+        self.assertEqual(clients.label(5, {}), "Client 5")
+
+    def test_only_one_client_needs_no_reading(self):
+        with patch.object(clients, "windows", return_value={7: 1}), patch.object(clients, "capture") as capture:
+            self.assertEqual(clients.list_clients(), [{"pid": 7, "label": "Client 7"}])
+        capture.assert_not_called()
 
 
 class AppTests(unittest.TestCase):

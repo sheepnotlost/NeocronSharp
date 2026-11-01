@@ -40,6 +40,7 @@ try
         case "nearby": return FollowCommand.Nearby(rest);
         case "follow": return FollowCommand.Follow(rest, root, pulse, run);
         case "camera": return FollowCommand.Camera(rest, root, pulse);
+        case "heal": return FollowCommand.Heal(rest, root);
         case "places":
         {
             var procs = Process.GetProcessesByName("neocronclient");

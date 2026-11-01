@@ -21,6 +21,29 @@ internal static class FollowTests
             Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
         });
 
+        test("Heal follow: keeps its place beside the target, and only casts when in it", () =>
+        {
+            var facing = new Vector3(0.8f, 0, 0.6f);
+            var you = new Vector3(100, 0, 100);
+            var target = you + facing * 120;
+            var place = Formation.Place(facing, you, target);
+            Check(MathF.Abs(place.Forward - 120) < 0.01f && MathF.Abs(place.Right) < 0.01f, "the target straight ahead");
+            var still = Formation.Error(facing, you, target, place);
+            Check(MathF.Abs(still.Forward) < 0.01f && MathF.Abs(still.Right) < 0.01f && Formation.InPlace(still), "nothing moved, nothing to do");
+            // Live: with this facing D moved (-6.2, 8.2) and W (9.3, 6.9). A target that goes D's way wants D.
+            var sideways = Formation.Error(facing, you, target + new Vector3(-30, 0, 40), place);
+            Check(sideways.Right > 45 && MathF.Abs(sideways.Forward) < 0.01f, "right is D's direction");
+            Check(!Formation.InPlace(sideways), "off to the side does not cast");
+            Check(Formation.Ahead(place) && Formation.Ahead((100, -20)), "the target about under the crosshair");
+            Check(!Formation.Ahead((-170, -59)) && !Formation.Ahead((100, 60)), "behind you or well to the side is refused");
+            var walk = new Formation();
+            Check(walk.Keys((20, 0)) is (1, 0, false), "starts walking past the start distance");
+            Check(walk.Keys((10, 0)) is (1, 0, false), "keeps walking until nearly there");
+            Check(walk.Keys((3, 0)) is (0, 0, false), "stops when there");
+            Check(walk.Keys((10, 0)) is (0, 0, false), "and does not start again for a small drift");
+            Check(walk.Keys((-200, 0)) is (-1, 0, true), "runs when far off");
+        });
+
         test("Camera aim: the left button goes down on the target, and only ever on an NPC", () =>
         {
             Check(CameraAim.OnTarget(0.01f, -0.01f), "within 2 degrees both ways");

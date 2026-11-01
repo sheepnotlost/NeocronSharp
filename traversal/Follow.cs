@@ -139,6 +139,21 @@ internal static class FollowCommand
         return target;
     }
 
+    /// <summary>heal &lt;player id&gt;: live and without focus (NEOCRON_PID picks the healer): keeps its place beside the player, casting with the Shoot key every 30 s.</summary>
+    public static int Heal(List<string> rest, string root)
+    {
+        if (rest.Count < 1) throw new InvalidOperationException("Usage: heal <player id from 'nearby'>");
+        using var reader = new PlayerReader(ClientExecutable());
+        var target = Pick(reader, rest[0]);
+        if (target.Identity.Kind != EntityKind.Player) throw new InvalidOperationException($"{target.Name} is not a player.");
+        string keys = Path.Combine(Path.GetDirectoryName(reader.Executable)!, "ini", "keys.ini");
+        if (!File.ReadAllText(keys).Contains("bind \"INSERT\" \"Shoot\"", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Insert is not bound to Shoot in keys.ini, so the healer cannot cast without focus.");
+        string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+        Console.WriteLine(new HealWatch(reader, target, Path.Combine(logs, $"heal-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        return 0;
+    }
+
     /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {

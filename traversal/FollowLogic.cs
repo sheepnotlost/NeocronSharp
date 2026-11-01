@@ -50,6 +50,48 @@ internal sealed class PositionJumps
     }
 }
 
+/// <summary>
+/// Walking in a formation with the camera fixed: where a place beside the target is, in the camera's own forward and
+/// right, and which keys reach it. Right is measured live: D moves along (-forward.Z, forward.X).
+/// </summary>
+internal sealed class Formation
+{
+    public const float StartOff = 14, StopOff = 6, RunBeyond = 90;
+    /// <summary>A cast needs the target under the crosshair: this far off sideways misses a body, further along the view does not.</summary>
+    public const float AimRight = 14, AimForward = 40;
+
+    private static (float Forward, float Right) Split(Vector3 facing, Vector3 offset) =>
+        (offset.X * facing.X + offset.Z * facing.Z, -offset.X * facing.Z + offset.Z * facing.X);
+
+    /// <summary>Where the target is from you, in the camera's terms.</summary>
+    public static (float Forward, float Right) Place(Vector3 facing, Vector3 you, Vector3 target) => Split(facing, target - you);
+
+    /// <summary>How far you are from that place now: positive forward and right mean walk that way.</summary>
+    public static (float Forward, float Right) Error(Vector3 facing, Vector3 you, Vector3 target, (float Forward, float Right) place)
+    {
+        var now = Split(facing, target - you);
+        return (now.Forward - place.Forward, now.Right - place.Right);
+    }
+
+    /// <summary>The place is only worth keeping with the target about under the crosshair: nothing here can turn the camera.</summary>
+    public static bool Ahead((float Forward, float Right) place) => place.Forward > 0 && MathF.Abs(place.Right) < place.Forward / 4;
+
+    public static bool InPlace((float Forward, float Right) error) => MathF.Abs(error.Right) < AimRight && MathF.Abs(error.Forward) < AimForward;
+
+    private int _forward, _right;
+
+    private static int Axis(float error, int was) =>
+        MathF.Abs(error) >= StartOff ? Math.Sign(error) : MathF.Abs(error) < StopOff ? 0 : was;
+
+    /// <summary>Which way to go on each axis (-1, 0, 1) and whether to run. A key once down stays down until nearly there, so it does not chatter.</summary>
+    public (int Forward, int Right, bool Run) Keys((float Forward, float Right) error)
+    {
+        _forward = Axis(error.Forward, _forward);
+        _right = Axis(error.Right, _right);
+        return (_forward, _right, MathF.Max(MathF.Abs(error.Forward), MathF.Abs(error.Right)) > RunBeyond);
+    }
+}
+
 /// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
 internal static class CameraAim
 {
