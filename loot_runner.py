@@ -1,5 +1,5 @@
-"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, kill it, run to its body, take
-the T, E, A and L parts, and only then pick the next.
+"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, back away to the target limit,
+kill it, run to its body, take the T, E, A and L parts, and only then pick the next.
 
 traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
 next and works the game's windows. NPCs only: a player is never picked, whatever the list says.
@@ -20,6 +20,7 @@ REACH_MOST = 6000            # units: about where the game stops letting you tar
 CLOSE = 200                  # units: the closest a target that takes no damage is walked to
 LOOT_WALK = 300              # units: a body further than this gets Follow's routes, not a straight run
 BODY_NEAR = 110              # units: where that walk ends, inside the run's own stopping distance
+TARGET_MARGIN = 100          # units: walks stop this far inside the measured target limit
 HEALTH_FLOOR = .35           # stop for good below this share of your health
 HEALTH_EVERY = 1.0           # seconds between readings during a fight
 GIVE_UP = 20                 # seconds of no damage before going closer
@@ -28,7 +29,7 @@ START_TRIES = 3              # readings of your health before the hunt refuses t
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
 ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
               "Nobody with id", " is dead", " is still alive", "The door did not open", "Kept leaving the route", "Could not face the route",
-              "Could not reach the body", "Could not aim at the body")
+              "Could not reach the body", "Could not aim at the body", "No line of sight")
 MOST = 99                    # typed into the amount box: the game keeps it to the size of the stack
 AWAY = (24, 80)              # where the pointer waits, off every window
 
@@ -48,6 +49,7 @@ class Engine:
         self.log, self.control = log, control
         self.gains = None
         self.calibration = None
+        self.limit = None
 
     def nearby(self):
         data = tt.run_tool(["nearby"])
@@ -108,8 +110,13 @@ class Engine:
             self.calibration = f"{found.group(1)},{found.group(2)}"
         return text
 
-    def fight(self, actor, tick):
-        return self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP)], tick)
+    def fight(self, actor, tick, back=False):
+        """Only shoots while the game's target bar is up, and first backs away to where it drops, when asked."""
+        text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off"] if back else [])], tick)
+        found = re.search(r"^Target limit (\d+) units", text, re.M)
+        if found:
+            self.limit = int(found.group(1))
+        return text
 
     def box(self, actor, tick):
         return self.run([actor["id"], "--box"], tick)
@@ -127,6 +134,7 @@ class LootRunner(VisualRunner):
         self.engine = engine or Engine(lambda text: self.emit("log", text), self.control)
         self.next_health = 0.
         self.kills = 0
+        self.back = True             # until the weapon proves shorter than the target limit
 
     def guard(self):
         super().guard()
@@ -165,17 +173,20 @@ class LootRunner(VisualRunner):
         self.emit("log", last)
         return last.startswith("Reached ")
 
-    def fight(self, actor):
-        """How it ended."""
+    def fight(self, actor, back):
+        """How it ended. The first target limit measured is where later walks stop."""
         self.emit("log", f"Attacking {actor['name']}.")
-        last = self.ended(self.engine.fight(actor, self.watch_health))
+        last = self.ended(self.engine.fight(actor, self.watch_health, back))
         self.emit("log", last)
+        if self.engine.limit:
+            self.reach = max(CLOSE, self.engine.limit-TARGET_MARGIN)
         return last
 
     def attack(self, actor):
-        """True when it died. Hurting nothing means out of range or out of sight, so it goes closer and tries again, as
-        far as CLOSE, instead of leaving for the next enemy. The range that worked is kept for the rest of the hunt."""
-        reach, close, closer = self.reach, min(CLOSE, self.reach), False
+        """True when it died. No clear shot, or hurting nothing, means going closer and trying again, as far as CLOSE,
+        instead of leaving for the next enemy. A weapon shorter than the target limit shows by hurting nothing: the range
+        that worked then is kept for the rest of the hunt, and it stops backing away."""
+        reach, close, closer, unhurt = self.reach, min(CLOSE, self.reach), False, False
         while True:
             here = next((a for a in self.engine.nearby() if a["id"] == actor["id"]), None)
             if here is None:
@@ -184,11 +195,13 @@ class LootRunner(VisualRunner):
                 return True
             if (closer or here["distance"] > reach) and not self.walk_to(here, reach):
                 return False
-            last = self.fight(here)
+            last = self.fight(here, self.back and not closer)
             if " died." in last:
-                self.reach = reach
+                if unhurt:
+                    self.reach, self.back = reach, False
                 return True
-            if "No damage to" not in last or (closer and reach <= close):
+            unhurt = unhurt or "No damage to" in last
+            if not any(word in last for word in ("No damage to", "No line of sight")) or (closer and reach <= close):
                 return False
             reach, closer = max(close, min(reach, int(here["distance"]))//2), True
 

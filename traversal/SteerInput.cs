@@ -20,11 +20,12 @@ internal static class StopRequest
 /// </summary>
 internal sealed class SteerInput : IDisposable
 {
-    private const ushort W = 0x11, Shift = 0x2a, Space = 0x39;   // keys.ini: W = Forward, SHIFT = Run, SPACE = Jump
+    private const ushort W = 0x11, S = 0x1f, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, SHIFT = Run, SPACE = Jump, 1 = Slot 1
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
     public bool Walking { get; private set; }
+    public bool Backing { get; private set; }
     public bool LeftHeld { get; private set; }
     private bool _sprint = true;
     /// <summary>Shift and W are both down.</summary>
@@ -46,6 +47,23 @@ internal sealed class SteerInput : IDisposable
         if (on && Run && _sprint) Key(Shift, false);
         Key(W, !on);
         if (!on && Run && _sprint) Key(Shift, true);
+    }
+
+    public void Back(bool on)
+    {
+        if (on == Backing) return;
+        if (on) _reader.RequireForeground();
+        Backing = on;
+        Key(S, !on);
+    }
+
+    /// <summary>One tap of a slot's number key, 1 to 9.</summary>
+    public void Slot(int slot)
+    {
+        _reader.RequireForeground();
+        Key((ushort)(FirstSlot + slot - 1), false);
+        Thread.Sleep(60);
+        Key((ushort)(FirstSlot + slot - 1), true);
     }
 
     /// <summary>Send one mouse pulse of at most <see cref="Pulse"/> pixels; returns the pixels sent.</summary>
@@ -126,6 +144,10 @@ internal sealed class SteerInput : IDisposable
     public void Dispose()
     {
         try { HoldLeft(false); }
-        finally { if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); } }
+        finally
+        {
+            if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); }
+            if (Backing) { Backing = false; Key(S, true); }
+        }
     }
 }

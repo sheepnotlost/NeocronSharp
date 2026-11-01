@@ -336,7 +336,7 @@ class TargetTab:
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
             return
-        self.append(f"Tracking {actor['name']} and following. Casting every 30 s.")
+        self.append(f"Tracking {actor['name']} and following. Slot 1 every 30 s, slots 2 and 3 every 120 s, on both of you.")
         try:
             # A name in the box means the fighter is elsewhere, whatever else is open here: a leftover or closing client
             # made a healer alone in a VM count two (1 Nov), and the engine then looked for the fighter in that one.

@@ -162,6 +162,92 @@ internal static class CameraAim
         Math.Clamp(MathF.Atan2(target.Y - (from.Y + EyeHeight), Math.Max(1, PointNavigation.Distance(from, target))), -MaxPitch, MaxPitch);
 }
 
+/// <summary>Has the game's target bar been up lately? It flickers as a shot throws the crosshair, so one gap proves nothing.</summary>
+internal sealed class SightWatch(double holdSeconds = 1)
+{
+    public double SeenAt { get; private set; } = double.NegativeInfinity;
+    public bool Showing { get; private set; }
+
+    public void Update(double now, bool showing)
+    {
+        Showing = showing;
+        if (showing) SeenAt = now;
+    }
+
+    public bool Seen(double now) => now - SeenAt <= holdSeconds;
+}
+
+/// <summary>Back away from a mob with the crosshair on it until the game stops targeting it, then forward until it targets it again.</summary>
+internal sealed class BackOff(bool wanted)
+{
+    public enum Phase { Waiting, Backing, Returning, Done }
+    /// <summary>S is slow, about 30 units/s, so 180 s is about 5,400 units: nothing is fired until this ends, for a safe distance first.</summary>
+    public const double MostSeconds = 180, ReturnSeconds = 5, StuckSeconds = 3;
+    /// <summary>A mob this much closer than when backing began has noticed you: shoot it.</summary>
+    public const float MobCloser = 60, StuckBelow = 10;
+    private double _from, _stuckAt;
+    private float _startAway;
+    private Vector3 _stuckFrom;
+
+    public Phase Now { get; private set; } = wanted ? Phase.Waiting : Phase.Done;
+    public float? Limit { get; private set; }
+
+    public void Update(double now, bool seen, bool showing, float away, Vector3 at)
+    {
+        switch (Now)
+        {
+            case Phase.Waiting:
+                if (seen) { Now = Phase.Backing; _from = _stuckAt = now; _startAway = away; _stuckFrom = at; }
+                break;
+            case Phase.Backing:
+                if (!seen) { Limit = away; Now = Phase.Returning; _from = now; }
+                else if (now - _from > MostSeconds || away < _startAway - MobCloser) Now = Phase.Done;
+                else if (now - _stuckAt >= StuckSeconds)
+                {
+                    if (PointNavigation.Distance(at, _stuckFrom) < StuckBelow) Now = Phase.Done;
+                    _stuckAt = now; _stuckFrom = at;
+                }
+                break;
+            case Phase.Returning:
+                if (showing || now - _from > ReturnSeconds) Now = Phase.Done;
+                break;
+        }
+    }
+}
+
+/// <summary>What a healer casts next: the heal in slot 1 every 30 s and the shields in slots 2 and 3 every 120 s, on the fighter and on itself.</summary>
+internal sealed class CastCycle
+{
+    public const double HealEvery = 30, ShieldEvery = 120, SlotWait = 2, BetweenCasts = 0.5;
+    /// <summary>Radians above level: nobody is up there, so the spell lands on the caster.</summary>
+    public const float SkyPitch = 0.65f;
+
+    public sealed class Cast(int slot, bool onFighter, double every)
+    {
+        public int Slot { get; } = slot;
+        public bool OnFighter { get; } = onFighter;
+        public double Every { get; } = every;
+        public double Next { get; set; }
+    }
+
+    private readonly Cast[] _casts =
+    [
+        new(1, true, HealEvery), new(1, false, HealEvery),
+        new(2, true, ShieldEvery), new(3, true, ShieldEvery), new(2, false, ShieldEvery), new(3, false, ShieldEvery),
+    ];
+
+    /// <summary>The first cast due, heals before shields. Null until one is.</summary>
+    public Cast? Due(double now) => _casts.FirstOrDefault(c => now >= c.Next);
+
+    public void Done(Cast cast, double now) => cast.Next = now + cast.Every;
+
+    /// <summary>
+    /// The slot key to press to get a cast's slot in hand. A slot's own key puts it away, and a new run can't know what is
+    /// out, so it first presses another slot: that ends with the right one out whichever was.
+    /// </summary>
+    public static int KeyFor(int slot, int? inHand) => inHand == null ? (slot == 1 ? 2 : 1) : slot;
+}
+
 /// <summary>Why the follow route is planned again (None: keep the current one).</summary>
 internal enum FollowReplan { None, First, OffRoute, TargetMoved, NearRouteEnd, Refresh }
 

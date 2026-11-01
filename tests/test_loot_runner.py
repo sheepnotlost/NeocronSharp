@@ -44,6 +44,17 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(sent[1][-2:], ["--calibration", "300,0.002"])
         self.assertNotIn("--body", sent[0])
 
+    def test_a_fight_only_shoots_on_target_and_backs_off_when_asked(self):
+        engine = loot_runner.Engine(None, None)
+        sent = []
+        engine.live = lambda args, tick: sent.append(args) or "Target limit 4210 units.\nRat died."
+        engine.fight(actor("Rat"), None)
+        self.assertIn("--sight", sent[0])
+        self.assertNotIn("--back-off", sent[0])
+        self.assertEqual(engine.limit, 4210)
+        engine.fight(actor("Rat"), None, True)
+        self.assertIn("--back-off", sent[1])
+
     def test_a_walk_to_a_body_says_so(self):
         engine = loot_runner.Engine(None, None)
         sent = []
@@ -113,6 +124,8 @@ class Engine:
         self.walks = []
         self.boxes = []
         self.distance = 50.
+        self.limit = None
+        self.backs = []
 
     def nearby(self):
         return [actor(n, distance=self.distance, dead=n in self.dead) for n in ("Rat", "Spider")]
@@ -121,8 +134,9 @@ class Engine:
         self.seen.append(("walk", target["name"], reach))
         return self.walks.pop(0) if self.walks else f"Following.\nReached {target['name']}, {reach} units away."
 
-    def fight(self, target, tick):
+    def fight(self, target, tick, back=False):
         self.seen.append(("fight", target["name"]))
+        self.backs.append(back)
         if isinstance(self.fights[0], str):
             return self.fights.pop(0)
         died = self.fights.pop(0)
@@ -179,6 +193,7 @@ class SequenceTests(unittest.TestCase):
         runner.move = lambda point: None
         runner.diagnostic_dir = Path("nowhere")
         runner.save_failure = lambda error: None
+        self.engine = engine
         loot_runner.IDLE_LIMIT, limit = 0, loot_runner.IDLE_LIMIT
         self.addCleanup(setattr, loot_runner, "IDLE_LIMIT", limit)
         runner.run()
@@ -264,6 +279,28 @@ class SequenceTests(unittest.TestCase):
         seen, _ = self.run_sequence([False]*5 + [True], names=("Rat",), distance=9000.)
         self.assertEqual([s for s in seen if s[0] == "walk"][:6], [("walk", "Rat", r) for r in (5000, 2500, 1250, 625, 312, 200)])
         self.assertEqual([s[1] for s in seen if s[0] == "fight"], ["Rat"]*6)
+
+    def test_a_blocked_shot_goes_closer_without_giving_up_the_range(self):
+        blocked = "No line of sight to Rat. Camera follow stopped."
+        seen, _ = self.run_sequence([blocked, True, True], distance=9000.)
+        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 5000), ("walk", "Rat", 2500)])
+        self.assertIn(("walk", "Spider", 5000), seen)
+        self.assertEqual(self.engine.backs, [True, False, True])
+
+    def test_a_measured_target_limit_is_where_later_walks_stop(self):
+        real = Engine.fight
+
+        def measured(engine, target, tick, back=False):
+            engine.limit = 4000
+            return real(engine, target, tick, back)
+        self.addCleanup(setattr, Engine, "fight", real)
+        Engine.fight = measured
+        seen, _ = self.run_sequence([True, True], distance=9000.)
+        self.assertIn(("walk", "Spider", 3900), seen)
+
+    def test_a_weapon_shorter_than_the_target_limit_stops_the_backing(self):
+        seen, _ = self.run_sequence([False, True, True])
+        self.assertEqual(self.engine.backs, [True, False, False])
 
     def test_the_range_that_worked_is_kept(self):
         seen, _ = self.run_sequence([False, True, True], distance=9000.)

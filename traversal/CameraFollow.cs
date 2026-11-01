@@ -65,7 +65,7 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 /// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
-    bool MeasureOnly = false);
+    bool MeasureOnly = false, bool Sight = false, bool BackOff = false);
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -85,7 +85,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, LookEveryMs = 120;
+    /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
+    private const double BlindSeconds = 4;
     private const float StuckBelow = 15;
 
     public string Run()
@@ -225,7 +227,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
             int ticks = 0;
             int? health = watch.Health;
-            long lastHurt = 0;
+            long lastHurt = 0, lookAt = 0;
+            var sight = new SightWatch();
+            var backOff = new BackOff(plan.BackOff);
+            double aimedAt = -1;
             while (true)
             {
                 var s = Guard();
@@ -239,16 +244,40 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
                 if (watch.Health < health) lastHurt = clock.ElapsedMilliseconds;
                 health = watch.Health;
+                bool onTarget = CameraAim.OnTarget(yawError, pitchError);
+                if (plan.Sight)
+                {
+                    double now = clock.Elapsed.TotalSeconds;
+                    if (clock.ElapsedMilliseconds >= lookAt)
+                    {
+                        lookAt = clock.ElapsedMilliseconds + LookEveryMs;
+                        sight.Update(now, TargetBar.Showing(reader.Window));
+                    }
+                    if (onTarget && aimedAt < 0) aimedAt = now;
+                    var was = backOff.Now;
+                    backOff.Update(now, sight.Seen(now), sight.Showing, away, s.Position);
+                    input.Back(backOff.Now == BackOff.Phase.Backing);
+                    input.Walk(backOff.Now == BackOff.Phase.Returning);
+                    if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
+                        Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
+                    if (input.LeftHeld && !sight.Seen(now)) input.HoldLeft(false);   // Terrain in the way: the shots would only hit that.
+                    if (aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(aimedAt, sight.SeenAt) > BlindSeconds)
+                    {
+                        string blocked = $"No line of sight to {target.Name}. Camera follow stopped.";
+                        Record("blocked", s, new { away });
+                        return blocked;
+                    }
+                }
                 if (input.LeftHeld && plan.GiveUpSeconds > 0 && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
                 {
                     string missed = $"No damage to {target.Name} for {plan.GiveUpSeconds:F0} s. Camera follow stopped.";
                     Record("gave-up", s, new { missed });
                     return missed;
                 }
-                if (plan.HoldLeft && !input.LeftHeld && CameraAim.OnTarget(yawError, pitchError))
+                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (sight.Seen(clock.Elapsed.TotalSeconds) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
-                    lastHurt = clock.ElapsedMilliseconds;
+                    if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;
                     Record("hold", s, new { yawError, pitchError, away });
                     Console.WriteLine($"On {target.Name}: holding the left mouse button.");
                 }

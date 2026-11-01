@@ -66,6 +66,64 @@ internal static class FollowTests
             Check(CameraAim.Turn(1f) == CameraAim.FarShare && CameraAim.Turn(-1f) == -CameraAim.FarShare, "far off, a big share");
             Check(CameraAim.Turn(0.005f, 6000) != 0 && CameraAim.Turn(0.005f, 1000) == 0, "the deadband narrows at long range");
             Check(CameraAim.Turn(0.002f, 6000) == 0, "but stays over a pixel, or the aim would shake");
+            var sight = new SightWatch();
+            Check(!sight.Seen(0), "nothing targeted yet");
+            sight.Update(1, true); sight.Update(1.5, false);
+            Check(sight.Seen(1.9) && !sight.Showing, "a gap in the target bar is not losing the target");
+            Check(!sight.Seen(2.1), "a second without it is");
+
+            var back = new BackOff(true);
+            back.Update(0, false, false, 1000, default);
+            Check(back.Now == BackOff.Phase.Waiting, "no backing until the game targets the mob");
+            back.Update(1, true, true, 1000, default);
+            Check(back.Now == BackOff.Phase.Backing, "then back away");
+            back.Update(2.5, true, true, 1030, new Vector3(30, 0, 0));
+            back.Update(5, true, true, 1100, new Vector3(100, 0, 0));
+            Check(back.Now == BackOff.Phase.Backing, "still moving, still backing");
+            back.Update(6, false, false, 1130, new Vector3(130, 0, 0));
+            Check(back.Now == BackOff.Phase.Returning && back.Limit == 1130, "losing it is the target limit");
+            back.Update(6.5, false, true, 1120, new Vector3(120, 0, 0));
+            Check(back.Now == BackOff.Phase.Done, "forward until it is back");
+            var noticed = new BackOff(true);
+            noticed.Update(0, true, true, 1000, default);
+            noticed.Update(1, true, true, 900, default);
+            Check(noticed.Now == BackOff.Phase.Done && noticed.Limit == null, "a mob coming at you ends the backing");
+            var stuck = new BackOff(true);
+            stuck.Update(0, true, true, 1000, default);
+            stuck.Update(4, true, true, 1000, default);
+            Check(stuck.Now == BackOff.Phase.Done, "so does backing into something");
+            var late = new BackOff(true);
+            late.Update(0, true, true, 1000, default);
+            late.Update(2, true, true, 1000, new Vector3(60, 0, 0));
+            late.Update(181, true, true, 3000, new Vector3(9000, 0, 0));
+            Check(late.Now == BackOff.Phase.Done, "and so does the time limit");
+            Check(new BackOff(false).Now == BackOff.Phase.Done, "only when asked for");
+
+            var cycle = new CastCycle();
+            var order = new List<(int, bool)>();
+            for (var c = cycle.Due(0); c != null; c = cycle.Due(0)) { order.Add((c.Slot, c.OnFighter)); cycle.Done(c, 0); }
+            Check(order.SequenceEqual(new[] { (1, true), (1, false), (2, true), (3, true), (2, false), (3, false) }), "every spell on both people, heals first");
+            Check(cycle.Due(29) == null, "then nothing for 30 s");
+            var heal = cycle.Due(30);
+            Check(heal is { Slot: 1, OnFighter: true }, "the heal comes back at 30 s");
+            cycle.Done(heal!, 30);
+            var selfHeal = cycle.Due(30)!;
+            Check(selfHeal is { Slot: 1, OnFighter: false }, "on both");
+            cycle.Done(selfHeal, 30);
+            Check(cycle.Due(119) == null || cycle.Due(119)!.Slot == 1, "shields wait");
+            Check(CastCycle.KeyFor(1, null) == 2 && CastCycle.KeyFor(2, null) == 1, "with nothing known, another slot first");
+            Check(CastCycle.KeyFor(1, 2) == 1, "then the slot itself");
+
+            byte[] Picture(Func<int, (byte B, byte G, byte R)> colour, int width, int height)
+            {
+                var bytes = new byte[width * height * 4];
+                for (int i = 0; i < width * height; i++) { var c = colour(i % width); bytes[i * 4] = c.B; bytes[i * 4 + 1] = c.G; bytes[i * 4 + 2] = c.R; }
+                return bytes;
+            }
+            Check(TargetBar.Looks(Picture(_ => (28, 45, 188), 100, 10), 100, 10), "the red bar is seen");
+            Check(TargetBar.Looks(Picture(x => x < 74 ? ((byte)10, (byte)10, (byte)10) : ((byte)72, (byte)210, (byte)134), 100, 10), 100, 10), "so is its green end once the red has drained");
+            Check(!TargetBar.Looks(Picture(_ => (171, 171, 171), 100, 10), 100, 10), "plain sky is not");
+
             Check(CameraAim.Pixels(0.0002f, -0.0014f) == -1 && CameraAim.Pixels(0.01f, 0.002f) == 5 && CameraAim.Pixels(0, 0.002f) == 0, "a turn is at least a pixel");
             Check(MathF.Abs(CameraAim.Facing(MathF.PI / 2).Z - 1) < 1e-5f && MathF.Abs(PointNavigation.SignedAngle(CameraAim.Facing(0), CameraAim.Facing(0.5f)) - 0.5f) < 1e-5f, "a heading as a flat direction");
         });

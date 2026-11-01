@@ -206,7 +206,7 @@ internal static class FollowCommand
         return 0;
     }
 
-    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
+    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--sight] [--back-off]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {
         string? Option(string name)
@@ -214,7 +214,8 @@ internal static class FollowCommand
             int i = rest.IndexOf(name); if (i < 0 || i + 1 >= rest.Count) return null;
             string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
         }
-        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box");
+        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"),
+            sight = rest.Remove("--sight"), backOff = sight && rest.Remove("--back-off");
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
             ? (float.Parse(yaw, CultureInfo.InvariantCulture), float.Parse(pitch, CultureInfo.InvariantCulture)) : null;
@@ -225,7 +226,7 @@ internal static class FollowCommand
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackOff: backOff), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }
@@ -340,14 +341,22 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             Vector3 stallFrom = first.Position; double stallMark = 0; int stalls = 0;
             double turningSince = -1;
             bool wasMoving = !band.Moving;
-            double nextCast = 0, castEnds = -1;
-            int casts = 0;
+            double castEnds = -1, castFrom = 0;
+            var cycle = new CastCycle();
+            CastCycle.Cast? casting = null;
+            int? inHand = null;
 
             while (true)
             {
                 var s = Guard();
                 double now = clock.Elapsed.TotalSeconds;
-                if (castEnds >= 0 && now >= castEnds) { input.HoldLeft(false); castEnds = -1; }
+                if (castEnds >= 0 && now >= castEnds)
+                {
+                    input.HoldLeft(false);
+                    castEnds = -1; castFrom = now + CastCycle.BetweenCasts;
+                    if (casting != null) cycle.Done(casting, now);
+                    casting = null;
+                }
                 if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
 
                 float straight = FollowLogic.Straight(s.Position, watch.SeenAt);
@@ -389,7 +398,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 }
                 bool moving = arrive || band.Update(gap);
                 // A blocking step ahead (a lift, a door) must not start with the cast's button down.
-                if (moving && castEnds >= 0) { input.HoldLeft(false); castEnds = -1; }
+                if (moving && castEnds >= 0) { input.HoldLeft(false); castEnds = -1; casting = null; }
                 if (moving != wasMoving)
                 {
                     doors.Reset();
@@ -409,19 +418,29 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                         moving ? $"{straight:F0} units away; no walkable way there yet" : $"waiting, {gap:F0} units away (moves on past {band.Resume:F0})", "F8 stops");
                     Wait(Tick);
                     stallFrom = s.Position; stallMark = now; lastPixels = 0;
-                    // In reach of the fighter: the same aim as the camera follow, and the click every 30 s.
-                    if (!moving && heal is { } gains)
+                    // In reach of the fighter: the aim of the camera follow, up at the empty sky for a cast on itself, and the cycle of casts.
+                    // A camera reading that fails for a moment waits for the next tick: on a slow machine it ended the follow.
+                    if (!moving && heal is { } gains && reader.ReadCamera(s) is { } view)
                     {
-                        var view = reader.ReadCamera(s) ?? throw new InvalidOperationException("The camera's angles could not be read on this game build. Follow stopped.");
+                        var cast = casting ?? (now >= castFrom ? cycle.Due(now) : null);
+                        if (cast != null && castEnds < 0 && inHand != cast.Slot && now >= castFrom)
+                        {
+                            inHand = CastCycle.KeyFor(cast.Slot, inHand);
+                            input.Slot(inHand.Value);
+                            castFrom = now + CastCycle.SlotWait;
+                            Record("slot", s, new { slot = inHand });
+                        }
                         float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                        float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0)) - view.Pitch;
+                        float pitch = cast is { OnFighter: false } ? CastCycle.SkyPitch : CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0));
+                        float pitchError = pitch - view.Pitch;
                         input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / gains.Yaw), (int)MathF.Round(CameraAim.Turn(pitchError) / gains.Pitch));
-                        if (castEnds < 0 && now >= nextCast && CameraAim.OnTarget(yawError, pitchError))
+                        if (cast != null && castEnds < 0 && inHand == cast.Slot && now >= castFrom && CameraAim.OnTarget(yawError, pitchError))
                         {
                             input.HoldLeft(true);
-                            castEnds = now + CameraAim.CastHoldSeconds; nextCast = now + CameraAim.CastEverySeconds;
-                            Record("cast", s, new { yawError, pitchError, gap });
-                            Console.WriteLine($"Cast {++casts} on {target.Name}.");
+                            casting = cast;
+                            castEnds = now + CameraAim.CastHoldSeconds;
+                            Record("cast", s, new { cast.Slot, cast.OnFighter, yawError, pitchError, gap });
+                            Console.WriteLine($"Slot {cast.Slot} on {(cast.OnFighter ? target.Name : "yourself")}.");
                         }
                     }
                     continue;
