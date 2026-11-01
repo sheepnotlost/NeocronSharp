@@ -129,28 +129,36 @@ internal static class FollowCommand
     }
 
     /// <summary>The living, nearby actor with this id from 'nearby'.</summary>
-    private static WorldEntity Pick(PlayerReader reader, string idText)
+    private static WorldEntity Pick(PlayerReader reader, string idText, bool dead = false)
     {
         string id = idText.Trim().ToLowerInvariant();
         if (id.StartsWith("0x")) id = id[2..];
         var target = Followable(ReadSnapshot(reader)).FirstOrDefault(n => Id(n.Entity) == id)?.Entity
             ?? throw new InvalidOperationException($"Nobody with id {id} is nearby any more. Press Refresh and pick again.");
-        if (Dead(target)) throw new InvalidOperationException($"{target.Name} is dead.");
+        if (Dead(target) != dead) throw new InvalidOperationException($"{target.Name} is {(dead ? "still alive" : "dead")}.");
         return target;
     }
 
-    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC.</summary>
+    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {
-        bool holdLeft = rest.Remove("--hold-left");
+        string? Option(string name)
+        {
+            int i = rest.IndexOf(name); if (i < 0 || i + 1 >= rest.Count) return null;
+            string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
+        }
+        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box");
+        double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
+        (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
+            ? (float.Parse(yaw, CultureInfo.InvariantCulture), float.Parse(pitch, CultureInfo.InvariantCulture)) : null;
         if (rest.Count < 1) throw new InvalidOperationException("Usage: camera <entity id from 'nearby'> [--hold-left]");
         using var reader = new PlayerReader(ClientExecutable());
-        var target = Pick(reader, rest[0]);
-        if (holdLeft && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the left mouse button is held on NPCs only.");
+        var target = Pick(reader, rest[0], box);
+        if ((holdLeft || box) && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the mouse buttons are used on NPCs only.");
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, holdLeft, hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

@@ -330,8 +330,8 @@ class App:
         self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
         from target_tab import TargetTab
         self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
-                              other_live=lambda:self.traversal.process is not None)
-        self.traversal.other_live=lambda:self.target.process is not None
+                              other_live=lambda:self.traversal.process is not None,loot_runner=self.loot_runner)
+        self.traversal.other_live=self.target.steering
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -971,6 +971,11 @@ class App:
         if enabled:
             self.sync_start_button()
             self.show_build_recipe()
+
+    def loot_runner(self,names,emit,control):
+        from loot_runner import LootRunner
+        self.ensure_bound()
+        return LootRunner(self.profile,self.backend,control,emit,names=names)
 
     def ensure_bound(self):
         title, size = self.backend.bind_foreground()

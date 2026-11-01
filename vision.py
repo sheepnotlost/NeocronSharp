@@ -1103,13 +1103,57 @@ class Detector:
                 y = 63 + row * 45.5
                 cell = self.region(frame, anchor, (x, y, x+44.6, y+45.5))
                 label = self.read_label(cell)
-                if label:
-                    # Reject single letters on a different kind of inventory icon.
-                    icon = cv2.resize(cell, (45, 46))[14:33, 8:38].astype(float)
-                    r, g, b = icon[:, :, 0], icon[:, :, 1], icon[:, :, 2]
-                    if ((r > g*.9) & (g > b*1.15) & (r > 45)).mean() >= .06:
-                        found[label].append(anchor.point(x+22.3, y+22.75))
+                if label and self.tech_icon(cell):
+                    found[label].append(anchor.point(x+22.3, y+22.75))
         return found
+
+    @staticmethod
+    def tech_icon(cell):
+        """Reject single letters on a different kind of inventory icon."""
+        icon = cv2.resize(cell, (45, 46))[14:33, 8:38].astype(float)
+        r, g, b = icon[:, :, 0], icon[:, :, 1], icon[:, :, 2]
+        return bool(((r > g*.9) & (g > b*1.15) & (r > 45)).mean() >= .06)
+
+    def loot_window(self, frame):
+        """An open loot box, found by its Take All button: {"left", "top", "scale", "close"}, or None. The window is not
+        an Inventory-scale window, so its size comes from the width of its own buttons (1 at 2000 px across, 1 Nov)."""
+        words = self.text_reader().read_words(self.gray(frame), up=2)
+        for text, x, y, width, height in words:
+            if text.lower() != "take":
+                continue
+            line = sorted(w[1] for w in words if w[0].lower() == "all" and abs(w[2]-y) <= height and w[1] > x)
+            if line:
+                scale = (line[-1]-x)/122 if len(line) > 1 else width/34
+                return {"left": x-35*scale, "top": y-148*scale, "scale": scale,
+                        "close": (round(x+487*scale), round(y-170*scale))}
+        return None
+
+    def loot_parts(self, frame, window):
+        """[{"letter", "point"}] of the T, E, A and L parts in a loot window. A letter sits at the cell's left; the icon in its middle."""
+        size, parts = window["scale"], []
+        wide, high = 95.6*size, 47.5*size
+        for row in range(3):
+            for col in range(5):
+                left, top = round(window["left"]+col*wide), round(window["top"]+row*high)
+                bottom, square = top+round(high), round(high)
+                middle = left+round((wide-high)/2)
+                letter = self.read_label(frame[top:bottom, left:left+square])
+                if letter and self.tech_icon(frame[top:bottom, middle:middle+square]):
+                    parts.append({"letter": letter, "point": (round(left+wide/2), round(top+high/2))})
+        return parts
+
+    def inventory_drop(self, frame, anchor, letter, checkpoint=lambda: None):
+        """Where to drop a part: on its own stack, or in the first empty cell. None when neither is visible."""
+        stack = self.stacks(frame, checkpoint=checkpoint)[letter]
+        if stack:
+            return stack[0]
+        for row in range(6):
+            for col in range(8):
+                x, y = 39+col*44.6, 63+row*45.5
+                patch = self.gray(self.region(frame, anchor, (x+9, y+9, x+36, y+37)))
+                if patch.std() < 8:
+                    return anchor.point(x+22.3, y+22.75)
+        return None
 
     def quantity(self, frame, checkpoint=lambda: None, expected=False):
         # Inventory already establishes the UI scale during construction.

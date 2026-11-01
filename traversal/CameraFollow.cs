@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using NeocronSharp;
@@ -21,6 +22,9 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
     private int _misses, _unreadable;
 
     public Vector3 SeenAt { get; private set; } = target.Position;
+
+    /// <summary>The target's health at the last reading, when it can be read.</summary>
+    public int? Health { get; private set; } = target.Stats?.Health?.RawCurrent;
 
     /// <summary>Returns why the target is gone, or null while it is still there.</summary>
     public string? Read()
@@ -50,27 +54,38 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
         _misses = 0;
         if (live.Stats?.Dead == true || live.Player?.Dead == true) return $"{target.Name} died. {stopped}";
         SeenAt = live.Position;
+        Health = live.Stats?.Health?.RawCurrent ?? Health;
         return null;
     }
 }
 
+/// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
+/// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
+internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false);
+
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
 /// target. No movement key is ever sent, so you keep walking yourself, and no click unless
-/// <paramref name="holdLeft"/> asks for the left button, held from the first time the crosshair is
-/// on an NPC until the run ends. Ends by returning why it stopped, or by throwing (F8, focus, zone change).
+/// <paramref name="plan"/> asks for the left button, held from the first time the crosshair is
+/// on an NPC until the run ends. With <see cref="CameraPlan.Box"/> it instead runs to a dead NPC and
+/// right-clicks its loot box. Ends by returning why it stopped, or by throwing (F8, focus, zone change).
 /// </summary>
-internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int pulse, bool holdLeft, Hud hud, string logPath)
+internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int pulse, CameraPlan plan, Hud hud, string logPath)
 {
     private const int Tick = 16, PulseGap = 16, ReadEveryMs = 80, YawProbe = 96, PitchProbe = 64,
         ProbeStep = 6;   // Windows mouse acceleration: a pixel of a big pulse goes twice as far, and corrections are small.
     /// <summary>Closer than this on the flat, "towards the target" has no useful direction.</summary>
     public const float TooClose = 5;
+    /// <summary>Where a run to a loot box stops. Not yet set live: the view stops at 43 degrees down, so too close and the crosshair cannot reach the box.</summary>
+    public const float BoxReach = 60;
+    private const float FacingToRun = 0.35f;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000;
+    private const float StuckBelow = 15;
 
     public string Run()
     {
         using var log = new StreamWriter(logPath) { AutoFlush = true };
-        using var input = new SteerInput(reader, pulse);
+        using var input = new SteerInput(reader, pulse, plan.Box);
         var clock = Stopwatch.StartNew();
         string title = $"CAMERA  {target.Name}";
         var origin = reader.ReadSteady();
@@ -138,23 +153,69 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             throw new InvalidOperationException("Mouse-look did not respond steadily. Press Tab in Neocron so the free pointer disappears, close chat, try again.");
         }
 
+        // Run to the body facing it, with Shift held, then put the crosshair on it and right-click.
+        string RunToBox(float yawGain, float pitchGain)
+        {
+            var box = target.Position;
+            var stuckFrom = Guard().Position;
+            long stuckAt = clock.ElapsedMilliseconds;
+            while (true)
+            {
+                var s = Guard();
+                float away = PointNavigation.Distance(s.Position, box);
+                if (away <= BoxReach) break;
+                float error = PointNavigation.SignedAngle(CameraAim.Facing(View(s).Yaw), box - s.Position);
+                input.Walk(MathF.Abs(error) < FacingToRun);
+                input.LookPulse((int)MathF.Round(CameraAim.Turn(error) / yawGain), 0);
+                if (clock.ElapsedMilliseconds - stuckAt > StuckAfterMs)
+                {
+                    if (PointNavigation.Distance(s.Position, stuckFrom) < StuckBelow) throw new InvalidOperationException($"Could not reach the body of {target.Name}. Stopped.");
+                    stuckFrom = s.Position; stuckAt = clock.ElapsedMilliseconds;
+                }
+                hud.Show(Hud.Green, $"LOOT  {target.Name}", $"{away:F0} units away", "F8 stops");
+                Wait(Tick);
+            }
+            input.Walk(false);
+            for (long until = clock.ElapsedMilliseconds + BoxAimMs; clock.ElapsedMilliseconds < until; Wait(Tick))
+            {
+                var s = Guard();
+                var view = View(s);
+                float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), box - s.Position);
+                float pitchError = CameraAim.PitchTo(s.Position, box) - view.Pitch;
+                if (CameraAim.OnTarget(yawError, pitchError)) break;
+                input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / yawGain), (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain));
+            }
+            Record("box", previous, new { target = target.Name });
+            input.Use();
+            return $"Right-clicked the body of {target.Name}.";
+        }
+
         try
         {
-            Console.WriteLine("Focus Neocron now (mouse-look on: press Tab so the pointer disappears). Starting in 5 s. F8 stops.");
-            for (int i = 5; i > 0; i--)
+            if (!plan.Now) Console.WriteLine("Focus Neocron now (mouse-look on: press Tab so the pointer disappears). Starting in 5 s. F8 stops.");
+            for (int i = plan.Now ? 0 : 5; i > 0; i--)
             {
                 hud.Post(Hud.Amber, $"CAMERA  starting in {i} s", "Click into Neocron now; press Tab so the pointer is hidden.", "F8 stops at any time.");
                 for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("Stop pressed."); Thread.Sleep(50); }
             }
 
-            var reference = CameraAim.Facing(View(Guard()).Yaw);
-            float yawGain = Measure("yaw", YawProbe, s => PointNavigation.SignedAngle(reference, CameraAim.Facing(View(s).Yaw)), px => input.LookPulse(px, 0));
-            float pitchGain = Measure("pitch", PitchProbe, s => View(s).Pitch, px => input.LookPulse(0, px));
+            float yawGain, pitchGain;
+            if (plan.Gains is { } known) (yawGain, pitchGain) = known;
+            else
+            {
+                var reference = CameraAim.Facing(View(Guard()).Yaw);
+                yawGain = Measure("yaw", YawProbe, s => PointNavigation.SignedAngle(reference, CameraAim.Facing(View(s).Yaw)), px => input.LookPulse(px, 0));
+                pitchGain = Measure("pitch", PitchProbe, s => View(s).Pitch, px => input.LookPulse(0, px));
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {yawGain} {pitchGain}"));
+            }
+            if (plan.Box) return RunToBox(yawGain, pitchGain);
 
             var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Camera follow stopped.");
             Record("start", previous, new { target = target.Name, id = FollowCommand.Id(target), yawGain, pitchGain });
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
             int ticks = 0;
+            int? lowest = watch.Health;
+            long lastHurt = 0;
             while (true)
             {
                 var s = Guard();
@@ -165,9 +226,17 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt) - view.Pitch;
                 int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
                 input.LookPulse(x, y);
-                if (holdLeft && !input.LeftHeld && CameraAim.OnTarget(yawError, pitchError))
+                if (watch.Health < lowest) { lowest = watch.Health; lastHurt = clock.ElapsedMilliseconds; }
+                if (input.LeftHeld && plan.GiveUpSeconds > 0 && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
+                {
+                    string missed = $"No damage to {target.Name} for {plan.GiveUpSeconds:F0} s. Camera follow stopped.";
+                    Record("gave-up", s, new { missed });
+                    return missed;
+                }
+                if (plan.HoldLeft && !input.LeftHeld && CameraAim.OnTarget(yawError, pitchError))
                 {
                     input.HoldLeft(true);
+                    lastHurt = clock.ElapsedMilliseconds;
                     Record("hold", s, new { yawError, pitchError, away });
                     Console.WriteLine($"On {target.Name}: holding the left mouse button.");
                 }

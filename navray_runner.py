@@ -632,7 +632,7 @@ class NavRayRunner(VisualRunner):
         x0, y0, x1, y1 = HEALTH_BOX
         crop = self.detector.gray(frame)[int(y0*height):int(y1*height), int(x0*width):int(x1*width)]
         text = " ".join(word for word, *_ in sorted(reader.read_words(crop), key=lambda w: w[1]))
-        match = re.search(r"(\d+)\s*/\s*(\d+)", text)
+        match = re.search(r"(\d+)\D+(\d+)", text)   # the OCR can miss the slash
         return (int(match.group(1)), int(match.group(2))) if match else None
 
     @staticmethod

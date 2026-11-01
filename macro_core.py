@@ -263,9 +263,11 @@ class Control:
 
 
 class ResearchRunner:
+    needs_ready = True      # a runner that doesn't use the Research or Construction choices turns this off
+
     def __init__(self, profile, backend, control, emit=lambda *args: None,
                  clock=time.monotonic, sleep=time.sleep):
-        validate_profile(profile)
+        validate_profile(profile, require_ready=self.needs_ready)
         self.profile = monitor_only_profile(profile)
         self.backend = backend
         self.control = control

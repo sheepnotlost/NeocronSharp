@@ -3,6 +3,7 @@
 Follow's target list without the walk: the work is done by traversal.exe's "camera" command,
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
+The loot sequence (loot_runner.py) repeats fight, run and loot on the NPC names you add.
 """
 import queue
 import subprocess
@@ -11,13 +12,22 @@ import tkinter as tk
 from tkinter import ttk
 
 import traversal_tab as tt
+from macro_core import Control
+
+
+def loot_names(text):
+    """"Small Spider, Rat" -> ["Small Spider", "Rat"], without repeats."""
+    return list(dict.fromkeys(name.strip() for name in text.split(",") if name.strip()))
 
 
 class TargetTab:
-    def __init__(self, parent, root, autoload=True, other_live=lambda: False):
+    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None):
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk or follow is steering the same mouse
+        self.loot_runner = loot_runner      # makes a LootRunner(names, emit, control) bound to the game
+        self.looting = None                 # the running loot sequence's Control
+        self.loot_start = None              # its 5 s countdown
         self.queue = queue.Queue()
         self.process = None                 # the live camera follow
         self.busy = False                   # the actor list is being read
@@ -66,8 +76,19 @@ class TargetTab:
         for button in (self.track_button, self.stop_button, self.refresh_button):
             button.pack(side="left", padx=(0, 6))
         ttk.Label(buttons, text="Tab in-game first. You do the walking; F8 stops.").pack(side="left", padx=(6, 0))
+        loot = ttk.Frame(host)
+        loot.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        loot.columnconfigure(1, weight=1)
+        ttk.Label(loot, text="Loot sequence, NPCs:").grid(row=0, column=0, sticky="w")
+        self.loot_names = tk.StringVar()
+        self.loot_names.trace_add("write", lambda *_: self.update_buttons())
+        ttk.Entry(loot, textvariable=self.loot_names).grid(row=0, column=1, sticky="ew", padx=6)
+        self.add_loot_button = ttk.Button(loot, text="Add selected", command=self.add_loot_name)
+        self.add_loot_button.grid(row=0, column=2, padx=(0, 6))
+        self.loot_button = ttk.Button(loot, text="Start loot sequence", command=self.start_loot)
+        self.loot_button.grid(row=0, column=3)
         logs = ttk.Frame(host)
-        logs.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        logs.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         logs.columnconfigure(0, weight=1)
         self.log = tk.Text(logs, height=5, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
         self.log.grid(row=0, column=0, sticky="ew")
@@ -75,6 +96,7 @@ class TargetTab:
         bar.grid(row=0, column=1, sticky="ns")
         self.log.configure(yscrollcommand=bar.set)
         parent.bind("<Map>", self.first_view, add="+")
+        self.ready = True
         self.update_buttons()
         self._after = self.root.after(100, self.poll)
 
@@ -88,13 +110,21 @@ class TargetTab:
         chosen = self.tree.selection()
         return self.rows.get(chosen[0]) if chosen else None
 
+    def steering(self):
+        return self.process is not None or self.looting is not None
+
     def update_buttons(self):
-        idle = not self.busy and self.process is None
+        if not getattr(self, "ready", False):
+            return
+        idle = not self.busy and not self.steering()
         actor = self.selected()
+        names = loot_names(self.loot_names.get())
+        self.add_loot_button.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
+        self.loot_button.configure(state="normal" if idle and names and self.loot_runner else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
-        self.stop_button.configure(state="normal" if self.process is not None else "disabled")
+        self.stop_button.configure(state="normal" if self.steering() else "disabled")
 
     def append(self, text):
         self.log.configure(state="normal")
@@ -115,12 +145,14 @@ class TargetTab:
                     self.show_nearby(payload)
                 elif kind == "done":
                     self.finished()
+                elif kind == "loot":
+                    self.loot_event(*payload)
         except queue.Empty:
             pass
         self._after = self.root.after(100, self.poll)
 
     def refresh(self):
-        if self.busy or self.process is not None:
+        if self.busy or self.steering():
             return
         self.busy = True
         self.update_buttons()
@@ -169,7 +201,7 @@ class TargetTab:
 
     def track(self):
         actor = self.selected()
-        if self.busy or self.process is not None or actor is None or actor["dead"]:
+        if self.busy or self.steering() or actor is None or actor["dead"]:
             return
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
@@ -200,7 +232,47 @@ class TargetTab:
             self.queue.put(("done", None))
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
 
+    def add_loot_name(self):
+        actor = self.selected()
+        if actor is not None and actor["kind"] == "npc":
+            self.loot_names.set(", ".join(loot_names(f"{self.loot_names.get()}, {actor['name']}")))
+
+    def start_loot(self):
+        names = loot_names(self.loot_names.get())
+        if self.busy or self.steering() or not names or self.loot_runner is None:
+            return
+        if self.other_live():
+            self.append("A walk or follow is running on the Traversal tab. Stop it first.")
+            return
+        self.looting = Control()
+        self.append("Loot sequence: click into Neocron now. Starting in 5 s...")
+        self.update_buttons()
+        self.loot_start = self.root.after(5000, self.begin_loot, names)
+
+    def begin_loot(self, names):
+        self.loot_start = None
+        try:
+            runner = self.loot_runner(names, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
+            threading.Thread(target=runner.run, daemon=True, name="loot-sequence").start()
+        except (ValueError, RuntimeError) as exc:
+            self.loot_event("done", str(exc))
+
+    def loot_event(self, kind, payload):
+        if kind in ("log", "status"):
+            self.append(payload)
+        elif kind == "done":
+            self.append(payload)
+            self.looting = None
+            self.update_buttons()
+            self.refresh()
+
     def stop(self):
+        if self.looting is not None:
+            self.looting.stopped.set()
+            if self.loot_start is not None:
+                self.root.after_cancel(self.loot_start)
+                self.loot_event("done", "Loot sequence stopped.")
+            return
         process = self.process
         if process is None:
             return
@@ -225,6 +297,8 @@ class TargetTab:
         if self.process is not None:
             tt.stop_walk(self.process)
             self.process = None
+        if self.looting is not None:
+            self.looting.stopped.set()
         for process in list(self.offline):
             try:
                 process.kill()
