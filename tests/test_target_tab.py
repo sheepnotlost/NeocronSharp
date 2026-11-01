@@ -76,12 +76,31 @@ class TargetTabTests(unittest.TestCase):
         with patch.object(self.tab, "start_live") as start:
             self.tab.heal()
         start.assert_not_called()
+        self.tab.clients = [{"pid": 1, "label": "a"}, {"pid": 2, "label": "b"}]
         self.tab.tree.selection_set(children[0])
         self.root.update()
         self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")
         with patch.object(self.tab, "start_live") as start:
             self.tab.heal()
         start.assert_called_once_with(["heal", "p1"])
+
+    def test_alone_in_a_vm_it_heals_only_the_named_fighter_with_real_input(self):
+        children = self.tab.tree.get_children()
+        self.tab.clients = [{"pid": 1, "label": "a"}]
+        self.tab.tree.selection_set(children[0])
+        self.root.update()
+        self.assertEqual(str(self.tab.heal_button.cget("state")), "disabled")
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.heal()
+        start.assert_not_called()
+        self.tab.fighter.set(" buddy ")
+        self.root.update()
+        self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")
+        with tempfile.TemporaryDirectory() as folder, patch.object(target_tab, "FIGHTER_FILE", Path(folder) / "fighter.txt"), \
+                patch.object(self.tab, "start_live") as start:
+            self.tab.heal()
+            self.assertEqual(target_tab.FIGHTER_FILE.read_text(encoding="utf-8"), "Buddy")
+        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24"])
 
     def test_two_clients_are_told_apart_and_the_choice_reaches_the_engine(self):
         found = [{"pid": 11, "label": "HLT 768, PSI 433 (11)"}, {"pid": 22, "label": "HLT 913, PSI 7 (22)"}]

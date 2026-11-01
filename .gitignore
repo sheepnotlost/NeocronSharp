@@ -49,3 +49,4 @@ traversal/logs/*
 !traversal/logs/door-graph.txt
 !traversal/logs/wasteland-places.json
 !traversal/logs/arrows-*.json
+traversal/fighter.txt

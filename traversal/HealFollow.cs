@@ -102,8 +102,6 @@ internal sealed class CameraWriter : IDisposable
 internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string logPath)
 {
     private const int Tick = 33, ReadEveryMs = 100, CastEveryMs = 30000, CastHoldMs = 1500;
-    /// <summary>A position is at the feet (seen live): this is about the middle of a standing character.</summary>
-    private const float BodyMiddle = 50;
 
     public string Run()
     {
@@ -144,7 +142,7 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
                 var towards = watch.SeenAt - s.Position;
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 float yawError = away < CameraWatch.TooClose ? 0 : CameraAim.Between(view.Yaw, MathF.Atan2(towards.Z, towards.X));
-                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, BodyMiddle, 0)) - view.Pitch;
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0)) - view.Pitch;
                 float yawTurn = CameraAim.Turn(yawError), pitchTurn = CameraAim.Turn(pitchError);
                 if (yawTurn != 0 || pitchTurn != 0) camera.Set(s, view.Yaw + yawTurn, view.Pitch + pitchTurn);
 

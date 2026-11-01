@@ -86,6 +86,7 @@ internal static class FollowCommand
     /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N]: live, until F8, Stop, focus loss, the target going, or a zone change.</summary>
     public static int Follow(List<string> rest, string root, int pulse, bool run)
     {
+        bool heal = rest.Remove("--heal");
         float distance = FollowBand.DefaultDistance;
         int d = rest.IndexOf("--distance");
         if (d >= 0 && d + 1 < rest.Count)
@@ -93,12 +94,15 @@ internal static class FollowCommand
             if (!float.TryParse(rest[d + 1], CultureInfo.InvariantCulture, out distance)) throw new InvalidOperationException($"--distance wants a number of units, not '{rest[d + 1]}'.");
             rest.RemoveRange(d, 2);
         }
-        if (rest.Count < 1) throw new InvalidOperationException("Usage: follow <entity id from 'nearby'> [--distance 150] [--run]");
+        if (rest.Count < 1) throw new InvalidOperationException("Usage: follow <entity id from 'nearby'> [--distance 150] [--run] [--heal]");
 
         using var reader = new PlayerReader(ClientExecutable());
         var sample = reader.ReadSteady();
         int sector = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
         var target = Pick(reader, rest[0]);
+        string fighterFile = Path.Combine(root, FighterFile);
+        if (heal && !CameraAim.IsFighter(File.Exists(fighterFile) ? File.ReadAllText(fighterFile) : null, target.Name, target.Identity.Kind))
+            throw new InvalidOperationException($"{target.Name} is not the fighter named on the tab. Follow and heal only works on your own fighter.");
         var band = new FollowBand(distance);
         Console.WriteLine($"Following {target.Name} ({Kind(target)}) at {band.Distance:F0} units{(band.Distance != distance ? $" (asked {distance:F0}; allowed {FollowBand.MinDistance:F0}-{FollowBand.MaxDistance:F0})" : "")}.");
 
@@ -117,16 +121,26 @@ internal static class FollowCommand
             Path.Combine(logs, $"steer-{stamp}-follow-calibration.jsonl"), hud, run) { CalibrateOnly = true };
         calibrate.Run();
         var calibration = calibrate.Measured ?? throw new InvalidOperationException("Calibration did not finish.");
+        (float Yaw, float Pitch)? aim = null;
+        if (heal)
+        {
+            var measure = new CameraWatch(reader, target, pulse, new CameraPlan(Now: true, MeasureOnly: true), hud, Path.Combine(logs, $"camera-{stamp}-gain.jsonl"));
+            measure.Run();
+            aim = measure.Measured;
+        }
 
         var exits = nav.World.Summary.Features.Where(f => f.Kind == "WorldChange"
                 && int.TryParse(f.Properties.GetValueOrDefault("NextLevelStartIndex"), out int start) && start > 0
                 && int.TryParse(f.Properties.GetValueOrDefault("NextLevel"), out int to) && to > 0 && to != sector)
             .Select(f => (f.Position, int.Parse(f.Properties["NextLevel"]))).ToList();
         string why = new FollowWalk(reader, nav, sector, target, band, calibration, pulse, run, hud,
-            Path.Combine(logs, $"follow-{stamp}.jsonl"), exits, Name).Run();
+            Path.Combine(logs, $"follow-{stamp}.jsonl"), exits, Name, aim).Run();
         Console.WriteLine(why);
         return 0;
     }
+
+    /// <summary>The user's fighter, named on the suite's tab, in this folder.</summary>
+    private const string FighterFile = "fighter.txt";
 
     /// <summary>The living, nearby actor with this id from 'nearby'.</summary>
     private static WorldEntity Pick(PlayerReader reader, string idText, bool dead = false)
@@ -203,7 +217,7 @@ internal static class FollowCommand
 /// <summary>The live follow loop. Ends by returning why it stopped, or by throwing (F8, focus, zone change, stuck).</summary>
 internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, WorldEntity target, FollowBand band,
     LiveSteer.Calibration calibration, int pulse, bool run, Hud hud, string logPath,
-    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName)
+    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName, (float Yaw, float Pitch)? heal = null)
 {
     private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
@@ -304,11 +318,14 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             Vector3 stallFrom = first.Position; double stallMark = 0; int stalls = 0;
             double turningSince = -1;
             bool wasMoving = !band.Moving;
+            double nextCast = 0, castEnds = -1;
+            int casts = 0;
 
             while (true)
             {
                 var s = Guard();
                 double now = clock.Elapsed.TotalSeconds;
+                if (castEnds >= 0 && now >= castEnds) { input.HoldLeft(false); castEnds = -1; }
                 if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
 
                 float straight = FollowLogic.Straight(s.Position, watch.SeenAt);
@@ -359,6 +376,21 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                         moving ? $"{straight:F0} units away; no walkable way there yet" : $"waiting, {gap:F0} units away (moves on past {band.Resume:F0})", "F8 stops");
                     Wait(Tick);
                     stallFrom = s.Position; stallMark = now; lastPixels = 0;
+                    // In reach of the fighter: the same aim as the camera follow, and the click every 30 s.
+                    if (!moving && heal is { } gains)
+                    {
+                        var view = reader.ReadCamera(s) ?? throw new InvalidOperationException("The camera's angles could not be read on this game build. Follow stopped.");
+                        float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
+                        float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0)) - view.Pitch;
+                        input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / gains.Yaw), (int)MathF.Round(CameraAim.Turn(pitchError) / gains.Pitch));
+                        if (castEnds < 0 && now >= nextCast && CameraAim.OnTarget(yawError, pitchError))
+                        {
+                            input.HoldLeft(true);
+                            castEnds = now + CameraAim.CastHoldSeconds; nextCast = now + CameraAim.CastEverySeconds;
+                            Record("cast", s, new { yawError, pitchError, gap });
+                            Console.WriteLine($"Cast {++casts} on {target.Name}.");
+                        }
+                    }
                     continue;
                 }
 

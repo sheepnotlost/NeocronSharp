@@ -98,6 +98,10 @@ internal static class CameraAim
         return size > FarAbove ? error * FarShare : Math.Clamp(error * NearShare, -MaxNearTurn, MaxNearTurn);
     }
 
+    /// <summary>A position is at the feet (seen live): this is about the middle of a standing character.</summary>
+    public const float BodyMiddle = 50;
+    public const double CastEverySeconds = 30, CastHoldSeconds = 1.5;
+
     /// <summary>The first aim must land before the left button goes down: the test moves leave the camera well off the target.</summary>
     public const float OnTargetWithin = 0.035f;   // 2 degrees
 
@@ -106,6 +110,10 @@ internal static class CameraAim
 
     /// <summary>The left button is held on NPCs only: on a real player it would be an aimbot.</summary>
     public static bool MayHold(EntityKind kind) => kind == EntityKind.Npc;
+
+    /// <summary>A player gets one click every 30 s, and only the fighter the user named. No other client can vouch for it from inside a VM.</summary>
+    public static bool IsFighter(string? named, string name, EntityKind kind) =>
+        kind == EntityKind.Player && string.Equals(named?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The shortest turn between two headings.</summary>
     public static float Between(float from, float to) => MathF.Atan2(MathF.Sin(to - from), MathF.Cos(to - from));

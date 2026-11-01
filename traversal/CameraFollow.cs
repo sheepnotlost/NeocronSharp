@@ -61,7 +61,8 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 
 /// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
-internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false);
+internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
+    bool MeasureOnly = false);
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -76,6 +77,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         ProbeStep = 6;   // Windows mouse acceleration: a pixel of a big pulse goes twice as far, and corrections are small.
     /// <summary>Closer than this on the flat, "towards the target" has no useful direction.</summary>
     public const float TooClose = 5;
+    /// <summary>Radians per pixel of mouse, once measured.</summary>
+    public (float Yaw, float Pitch)? Measured { get; private set; }
     /// <summary>Where a run to a loot box stops. Not yet set live: the view stops at 43 degrees down, so too close and the crosshair cannot reach the box.</summary>
     public const float BoxReach = 60;
     private const float FacingToRun = 0.35f;
@@ -208,6 +211,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 pitchGain = Measure("pitch", PitchProbe, s => View(s).Pitch, px => input.LookPulse(0, px));
                 Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {yawGain} {pitchGain}"));
             }
+            Measured = (yawGain, pitchGain);
+            if (plan.MeasureOnly) return "";
             if (plan.Box) return RunToBox(yawGain, pitchGain);
 
             var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Camera follow stopped.");

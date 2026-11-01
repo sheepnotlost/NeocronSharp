@@ -4,7 +4,9 @@ Follow's target list without the walk: the work is done by traversal.exe's "came
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 The loot sequence (loot_runner.py) repeats fight, run and loot on the NPC names you add.
-Follow and heal runs without focus: traversal.exe's "heal" keeps the crosshair on your other client's character, walks after it and casts every 30 s.
+Follow and heal has two forms. With two clients open here it runs without focus: traversal.exe's "heal" keeps the crosshair on your
+other client's character, walks after it and casts every 30 s. With one (a healer in a VM, its fighter elsewhere) it is "follow --heal",
+with real mouse input: Follow's routes to the fighter named here, then aiming and a click every 30 s when in reach.
 """
 import os
 import queue
@@ -16,6 +18,10 @@ from tkinter import ttk
 import clients
 import traversal_tab as tt
 from macro_core import Control
+
+
+FIGHTER_FILE = tt.PROJECT / "fighter.txt"
+HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 
 
 def loot_names(text):
@@ -85,6 +91,14 @@ class TargetTab:
         self.heal_button = ttk.Button(buttons, text="Follow and heal", command=self.heal)
         for button in (self.track_button, self.stop_button, self.refresh_button, self.heal_button):
             button.pack(side="left", padx=(0, 6))
+        ttk.Label(buttons, text="Fighter:").pack(side="left", padx=(6, 0))
+        try:
+            saved = FIGHTER_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            saved = ""
+        self.fighter = tk.StringVar(value=saved)
+        self.fighter.trace_add("write", lambda *_: self.update_buttons())
+        ttk.Entry(buttons, textvariable=self.fighter, width=16).pack(side="left", padx=6)
         ttk.Label(buttons, text="Tab in-game first. You do the walking; F8 stops.").pack(side="left", padx=(6, 0))
         loot = ttk.Frame(host)
         loot.grid(row=4, column=0, sticky="ew", pady=(6, 0))
@@ -120,6 +134,12 @@ class TargetTab:
         chosen = self.tree.selection()
         return self.rows.get(chosen[0]) if chosen else None
 
+    def may_heal(self, actor):
+        """A living player. Two clients here: the engine checks it is your other one. One: it must be the fighter you named."""
+        if actor is None or actor["dead"] or actor["kind"] != "player":
+            return False
+        return len(self.clients) > 1 or actor["name"].lower() == self.fighter.get().strip().lower()
+
     def steering(self):
         return self.process is not None or self.looting is not None
 
@@ -133,7 +153,7 @@ class TargetTab:
         self.loot_button.configure(state="normal" if idle and names and self.loot_runner else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
-        self.heal_button.configure(state="normal" if idle and actor is not None and actor["kind"] == "player" and not actor["dead"] else "disabled")
+        self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
         self.stop_button.configure(state="normal" if self.steering() else "disabled")
 
@@ -247,16 +267,21 @@ class TargetTab:
         self.update_buttons()
 
     def heal(self):
-        """The client chosen above is the healer, and it needs no focus. The engine refuses anyone but your other client's character."""
+        """Two clients here: the one chosen above is the healer, and it needs no focus. One: this is the healer, focused, and the fighter is elsewhere."""
         actor = self.selected()
-        if self.busy or self.steering() or actor is None or actor["dead"] or actor["kind"] != "player":
+        if self.busy or self.steering() or not self.may_heal(actor):
             return
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
             return
         self.append(f"Tracking {actor['name']} and following. Casting every 30 s.")
         try:
-            self.start_live(["heal", actor["id"]])
+            if len(self.clients) > 1:
+                self.start_live(["heal", actor["id"]])
+            else:
+                FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
+                self.append("Starting in 5 s: Neocron must stay the focused window here.")
+                self.start_live(["follow", actor["id"], "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24"])
             self.heal_button.configure(text="Healing...")
         except (OSError, RuntimeError) as exc:
             self.process = None

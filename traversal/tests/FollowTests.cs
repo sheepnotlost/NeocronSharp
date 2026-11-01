@@ -42,6 +42,14 @@ internal static class FollowTests
             Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");
         });
 
+        test("Heal from a VM: only the fighter named on the tab", () =>
+        {
+            Check(CameraAim.IsFighter(" scooter\n", "Scooter", EntityKind.Player), "the fighter, however it was typed");
+            Check(!CameraAim.IsFighter("Scooter", "Adam", EntityKind.Player), "any other player");
+            Check(!CameraAim.IsFighter(null, "Scooter", EntityKind.Player) && !CameraAim.IsFighter("", "Scooter", EntityKind.Player), "nobody named");
+            Check(!CameraAim.IsFighter("Scooter", "Scooter", EntityKind.Npc), "an NPC of that name");
+        });
+
         test("Camera aim: the left button goes down on the target, and only ever on an NPC", () =>
         {
             Check(CameraAim.OnTarget(0.01f, -0.01f), "within 2 degrees both ways");
