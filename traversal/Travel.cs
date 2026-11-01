@@ -848,7 +848,7 @@ internal sealed partial class Travel(string install, Func<int, NavWorld> bake, H
         PlayerSample? last = null; long stillSince = 0; int? lastSector = null;
         while (clock.Elapsed.TotalSeconds < 90)
         {
-            if ((Native.GetAsyncKeyState(0x77) & 0x8000) != 0) throw new OperationCanceledException("F8 stop pressed.");
+            if (StopRequest.Made()) throw new OperationCanceledException("F8 stop pressed.");
             Thread.Sleep(250);
             PlayerSample s; int? sector;
             try { s = reader.ReadSample(); sector = reader.ReadSectorId(s.World); }

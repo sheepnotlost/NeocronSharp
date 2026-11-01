@@ -183,7 +183,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         // As LiveSteer's guard on an ordinary walk: F8, focus, identity, sector, teleports.
         PlayerSample Guard()
         {
-            if ((Native.GetAsyncKeyState(0x77) & 0x8000) != 0) throw new OperationCanceledException("F8 stop pressed.");
+            if (StopRequest.Made()) throw new OperationCanceledException("F8 stop pressed.");
             reader.RequireForeground();
             PlayerSample s;
             try { s = reader.ReadSteady(); }

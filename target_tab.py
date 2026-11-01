@@ -1,7 +1,7 @@
 """Target Acquisition tab: keep the camera on a player or NPC while you move yourself.
 
 Follow's target list without the walk: the work is done by traversal.exe's "camera" command,
-which sends left/right mouse movement only (no movement keys, no clicks) and stops on F8.
+which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 """
 import queue
 import subprocess
@@ -57,7 +57,7 @@ class TargetTab:
         buttons = ttk.Frame(host)
         buttons.grid(row=3, column=0, sticky="ew", pady=(6, 0))
         self.track_button = ttk.Button(buttons, text="Track", command=self.track)
-        self.stop_button = ttk.Button(buttons, text="Stop (F8)", command=self.stop)
+        self.stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
         self.refresh_button = ttk.Button(buttons, text="Refresh", command=self.refresh)
         for button in (self.track_button, self.stop_button, self.refresh_button):
             button.pack(side="left", padx=(0, 6))
@@ -171,7 +171,7 @@ class TargetTab:
             return
         self.append(f"Keeping the camera on {actor['name']}. Starting in 5 s...")
         try:
-            self.start_live(["camera", actor["id"], "--pulse", "12"])
+            self.start_live(["camera", actor["id"], "--pulse", "24"])
             self.track_button.configure(text="Tracking...")
         except (OSError, RuntimeError) as exc:
             self.process = None
@@ -182,6 +182,7 @@ class TargetTab:
         problem = tt.build_tool()
         if problem:
             raise RuntimeError(problem)
+        tt.clear_stop()
         self.process = subprocess.Popen([str(tt.EXE), *args], cwd=tt.PROJECT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                         text=True, encoding="utf-8", errors="replace", creationflags=tt.NO_WINDOW)
 
@@ -208,7 +209,7 @@ class TargetTab:
         self.refresh()
 
     def close(self):
-        """Stop a running camera follow (F8, then end it) and any actor read; the window is closing."""
+        """Stop a running camera follow and any actor read; the window is closing."""
         self.closed = True
         if self._after is not None:
             try:

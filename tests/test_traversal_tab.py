@@ -99,16 +99,34 @@ class FakeProcess:
 
 
 class StopTests(unittest.TestCase):
-    def test_f8_held_until_the_walker_exits(self):
-        keys = []
-        tt.stop_walk(FakeProcess(exits=True), key=lambda *k: keys.append(k))
-        self.assertEqual(keys, [(0x77, 0x42, 0), (0x77, 0x42, 2)])
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.flag = Path(self.folder.name) / "stop.request"
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def test_the_stop_file_stays_until_the_walker_exits_and_no_key_reaches_the_game(self):
+        keys, seen = [], []
+        process = FakeProcess(exits=True)
+        process.wait = lambda timeout=None: seen.append(self.flag.exists())
+        tt.stop_walk(process, key=lambda *k: keys.append(k), flag=self.flag)
+        self.assertEqual(seen, [True])
+        self.assertFalse(self.flag.exists())
+        self.assertEqual(keys, [])
 
     def test_a_walker_that_will_not_stop_is_ended_and_its_keys_released(self):
         keys, process = [], FakeProcess(exits=False)
-        tt.stop_walk(process, key=lambda *k: keys.append(k))
+        tt.stop_walk(process, key=lambda *k: keys.append(k), flag=self.flag)
         self.assertTrue(process.killed)
-        self.assertEqual(keys, [(0x77, 0x42, 0), (0x77, 0x42, 2), (0, 0x11, 0x0A), (0, 0x2A, 0x0A)])
+        self.assertFalse(self.flag.exists())
+        self.assertEqual(keys, [(0, 0x11, 0x0A), (0, 0x2A, 0x0A)])
+
+    def test_a_stop_file_left_behind_is_cleared(self):
+        self.flag.write_text("stop")
+        tt.clear_stop(self.flag)
+        tt.clear_stop(self.flag)                                 # and none there is no error
+        self.assertFalse(self.flag.exists())
 
 
 class TabTests(unittest.TestCase):

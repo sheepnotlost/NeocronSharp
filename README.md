@@ -26,7 +26,9 @@ Tests: `runtime\python.exe -m unittest discover -s tests` (Python),
 
 The **Target Acquisition** tab keeps your camera on a player or NPC while you move yourself. It lists who is around you, as Follow does (players first, nearest first; the dead can't be picked). Press Tab in Neocron so the pointer is hidden, select someone and click **Track**; you have 5 s to click into the game.
 
-The camera makes one small test turn to measure your mouse, then turns left and right to keep facing the target. It only moves the mouse: no movement key and no click is ever sent, and it needs no navmesh, so you keep walking yourself. It follows left and right only, not up and down. It stops on F8, **Stop**, leaving the game window, a zone change, or the target dying or going out of range. It won't start while a walk or Follow is running on the Traversal tab, and they won't start while it runs. Not yet tried in the game.
+The camera makes a few small test moves to measure your mouse, then turns left, right, up and down to keep the crosshair on the target. It only moves the mouse: no movement key and no click is ever sent, so you keep walking yourself. It stops on **Stop**, F8, leaving the game window, a zone change, or the target dying or going out of range. It won't start while a walk or Follow is running on the Traversal tab, and they won't start while it runs.
+
+Tested live on a wandering Small Spider and a standing Copbot in Plaza 1: within about 0.5 degrees on the spider, and 0.2 degrees on the Copbot after swinging 144 degrees onto it in half a second; the game's own target label named the spider at the crosshair. It aims at where the target stands, so the crosshair sits at a tall target's feet. The height is set for your third-person view (`ctrl_externaldist 100`); another camera distance or first person needs it set again. The game stops the view at 43 degrees down, so a target right at your feet can stay below the crosshair, behind your character.
 
 ## Screen automation
 

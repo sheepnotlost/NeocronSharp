@@ -43,7 +43,7 @@ class TargetTabTests(unittest.TestCase):
         self.root.update()
         with patch.object(self.tab, "start_live") as start:
             self.tab.track()
-        start.assert_called_once_with(["camera", "p1", "--pulse", "12"])
+        start.assert_called_once_with(["camera", "p1", "--pulse", "24"])
         self.assertIn("Keeping the camera on Buddy", self.log())
 
     def test_will_not_start_while_a_walk_steers_the_same_mouse(self):

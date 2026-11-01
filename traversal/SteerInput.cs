@@ -4,6 +4,17 @@ using NeocronSharp;
 namespace NavmeshPrototype;
 
 /// <summary>
+/// Stop now: F8 on the keyboard, or the suite's Stop button, which leaves this file in the working folder.
+/// (The button used to send F8 itself, but the game gets that too: it is the Missions key, and it opens the
+/// game's menus and leaves mouse-look. 31 Oct.)
+/// </summary>
+internal static class StopRequest
+{
+    public const string File = "stop.request";
+    public static bool Made() => (Native.GetAsyncKeyState(0x77) & 0x8000) != 0 || System.IO.File.Exists(File);
+}
+
+/// <summary>
 /// Like the app's GameInput, but a turn keeps W held so the character can steer
 /// while walking, and mouse pulses are a configurable size.
 /// </summary>
@@ -38,12 +49,19 @@ internal sealed class SteerInput : IDisposable
     public int TurnPulse(int pixels)
     {
         int move = Math.Clamp(pixels, -Pulse, Pulse);
-        if (move == 0) return 0;
+        LookPulse(move, 0);
+        return move;
+    }
+
+    /// <summary>Send one mouse pulse, right and down in pixels (each at most <see cref="Pulse"/>).</summary>
+    public void LookPulse(int x, int y)
+    {
+        if (x == 0 && y == 0) return;
         _reader.RequireForeground();
-        var packet = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput { X = move, Flags = 0x0001 } } };
+        var packet = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput {
+            X = Math.Clamp(x, -Pulse, Pulse), Y = Math.Clamp(y, -Pulse, Pulse), Flags = 0x0001 } } };
         if (Native.SendInput(1, new[] { packet }, Marshal.SizeOf<Native.Input>()) != 1)
             throw new InvalidOperationException("Windows rejected steering input.");
-        return move;
     }
 
     private static void Key(ushort scan, bool up)

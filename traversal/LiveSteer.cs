@@ -84,7 +84,7 @@ internal sealed class LiveSteer
             position = new { s.Position.X, s.Position.Y, s.Position.Z }, forward = new { s.Forward.X, s.Forward.Z },
             walking = input.Walking, detail }));
 
-        bool F8() => (Native.GetAsyncKeyState(0x77) & 0x8000) != 0;
+        bool F8() => StopRequest.Made();
 
         PlayerSample Guard()
         {

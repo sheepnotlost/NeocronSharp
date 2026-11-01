@@ -6,9 +6,11 @@ Updated 2026-10-27. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
-- [x] New suite tab: Follow's list of players and NPCs, with Track, Stop (F8), Refresh and its own log. traversal.exe's new `camera <id>` command keeps the view on the target with Follow's steering: mouse pulses only, left and right, no movement keys and no clicks, and no navmesh or test step (mouse gain comes from one small turn).
+- [x] New suite tab: Follow's list of players and NPCs, with Track, Stop, Refresh and its own log. traversal.exe's new `camera <id>` command keeps the crosshair on the target: mouse pulses only, no movement keys and no clicks, and no navmesh or test step.
 - [x] Follow's target reading moved into `TargetWatch` (traversal/CameraFollow.cs), shared by the walk and the camera, with tests. Traversal and Target Acquisition refuse to start while the other is steering. Window minimum is now 1140 px wide so the eleven tabs fit in every skin (checked on screen in all 15).
-- [ ] Not tried live: the camera follow itself. Up and down is not followed.
+- [x] Live on a wandering Small Spider, tuned over several runs (31 Oct). The body heading (`Forward`) stands still for 0.6 s and then jumps in third person, which made the camera hunt by 8 degrees; the camera's own yaw and pitch were found by moving the mouse and reading the player's memory (player+0x27c yaw in degrees, heading + yaw = 270; player+0x278 twice the pitch; copies at +0x9d4; `PlayerReader.ReadCamera`). Mouse gain is measured with small test moves that must agree (Windows acceleration makes a pixel of a big pulse go twice as far). Result: spider median 0.3-0.7 degrees across and 0.3 up/down; standing Copbot steady at 0.2 degrees after a 144 degree swing in about 0.5 s. The crosshair height (82 units above your position) was set until the game's own target label named the spider; the view stops at 43 degrees down.
+- [x] Fixed: the Stop button sent F8, which the game also gets: it is the Missions key, and it opened the game's menus and left mouse-look (seen live; true of Traversal's Stop too). Stop now leaves a stop file; the real F8 key still works but opens Missions as it always does.
+- [ ] Not tested live: following a player, a target on another floor, first person or another camera distance. A tall target gets the crosshair at its feet.
 
 ### Construction queue — 29 October 2026
 

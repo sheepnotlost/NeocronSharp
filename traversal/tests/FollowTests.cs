@@ -12,6 +12,26 @@ internal static class FollowTests
 
     public static void Run(Action<string, Action> test)
     {
+        test("Camera aim: small steady corrections near the target, a quick swing when far off, nothing on it", () =>
+        {
+            Check(CameraAim.Turn(0.005f) == 0 && CameraAim.Turn(-0.005f) == 0, "within the deadband nothing moves");
+            Check(MathF.Abs(CameraAim.Turn(0.1f) - 0.03f) < 1e-5f, "near it, a share of the error");
+            Check(CameraAim.Turn(0.34f) == CameraAim.MaxNearTurn && CameraAim.Turn(-0.34f) == -CameraAim.MaxNearTurn, "capped near it");
+            Check(CameraAim.Turn(1f) == CameraAim.FarShare && CameraAim.Turn(-1f) == -CameraAim.FarShare, "far off, a big share");
+            Check(MathF.Abs(CameraAim.Facing(MathF.PI / 2).Z - 1) < 1e-5f && MathF.Abs(PointNavigation.SignedAngle(CameraAim.Facing(0), CameraAim.Facing(0.5f)) - 0.5f) < 1e-5f, "a heading as a flat direction");
+        });
+
+        test("Camera aim: the angle above level, from the eye to the target", () =>
+        {
+            var eye = new Vector3(0, -CameraAim.EyeHeight, 0);
+            Check(MathF.Abs(CameraAim.PitchTo(eye, new Vector3(100, 0, 0))) < 1e-5f, "same height as the eye: level");
+            Check(MathF.Abs(CameraAim.PitchTo(eye, new Vector3(200, 100, 0)) - MathF.Atan(0.5f)) < 1e-5f, "half as far up as along");
+            Check(CameraAim.PitchTo(eye, new Vector3(10, 900, 0)) == CameraAim.MaxPitch, "no higher than the game lets you look");
+            Check(CameraAim.PitchTo(default, new Vector3(10, -900, 0)) == -CameraAim.MaxPitch, "and no lower");
+            Check(CameraAim.PitchTo(default, new Vector3(100, 0, 0)) < 0, "an actor on your own floor is below your eye");
+            Check(MathF.Abs(CameraAim.PitchTo(eye, eye) ) < 1.6f && float.IsFinite(CameraAim.PitchTo(eye, eye)), "standing on it stays finite");
+        });
+
         test("Target watch: follows the actor, and rides out misses and a registry caught mid-update", () =>
         {
             long now = 0;

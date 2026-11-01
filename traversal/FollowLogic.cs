@@ -34,6 +34,33 @@ internal sealed class FollowBand
     }
 }
 
+/// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
+internal static class CameraAim
+{
+    /// <summary>
+    /// How far above your position the crosshair's line runs (the view sits behind and above you in third
+    /// person, so it passes over your head): set live on 31 Oct until the game's own target label named the
+    /// spider being followed. The game stops the view at <see cref="MaxPitch"/> up or down.
+    /// </summary>
+    public const float EyeHeight = 82, MaxPitch = 43 * MathF.PI / 180;
+    public const float Deadband = 0.006f, FarAbove = 0.35f, FarShare = 0.5f, NearShare = 0.3f, MaxNearTurn = 0.1f;
+
+    /// <summary>The turn for this tick: part of the error, so the camera settles on the target instead of swinging past it.</summary>
+    public static float Turn(float error)
+    {
+        float size = MathF.Abs(error);
+        if (size < Deadband) return 0;
+        return size > FarAbove ? error * FarShare : Math.Clamp(error * NearShare, -MaxNearTurn, MaxNearTurn);
+    }
+
+    /// <summary>The flat direction of a heading.</summary>
+    public static Vector3 Facing(float yaw) => new(MathF.Cos(yaw), 0, MathF.Sin(yaw));
+
+    /// <summary>Radians above level of the target, from the eye, within what the game allows.</summary>
+    public static float PitchTo(Vector3 from, Vector3 target) =>
+        Math.Clamp(MathF.Atan2(target.Y - (from.Y + EyeHeight), Math.Max(1, PointNavigation.Distance(from, target))), -MaxPitch, MaxPitch);
+}
+
 /// <summary>Why the follow route is planned again (None: keep the current one).</summary>
 internal enum FollowReplan { None, First, OffRoute, TargetMoved, NearRouteEnd, Refresh }
 

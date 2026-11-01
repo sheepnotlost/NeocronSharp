@@ -288,7 +288,7 @@ internal sealed class SubwayRide(PlayerReader reader, NavWorld nav, Travel trave
             timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
             position = at is { } p ? new { p.X, p.Y, p.Z } : null, detail,
         }));
-        static bool F8() => (Native.GetAsyncKeyState(0x77) & 0x8000) != 0;
+        static bool F8() => StopRequest.Made();
         var turns = new TurnController(Measured?.Gain ?? 0.0025f);
 
         // Turn toward a point (standing still), within about 5 degrees.

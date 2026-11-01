@@ -55,13 +55,14 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 }
 
 /// <summary>
-/// The live camera follow: mouse pulses only, turning left and right to keep facing the target
-/// with the same steering as a walk. No movement key and no click is ever sent, so you keep
-/// walking yourself. Ends by returning why it stopped, or by throwing (F8, focus, zone change).
+/// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
+/// target. No movement key and no click is ever sent, so you keep walking yourself. Ends by
+/// returning why it stopped, or by throwing (F8, focus, zone change).
 /// </summary>
 internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int pulse, Hud hud, string logPath)
 {
-    private const int Tick = 33, PulseGap = 16, ReadEveryMs = 80;
+    private const int Tick = 16, PulseGap = 16, ReadEveryMs = 80, YawProbe = 96, PitchProbe = 64,
+        ProbeStep = 6;   // Windows mouse acceleration: a pixel of a big pulse goes twice as far, and corrections are small.
     /// <summary>Closer than this on the flat, "towards the target" has no useful direction.</summary>
     public const float TooClose = 5;
 
@@ -79,7 +80,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
             position = new { s.Position.X, s.Position.Y, s.Position.Z }, forward = new { s.Forward.X, s.Forward.Z }, detail }));
 
-        bool F8() => (Native.GetAsyncKeyState(0x77) & 0x8000) != 0;
+        bool F8() => StopRequest.Made();
 
         PlayerSample Guard()
         {
@@ -101,11 +102,39 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             return s;
         }
 
-        int Turn(int pixels, int pulses)
+        (float Yaw, float Pitch) View(PlayerSample s) => reader.ReadCamera(s)
+            ?? throw new InvalidOperationException("The camera's angles could not be read on this game build. Camera follow stopped.");
+
+        // The value once the game has caught up: a turn shows late, so one quick read measures only part of it.
+        float Settled(Func<PlayerSample, float> value)
         {
-            int sent = 0;
-            for (int i = 0; i < pulses && sent != pixels; i++) { sent += input.TurnPulse(pixels - sent); Wait(PulseGap); }
-            return sent;
+            float last = value(Wait(60));
+            int calm = 0;
+            for (int i = 0; i < 25 && calm < 2; i++)
+            {
+                float now = value(Wait(60));
+                calm = MathF.Abs(now - last) < 0.0015f ? calm + 1 : 0;
+                last = now;
+            }
+            return last;
+        }
+
+        // Radians per pixel: test moves one way then the other, until two agree. The first pulses after
+        // focus can be swallowed, so one measurement alone proves nothing (31 Oct: one this far off hunted).
+        float Measure(string axis, int pixels, Func<PlayerSample, float> value, Action<int> send)
+        {
+            float? last = null;
+            for (int attempt = 0, way = 1; attempt < 6; attempt++, way = -way)
+            {
+                float before = Settled(value);
+                for (int sent = 0; sent < pixels; sent += ProbeStep) { send(way * ProbeStep); Wait(PulseGap); }
+                float gain = (Settled(value) - before) / (way * pixels);
+                Record("gain-probe", previous, new { axis, way, gain });
+                if (MathF.Abs(gain) < 1e-5f) continue;
+                if (last is { } g && Math.Sign(g) == Math.Sign(gain) && MathF.Abs(g - gain) < 0.35f * MathF.Abs(gain)) return (g + gain) / 2;
+                last = gain;
+            }
+            throw new InvalidOperationException("Mouse-look did not respond steadily. Press Tab in Neocron so the free pointer disappears, close chat, try again.");
         }
 
         try
@@ -117,41 +146,26 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("F8 stop pressed."); Thread.Sleep(50); }
             }
 
-            // Mouse gain from a small turn alone: a walk's test step would move the character.
-            // The first pulses after focus can be swallowed, so a silent first probe is retried once.
-            float gain = 0;
-            var before = Guard();
-            for (int attempt = 0; attempt < 2 && Math.Abs(gain) < 1e-6f; attempt++)
-            {
-                int sent = Turn(Math.Max(48, pulse * 4), 16);
-                var after = Wait(80);
-                float angle = PointNavigation.SignedAngle(before.Forward, after.Forward);
-                Record("turn-probe", after, new { sent, angle });
-                if (Math.Abs(angle) > 0.001f) gain = angle / sent;
-                before = after;
-            }
-            if (Math.Abs(gain) < 1e-6f) throw new InvalidOperationException("Mouse-look did not respond. Press Tab in Neocron so the free pointer disappears, close chat, try again.");
+            var reference = CameraAim.Facing(View(Guard()).Yaw);
+            float yawGain = Measure("yaw", YawProbe, s => PointNavigation.SignedAngle(reference, CameraAim.Facing(View(s).Yaw)), px => input.LookPulse(px, 0));
+            float pitchGain = Measure("pitch", PitchProbe, s => View(s).Pitch, px => input.LookPulse(0, px));
 
-            var turns = new TurnController(gain);
             var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Camera follow stopped.");
-            Record("start", before, new { target = target.Name, id = FollowCommand.Id(target), gain });
+            Record("start", previous, new { target = target.Name, id = FollowCommand.Id(target), yawGain, pitchGain });
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
-            int lastPixels = 0;
-            Vector3 lastForward = before.Forward;
             while (true)
             {
                 var s = Guard();
                 if (watch.Read() is { } gone) { Record("lost", s, new { gone }); hud.Post(Hud.Cyan, title, gone); return gone; }
-                turns.Observe(lastPixels, PointNavigation.SignedAngle(lastForward, s.Forward));
-                lastForward = s.Forward;
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
-                var decision = Steering.Decide(s.Position, s.Forward, watch.SeenAt);
-                int pixels = away < TooClose ? 0 : turns.Pixels(decision.TurnRadians, pulse * 2);
-                int sent = pixels == 0 ? 0 : Turn(pixels, 2);
-                lastPixels = sent;
-                hud.Show(Hud.Green, title, $"{away:F0} units away, {MathF.Abs(decision.Angle) * 180 / MathF.PI:F0} deg off centre", "F8 stops");
-                Record("track", s, new { decision.Angle, pixels = sent, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
-                if (sent == 0) Wait(Tick);
+                var view = View(s);
+                float yawError = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt) - view.Pitch;
+                int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
+                input.LookPulse(x, y);
+                hud.Show(Hud.Green, title, $"{away:F0} units away, {MathF.Abs(yawError) * 180 / MathF.PI:F0} deg across, {MathF.Abs(pitchError) * 180 / MathF.PI:F0} deg up/down", "F8 stops");
+                Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
+                Wait(Tick);
             }
         }
         catch (Exception error)

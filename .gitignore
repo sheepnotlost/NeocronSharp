@@ -40,6 +40,7 @@ traversal/obj/
 traversal/tests/bin/
 traversal/tests/obj/
 traversal/out/
+traversal/stop.request
 traversal/logs/*
 !traversal/logs/traversal-crossings.txt
 !traversal/logs/traversal-obstacles.txt

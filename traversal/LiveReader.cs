@@ -77,6 +77,22 @@ internal sealed partial class PlayerReader
     }
 
     /// <summary><see cref="ReadSample"/>, with one-off read failures retried for up to about 1 s (<see cref="ReadTolerance"/>).</summary>
+    /// <summary>
+    /// Where the camera points right now, in radians, heading as in <see cref="PointNavigation.SignedAngle"/>
+    /// and pitch above level. <see cref="PlayerSample.Forward"/> will not do: it is the body, flat, and in
+    /// third person it stands still for half a second and then jumps. Found live on 31 Oct by moving the
+    /// mouse: player+0x278 is twice the pitch in degrees, +0x27c the yaw in degrees (heading + yaw = 270),
+    /// both kept again at +0x9d4. Null when the copies disagree or they are no angles (an update moved them).
+    /// </summary>
+    internal (float Yaw, float Pitch)? ReadCamera(PlayerSample sample)
+    {
+        byte[] live = Read(sample.Player + 0x278, 8), copy = Read(sample.Player + 0x9d4, 8);
+        float pitch = BitConverter.ToSingle(live, 0) / 2, yaw = BitConverter.ToSingle(live, 4);
+        if (!float.IsFinite(pitch) || !float.IsFinite(yaw) || MathF.Abs(pitch) > 90 || MathF.Abs(yaw) > 3600) return null;
+        if (MathF.Abs(BitConverter.ToSingle(copy, 0) / 2 - pitch) > 5 || MathF.Abs(BitConverter.ToSingle(copy, 4) - yaw) > 30) return null;
+        return ((270 - yaw) * MathF.PI / 180, pitch * MathF.PI / 180);
+    }
+
     internal PlayerSample ReadSteady()
     {
         var clock = Stopwatch.StartNew();

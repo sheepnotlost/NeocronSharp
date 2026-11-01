@@ -4,7 +4,7 @@ A Tk port of Nav Walker. The work is done by traversal\\traversal.exe (C#): "all
 "preview" and "nearby" only read (the game's position read-only, the level files), and
 "travel" / "follow" walk the character live. This module lists the places, starts those
 commands (offline ones on worker threads, results handed back through root.after), shows
-their output, and stops a walk with F8, the key the walker watches.
+their output, and stops a walk by leaving the stop file the walker watches for (with the F8 key).
 """
 import ctypes
 import json
@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT / "traversal"
 EXE = PROJECT / "bin" / "Release" / "net9.0" / "traversal.exe"
 HOOKCTL = ROOT / "NeocronHook" / "bin" / "hookctl.exe"
+STOP_FILE = PROJECT / "stop.request"
 NO_WINDOW = 0x08000000
 NOT_YET, OUTPOSTS, BUILDINGS = "not-yet", "wasteland", "buildings"
 SECTION_TITLES = {NOT_YET: "Not walkable yet", OUTPOSTS: "Wasteland outposts and landmarks",
@@ -72,19 +73,27 @@ def keybd_event(vk, scan, flags):
     ctypes.windll.user32.keybd_event(vk, scan, flags, 0)
 
 
-def stop_walk(process, key=keybd_event):
-    """Stop a walk. The walker only looks at F8 between steps (not while it builds a map), so hold F8
-    down until it has gone, up to 5 s; if it is still running, end it and release the W and Shift keys
-    it may have been holding (scan-code key-ups, as the walker sends them)."""
+def clear_stop(flag=None):
+    """Remove a stop request left by a crash, so it cannot end the next walk at once."""
     try:
-        key(0x77, 0x42, 0)                    # F8 down
+        (flag or STOP_FILE).unlink()
+    except OSError:
+        pass
+
+
+def stop_walk(process, key=keybd_event, flag=None):
+    """Stop a walk. Never by sending F8: the game gets that too, and it opens its menus. The walker only
+    looks for the stop file between steps (not while it builds a map), so leave it there until the walker
+    has gone, up to 5 s; if it is still running, end it and release the W and Shift keys it may have been
+    holding (scan-code key-ups, as the walker sends them)."""
+    flag = flag or STOP_FILE
+    try:
+        flag.write_text("stop", encoding="ascii")
         try:
             process.wait(5)
             return
         except subprocess.TimeoutExpired:
             pass
-        finally:
-            key(0x77, 0x42, 2)                # F8 up
         process.kill()
         try:
             process.wait(2)
@@ -92,6 +101,8 @@ def stop_walk(process, key=keybd_event):
             pass
     except OSError:
         return                                 # already gone
+    finally:
+        clear_stop(flag)
     scan_up = 0x0008 | 0x0002                  # KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP
     key(0, 0x11, scan_up)                      # W
     key(0, 0x2A, scan_up)                      # left Shift
@@ -284,7 +295,7 @@ class TraversalTab:
         buttons.grid(row=2, column=0, sticky="ew", pady=(6, 0))
         self.walk_button = ttk.Button(buttons, text="Walk there", command=self.walk)
         self.show_button = ttk.Button(buttons, text="Show route", command=self.show_route)
-        self.stop_button = ttk.Button(buttons, text="Stop (F8)", command=self.stop)
+        self.stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
         self.refresh_button = ttk.Button(buttons, text="Refresh", command=self.refresh)
         for button in (self.walk_button, self.show_button, self.stop_button, self.refresh_button):
             button.pack(side="left", padx=(0, 6))
@@ -321,7 +332,7 @@ class TraversalTab:
         buttons = ttk.Frame(page)
         buttons.grid(row=2, column=0, sticky="ew", pady=(6, 0))
         self.follow_button = ttk.Button(buttons, text="Follow", command=self.follow)
-        self.follow_stop_button = ttk.Button(buttons, text="Stop (F8)", command=self.stop)
+        self.follow_stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
         self.refresh_actors_button = ttk.Button(buttons, text="Refresh", command=self.refresh_nearby)
         for button in (self.follow_button, self.follow_stop_button, self.refresh_actors_button):
             button.pack(side="left", padx=(0, 6))
@@ -407,6 +418,7 @@ class TraversalTab:
         problem = build_tool()
         if problem:
             raise RuntimeError(problem)
+        clear_stop()
         self.process = subprocess.Popen([str(EXE), *args], cwd=PROJECT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                         text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
         self.live_kind = kind
@@ -694,7 +706,7 @@ class TraversalTab:
     # ---- closing ----
 
     def close(self):
-        """Stop any running walk (F8, then end it) and any offline command; the window is closing."""
+        """Stop any running walk and any offline command; the window is closing."""
         self.closed = True
         if self._after is not None:
             try:
