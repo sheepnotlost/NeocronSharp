@@ -46,6 +46,26 @@ class TargetTabTests(unittest.TestCase):
         start.assert_called_once_with(["camera", "p1", "--pulse", "24"])
         self.assertIn("Keeping the camera on Buddy", self.log())
 
+    def test_holds_the_left_button_on_an_npc_when_asked(self):
+        self.tab.tree.selection_set(self.tab.tree.get_children()[3])
+        self.root.update()
+        self.assertEqual(str(self.tab.hold_check.cget("state")), "normal")
+        self.tab.hold_left.set(True)
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.track()
+        start.assert_called_once_with(["camera", "n1", "--pulse", "24", "--hold-left"])
+        self.assertIn("left mouse button held", self.log())
+
+    def test_never_holds_the_left_button_on_a_player(self):
+        self.tab.hold_left.set(True)
+        self.tab.tree.selection_set(self.tab.tree.get_children()[0])
+        self.root.update()
+        self.assertEqual(str(self.tab.hold_check.cget("state")), "disabled")
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.track()
+        start.assert_called_once_with(["camera", "p1", "--pulse", "24"])
+        self.assertNotIn("left mouse button", self.log())
+
     def test_will_not_start_while_a_walk_steers_the_same_mouse(self):
         self.walking = True
         self.tab.tree.selection_set(self.tab.tree.get_children()[0])

@@ -139,16 +139,18 @@ internal static class FollowCommand
         return target;
     }
 
-    /// <summary>camera &lt;entity id&gt; [--pulse N]: live, turns the camera to keep facing the target; never walks or clicks.</summary>
+    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {
-        if (rest.Count < 1) throw new InvalidOperationException("Usage: camera <entity id from 'nearby'>");
+        bool holdLeft = rest.Remove("--hold-left");
+        if (rest.Count < 1) throw new InvalidOperationException("Usage: camera <entity id from 'nearby'> [--hold-left]");
         using var reader = new PlayerReader(ClientExecutable());
         var target = Pick(reader, rest[0]);
+        if (holdLeft && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the left mouse button is held on NPCs only.");
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, holdLeft, hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

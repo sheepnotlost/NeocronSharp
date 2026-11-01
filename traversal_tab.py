@@ -73,6 +73,10 @@ def keybd_event(vk, scan, flags):
     ctypes.windll.user32.keybd_event(vk, scan, flags, 0)
 
 
+def left_up():
+    ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)   # MOUSEEVENTF_LEFTUP
+
+
 def clear_stop(flag=None):
     """Remove a stop request left by a crash, so it cannot end the next walk at once."""
     try:
@@ -81,11 +85,11 @@ def clear_stop(flag=None):
         pass
 
 
-def stop_walk(process, key=keybd_event, flag=None):
+def stop_walk(process, key=keybd_event, flag=None, mouse=left_up):
     """Stop a walk. Never by sending F8: the game gets that too, and it opens its menus. The walker only
     looks for the stop file between steps (not while it builds a map), so leave it there until the walker
     has gone, up to 5 s; if it is still running, end it and release the W and Shift keys it may have been
-    holding (scan-code key-ups, as the walker sends them)."""
+    holding (scan-code key-ups, as the walker sends them) and the left mouse button."""
     flag = flag or STOP_FILE
     try:
         flag.write_text("stop", encoding="ascii")
@@ -106,6 +110,7 @@ def stop_walk(process, key=keybd_event, flag=None):
     scan_up = 0x0008 | 0x0002                  # KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP
     key(0, 0x11, scan_up)                      # W
     key(0, 0x2A, scan_up)                      # left Shift
+    mouse()
 
 
 # ---- the lists (pure, so tests need no engine) ----

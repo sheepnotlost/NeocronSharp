@@ -56,10 +56,11 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
-/// target. No movement key and no click is ever sent, so you keep walking yourself. Ends by
-/// returning why it stopped, or by throwing (F8, focus, zone change).
+/// target. No movement key is ever sent, so you keep walking yourself, and no click unless
+/// <paramref name="holdLeft"/> asks for the left button, held from the first time the crosshair is
+/// on an NPC until the run ends. Ends by returning why it stopped, or by throwing (F8, focus, zone change).
 /// </summary>
-internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int pulse, Hud hud, string logPath)
+internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int pulse, bool holdLeft, Hud hud, string logPath)
 {
     private const int Tick = 16, PulseGap = 16, ReadEveryMs = 80, YawProbe = 96, PitchProbe = 64,
         ProbeStep = 6;   // Windows mouse acceleration: a pixel of a big pulse goes twice as far, and corrections are small.
@@ -164,6 +165,12 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt) - view.Pitch;
                 int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
                 input.LookPulse(x, y);
+                if (holdLeft && !input.LeftHeld && CameraAim.OnTarget(yawError, pitchError))
+                {
+                    input.HoldLeft(true);
+                    Record("hold", s, new { yawError, pitchError, away });
+                    Console.WriteLine($"On {target.Name}: holding the left mouse button.");
+                }
                 hud.Show(Hud.Green, title, $"{away:F0} units away, {MathF.Abs(yawError) * 180 / MathF.PI:F0} deg across, {MathF.Abs(pitchError) * 180 / MathF.PI:F0} deg up/down", "F8 stops");
                 // A few lines a second: every tick would be 40 MB an hour.
                 if (ticks++ % 10 == 0) Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });

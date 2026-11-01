@@ -21,6 +21,14 @@ internal static class FollowTests
             Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
         });
 
+        test("Camera aim: the left button goes down on the target, and only ever on an NPC", () =>
+        {
+            Check(CameraAim.OnTarget(0.01f, -0.01f), "within 2 degrees both ways");
+            Check(!CameraAim.OnTarget(0.1f, 0) && !CameraAim.OnTarget(0, -0.1f), "either axis off is not on the target");
+            Check(CameraAim.MayHold(EntityKind.Npc), "NPCs may be held on");
+            Check(!CameraAim.MayHold(EntityKind.Player) && !CameraAim.MayHold(EntityKind.UnclassifiedCharacter), "anything else may not");
+        });
+
         test("Camera aim: small steady corrections near the target, a quick swing when far off, nothing on it", () =>
         {
             Check(CameraAim.Turn(0.005f) == 0 && CameraAim.Turn(-0.005f) == 0, "within the deadband nothing moves");

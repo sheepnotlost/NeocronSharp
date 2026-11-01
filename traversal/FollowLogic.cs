@@ -69,6 +69,15 @@ internal static class CameraAim
         return size > FarAbove ? error * FarShare : Math.Clamp(error * NearShare, -MaxNearTurn, MaxNearTurn);
     }
 
+    /// <summary>The first aim must land before the left button goes down: the test moves leave the camera well off the target.</summary>
+    public const float OnTargetWithin = 0.035f;   // 2 degrees
+
+    public static bool OnTarget(float yawError, float pitchError) =>
+        MathF.Abs(yawError) < OnTargetWithin && MathF.Abs(pitchError) < OnTargetWithin;
+
+    /// <summary>The left button is held on NPCs only: on a real player it would be an aimbot.</summary>
+    public static bool MayHold(EntityKind kind) => kind == EntityKind.Npc;
+
     /// <summary>The flat direction of a heading.</summary>
     public static Vector3 Facing(float yaw) => new(MathF.Cos(yaw), 0, MathF.Sin(yaw));
 

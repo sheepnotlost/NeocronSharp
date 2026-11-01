@@ -2,6 +2,7 @@
 
 Follow's target list without the walk: the work is done by traversal.exe's "camera" command,
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
+The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 """
 import queue
 import subprocess
@@ -36,6 +37,9 @@ class TargetTab:
         self.find = tk.StringVar()
         ttk.Entry(top, textvariable=self.find, width=22).pack(side="left", padx=6)
         self.find.trace_add("write", lambda *_: self.show_actors())
+        self.hold_left = tk.BooleanVar(value=False)
+        self.hold_check = ttk.Checkbutton(top, text="Hold left mouse button (NPCs only)", variable=self.hold_left)
+        self.hold_check.pack(side="left", padx=(12, 0))
         self.status = tk.StringVar(value="Press Refresh to see who is around you.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
             row=1, column=0, sticky="ew", pady=(8, 4))
@@ -61,7 +65,7 @@ class TargetTab:
         self.refresh_button = ttk.Button(buttons, text="Refresh", command=self.refresh)
         for button in (self.track_button, self.stop_button, self.refresh_button):
             button.pack(side="left", padx=(0, 6))
-        ttk.Label(buttons, text="Tab in-game first. Turns the camera only; F8 stops.").pack(side="left", padx=(6, 0))
+        ttk.Label(buttons, text="Tab in-game first. You do the walking; F8 stops.").pack(side="left", padx=(6, 0))
         logs = ttk.Frame(host)
         logs.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         logs.columnconfigure(0, weight=1)
@@ -88,6 +92,7 @@ class TargetTab:
         idle = not self.busy and self.process is None
         actor = self.selected()
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
+        self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
         self.stop_button.configure(state="normal" if self.process is not None else "disabled")
 
@@ -169,9 +174,10 @@ class TargetTab:
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
             return
-        self.append(f"Keeping the camera on {actor['name']}. Starting in 5 s...")
+        hold = self.hold_left.get() and actor["kind"] == "npc"
+        self.append(f"Keeping the camera on {actor['name']}{', left mouse button held once on it' if hold else ''}. Starting in 5 s...")
         try:
-            self.start_live(["camera", actor["id"], "--pulse", "24"])
+            self.start_live(["camera", actor["id"], "--pulse", "24", *(["--hold-left"] if hold else [])])
             self.track_button.configure(text="Tracking...")
         except (OSError, RuntimeError) as exc:
             self.process = None

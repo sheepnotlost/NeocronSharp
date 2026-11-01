@@ -117,8 +117,10 @@ class StopTests(unittest.TestCase):
 
     def test_a_walker_that_will_not_stop_is_ended_and_its_keys_released(self):
         keys, process = [], FakeProcess(exits=False)
-        tt.stop_walk(process, key=lambda *k: keys.append(k), flag=self.flag)
+        released = []
+        tt.stop_walk(process, key=lambda *k: keys.append(k), flag=self.flag, mouse=lambda: released.append(True))
         self.assertTrue(process.killed)
+        self.assertEqual(released, [True])
         self.assertFalse(self.flag.exists())
         self.assertEqual(keys, [(0, 0x11, 0x0A), (0, 0x2A, 0x0A)])
 

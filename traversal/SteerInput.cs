@@ -25,6 +25,7 @@ internal sealed class SteerInput : IDisposable
     public int Pulse { get; }
     public bool Run { get; }
     public bool Walking { get; private set; }
+    public bool LeftHeld { get; private set; }
     private bool _sprint = true;
     public SteerInput(PlayerReader reader, int pulse, bool run = false)
     {
@@ -62,6 +63,18 @@ internal sealed class SteerInput : IDisposable
             X = Math.Clamp(x, -Pulse, Pulse), Y = Math.Clamp(y, -Pulse, Pulse), Flags = 0x0001 } } };
         if (Native.SendInput(1, new[] { packet }, Marshal.SizeOf<Native.Input>()) != 1)
             throw new InvalidOperationException("Windows rejected steering input.");
+    }
+
+    /// <summary>Press or release the left mouse button. Let go in <see cref="Dispose"/> however a run ends.</summary>
+    public void HoldLeft(bool on)
+    {
+        if (on == LeftHeld) return;
+        if (on) _reader.RequireForeground();
+        // Track the button before sending, so even uncertain delivery gets a release.
+        LeftHeld = on;
+        var packet = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput { Flags = on ? 0x0002u : 0x0004u } } };
+        if (Native.SendInput(1, new[] { packet }, Marshal.SizeOf<Native.Input>()) != 1)
+            throw new InvalidOperationException("Windows rejected the left mouse button.");
     }
 
     private static void Key(ushort scan, bool up)
@@ -108,5 +121,9 @@ internal sealed class SteerInput : IDisposable
         if (Walking) Key(Shift, !on);
     }
 
-    public void Dispose() { if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); } }
+    public void Dispose()
+    {
+        try { HoldLeft(false); }
+        finally { if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); } }
+    }
 }
