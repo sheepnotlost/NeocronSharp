@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 using NeocronSharp;
 using NeocronSharp.Core;
 
@@ -9,12 +10,12 @@ namespace NavmeshPrototype;
 
 /// <summary>
 /// Keys for a client that does not have focus: window messages, after telling the window it is active. Real focus
-/// stays where it is. W, A, S, D and a Shoot key get through; the mouse does not, so the camera cannot turn (1 Nov).
+/// stays where it is. W, A, S, D and a Shoot key get through; the mouse does not (1 Nov).
 /// </summary>
 internal sealed class BackgroundKeys(nint window) : IDisposable
 {
     internal sealed record Key(uint Vk, uint Scan, bool Extended = false);
-    public static readonly Key W = new(0x57, 0x11), S = new(0x53, 0x1f), A = new(0x41, 0x1e), D = new(0x44, 0x20),
+    public static readonly Key W = new(0x57, 0x11), S = new(0x53, 0x1f),
         Shift = new(0x10, 0x2a), Shoot = new(0x2d, 0x52, true);   // keys.ini: INSERT = Shoot
     private const uint KeyDown = 0x100, KeyUp = 0x101, Activate = 0x06, SetFocus = 0x07, ActivateApp = 0x1c;
     private readonly HashSet<Key> _held = new();
@@ -57,18 +58,55 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
 }
 
 /// <summary>
-/// The healer's follow, with the camera fixed: it keeps the place it had beside the target when it started, walking and
-/// strafing, so a target under the crosshair then stays under it. Casts with the Shoot key every 30 s when in place.
-/// Runs without focus. Ends by returning why it stopped, or by throwing.
+/// Sets the camera angles of the healer's own client, the only thing in this project that writes to the game's memory.
+/// The mouse cannot reach an unfocused client and no key turns the camera, so this is how its crosshair follows.
+/// </summary>
+internal sealed class CameraWriter : IDisposable
+{
+    private readonly SafeProcessHandle _handle;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern SafeProcessHandle OpenProcess(uint access, bool inherit, int pid);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool WriteProcessMemory(SafeProcessHandle handle, nint address, byte[] buffer, nuint size, out nuint written);
+
+    public CameraWriter(int pid)
+    {
+        _handle = OpenProcess(0x28, false, pid);   // VM write and operation
+        if (_handle.IsInvalid) throw new System.ComponentModel.Win32Exception();
+    }
+
+    /// <summary>Radians, as <see cref="PlayerReader.ReadCamera"/> gives them: the game keeps twice the pitch and 270 minus the yaw, in degrees, twice.</summary>
+    public void Set(PlayerSample sample, float yaw, float pitch)
+    {
+        float degrees = 270 - yaw * 180 / MathF.PI;
+        degrees -= 360 * MathF.Floor(degrees / 360);
+        var bytes = BitConverter.GetBytes(pitch * 2 * 180 / MathF.PI).Concat(BitConverter.GetBytes(degrees)).ToArray();
+        foreach (ulong field in new ulong[] { 0x278, 0x9d4 })
+            if (!WriteProcessMemory(_handle, (nint)(sample.Player + field), bytes, 8, out _))
+                throw new InvalidOperationException("The healer's camera could not be set. Stopped.");
+    }
+
+    public void Dispose() => _handle.Dispose();
+}
+
+/// <summary>
+/// The healer's follow: keeps the crosshair on the target by setting the camera, walks to keep the distance it started
+/// at, and casts with the Shoot key every 30 s when on target. Runs without focus. The caller has checked the target is
+/// the character in the user's other client. Ends by returning why it stopped, or by throwing.
 /// </summary>
 internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string logPath)
 {
-    private const int Tick = 50, ReadEveryMs = 150, CastEveryMs = 30000, CastHoldMs = 1500, ActiveEveryMs = 5000;
+    private const int Tick = 33, ReadEveryMs = 100, CastEveryMs = 30000, CastHoldMs = 1500, ActiveEveryMs = 5000;
+    /// <summary>A position is at the feet (seen live): this is about the middle of a standing character.</summary>
+    private const float BodyMiddle = 50;
 
     public string Run()
     {
         using var log = new StreamWriter(logPath) { AutoFlush = true };
         using var keys = new BackgroundKeys(reader.Window);
+        using var camera = new CameraWriter(reader.Process.Id);
         var clock = Stopwatch.StartNew();
         var origin = reader.ReadSteady();
         int? sector = reader.ReadSectorId(origin.World);
@@ -78,12 +116,10 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
             timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
             position = new { s.Position.X, s.Position.Y, s.Position.Z }, detail }));
 
-        var place = Formation.Place(CameraAim.Facing(View(origin).Yaw), origin.Position, target.Position);
-        if (!Formation.Ahead(place)) throw new InvalidOperationException($"{target.Name} is not under the crosshair. Aim the healer at them by hand, then start.");
+        var hold = new HoldDistance(PointNavigation.Distance(origin.Position, target.Position));
         var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Heal follow stopped.");
-        var walk = new Formation();
-        Record("start", origin, new { target = target.Name, place.Forward, place.Right });
-        Console.WriteLine($"Following {target.Name} from {place.Forward:F0} units behind and {place.Right:F0} to the side. Casting every {CastEveryMs / 1000} s.");
+        Record("start", origin, new { target = target.Name, hold.Distance });
+        Console.WriteLine($"Keeping the crosshair on {target.Name} and {hold.Distance:F0} units away. Casting every {CastEveryMs / 1000} s.");
         long nextCast = 0, castEnds = -1, nextActive = 0;
         int casts = 0, ticks = 0;
         var last = origin;
@@ -102,22 +138,28 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
                 last = s;
                 if (watch.Read() is { } gone) { Record("lost", s, new { gone }); return gone; }
 
-                var error = Formation.Error(CameraAim.Facing(View(s).Yaw), s.Position, watch.SeenAt, place);
-                var (forward, right, run) = walk.Keys(error);
+                var view = View(s);
+                var towards = watch.SeenAt - s.Position;
+                float away = PointNavigation.Distance(s.Position, watch.SeenAt);
+                float yawError = away < CameraWatch.TooClose ? 0 : CameraAim.Between(view.Yaw, MathF.Atan2(towards.Z, towards.X));
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, BodyMiddle, 0)) - view.Pitch;
+                float yawTurn = CameraAim.Turn(yawError), pitchTurn = CameraAim.Turn(pitchError);
+                if (yawTurn != 0 || pitchTurn != 0) camera.Set(s, view.Yaw + yawTurn, view.Pitch + pitchTurn);
+
+                var (forward, run) = hold.Keys(away, yawError);
                 keys.Set(BackgroundKeys.W, forward > 0); keys.Set(BackgroundKeys.S, forward < 0);
-                keys.Set(BackgroundKeys.D, right > 0); keys.Set(BackgroundKeys.A, right < 0);
                 keys.Set(BackgroundKeys.Shift, run);
 
                 if (castEnds >= 0 && now >= castEnds) { keys.Set(BackgroundKeys.Shoot, false); castEnds = -1; }
-                if (castEnds < 0 && now >= nextCast && Formation.InPlace(error))
+                if (castEnds < 0 && now >= nextCast && CameraAim.OnTarget(yawError, pitchError) && hold.InReach(away))
                 {
                     keys.Set(BackgroundKeys.Shoot, true);
                     castEnds = now + CastHoldMs; nextCast = now + CastEveryMs;
-                    Record("cast", s, new { error.Forward, error.Right });
+                    Record("cast", s, new { yawError, pitchError, away });
                     Console.WriteLine($"Cast {++casts} on {target.Name}.");
                 }
                 keys.Repeat();
-                if (ticks++ % 10 == 0) Record("step", s, new { error.Forward, error.Right, forward, right, run, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
+                if (ticks++ % 15 == 0) Record("step", s, new { yawError, pitchError, away, forward, run, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
                 Thread.Sleep(Tick);
             }
         }

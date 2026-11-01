@@ -20,13 +20,14 @@ internal sealed partial class PlayerReader : IDisposable
     private readonly SafeProcessHandle _handle;
     private readonly ulong _base;
 
-    public PlayerReader(string expectedExecutable)
+    public PlayerReader(string expectedExecutable, int? client = null)
     {
         var matches = System.Diagnostics.Process.GetProcessesByName("neocronclient");
         // With two clients open, NEOCRON_PID says which one to read.
-        if (int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int chosen))
+        if (client == null && int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int chosen)) client = chosen;
+        if (client != null)
         {
-            var kept = matches.Where(p => p.Id == chosen).ToArray();
+            var kept = matches.Where(p => p.Id == client).ToArray();
             foreach (var item in matches.Except(kept)) item.Dispose();
             matches = kept;
         }

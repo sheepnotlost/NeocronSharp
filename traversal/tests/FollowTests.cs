@@ -21,27 +21,23 @@ internal static class FollowTests
             Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
         });
 
-        test("Heal follow: keeps its place beside the target, and only casts when in it", () =>
+        test("Heal follow: keeps its distance, facing the target, and only heals your other client", () =>
         {
-            var facing = new Vector3(0.8f, 0, 0.6f);
-            var you = new Vector3(100, 0, 100);
-            var target = you + facing * 120;
-            var place = Formation.Place(facing, you, target);
-            Check(MathF.Abs(place.Forward - 120) < 0.01f && MathF.Abs(place.Right) < 0.01f, "the target straight ahead");
-            var still = Formation.Error(facing, you, target, place);
-            Check(MathF.Abs(still.Forward) < 0.01f && MathF.Abs(still.Right) < 0.01f && Formation.InPlace(still), "nothing moved, nothing to do");
-            // Live: with this facing D moved (-6.2, 8.2) and W (9.3, 6.9). A target that goes D's way wants D.
-            var sideways = Formation.Error(facing, you, target + new Vector3(-30, 0, 40), place);
-            Check(sideways.Right > 45 && MathF.Abs(sideways.Forward) < 0.01f, "right is D's direction");
-            Check(!Formation.InPlace(sideways), "off to the side does not cast");
-            Check(Formation.Ahead(place) && Formation.Ahead((100, -20)), "the target about under the crosshair");
-            Check(!Formation.Ahead((-170, -59)) && !Formation.Ahead((100, 60)), "behind you or well to the side is refused");
-            var walk = new Formation();
-            Check(walk.Keys((20, 0)) is (1, 0, false), "starts walking past the start distance");
-            Check(walk.Keys((10, 0)) is (1, 0, false), "keeps walking until nearly there");
-            Check(walk.Keys((3, 0)) is (0, 0, false), "stops when there");
-            Check(walk.Keys((10, 0)) is (0, 0, false), "and does not start again for a small drift");
-            Check(walk.Keys((-200, 0)) is (-1, 0, true), "runs when far off");
+            var hold = new HoldDistance(100);
+            Check(hold.Keys(120, 0) == (1, false), "too far: walks");
+            Check(hold.Keys(110, 0) == (1, false), "keeps walking until nearly there");
+            Check(hold.Keys(103, 0) == (0, false), "stops when there");
+            Check(hold.Keys(110, 0) == (0, false), "and does not start again for a small drift");
+            Check(hold.Keys(80, 0) == (-1, false), "too close: backs off");
+            Check(hold.Keys(300, 1) == (0, true), "does not walk until it faces the target");
+            Check(hold.Keys(300, 0) == (1, true), "runs when far off");
+            Check(hold.InReach(150) && !hold.InReach(200), "does not cast out of reach");
+            Check(new HoldDistance(5).Distance == HoldDistance.MinDistance && new HoldDistance(9000).Distance == HoldDistance.MaxDistance, "the distance is kept sensible");
+            var at = new Vector3(100, 0, 100);
+            Check(HoldDistance.SameCharacter(at, 7, at + new Vector3(30, 0, 0), 7), "your other client's character");
+            Check(!HoldDistance.SameCharacter(at, 7, at + new Vector3(300, 0, 0), 7), "someone else, elsewhere");
+            Check(!HoldDistance.SameCharacter(at, 8, at, 7) && !HoldDistance.SameCharacter(at, null, at, null), "another sector, or an unknown one");
+            Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");
         });
 
         test("Camera aim: the left button goes down on the target, and only ever on an NPC", () =>

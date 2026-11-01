@@ -4,7 +4,7 @@ Follow's target list without the walk: the work is done by traversal.exe's "came
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 The loot sequence (loot_runner.py) repeats fight, run and loot on the NPC names you add.
-Follow and heal runs without focus: traversal.exe's "heal" keeps your place beside a player, casting every 30 s.
+Follow and heal runs without focus: traversal.exe's "heal" keeps the crosshair on your other client's character, walks after it and casts every 30 s.
 """
 import os
 import queue
@@ -247,14 +247,14 @@ class TargetTab:
         self.update_buttons()
 
     def heal(self):
-        """The client chosen above is the healer. It needs no focus: put the crosshair on the player, then start."""
+        """The client chosen above is the healer, and it needs no focus. The engine refuses anyone but your other client's character."""
         actor = self.selected()
         if self.busy or self.steering() or actor is None or actor["dead"] or actor["kind"] != "player":
             return
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
             return
-        self.append(f"Following {actor['name']} from where you stand now. Casting every 30 s.")
+        self.append(f"Tracking {actor['name']} and following. Casting every 30 s.")
         try:
             self.start_live(["heal", actor["id"]])
             self.heal_button.configure(text="Healing...")
