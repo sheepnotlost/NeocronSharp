@@ -100,8 +100,8 @@ class Engine:
         return text
 
     def walk(self, actor, reach, tick):
-        """Follow's routes to an NPC, ending within reach. Walked, not sprinted: Shift runs out of stamina on a long way."""
-        args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", "24"]
+        """Follow's routes to an NPC, running while it is far, ending within reach."""
+        args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", "24", "--run"]
         if self.calibration:
             args += ["--calibration", self.calibration]
         text = self.live(args, tick)

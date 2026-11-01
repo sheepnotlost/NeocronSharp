@@ -117,6 +117,25 @@ internal static class FollowTests
             Check(watch.Read() == "crossed from 9", "and counts as gone, with the zone-exit reason when there is one");
         });
 
+        test("Sprint: rests when a run goes slow, and runs again after", () =>
+        {
+            var guard = new SprintGuard();
+            Vector3 At(float x) => new(x, 0, 0);
+            Check(guard.MayRun(0, At(0), true), "starts running");
+            Check(guard.MayRun(1, At(300), true), "300 units/s is a run");
+            Check(guard.MayRun(1.5, At(450), true), "still inside the window");
+            Check(!guard.MayRun(2, At(335), true), "35 units/s means stamina is out");
+            Check(!guard.MayRun(2.1, At(340), false), "rests");
+            Check(!guard.MayRun(16.9, At(2000), false), "for the whole rest");
+            Check(guard.MayRun(17.1, At(2100), false), "then may run again");
+            var turning = new SprintGuard();
+            turning.MayRun(0, At(0), true);
+            Check(turning.MayRun(0.5, At(10), false) && turning.MayRun(1.1, At(10), true) && turning.MayRun(1.2, At(10), true), "stopping to turn is not a crawl");
+            var lift = new SprintGuard();
+            lift.MayRun(0, At(0), true);
+            Check(lift.MayRun(10, At(0), true), "a lift ride between readings is not a crawl");
+        });
+
         test("Target watch: an NPC is never swapped for an unnamed character at its address", () =>
         {
             long now = 0;

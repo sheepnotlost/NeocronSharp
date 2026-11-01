@@ -34,6 +34,32 @@ internal sealed class FollowBand
     }
 }
 
+/// <summary>
+/// When Shift may stay down. It runs at about 300 units/s until stamina empties, then crawls at 35 (live, 1 Nov), and the
+/// game's stamina is not read, so a run gone slow is the sign. Then it rests with W alone. Not yet set live.
+/// </summary>
+internal sealed class SprintGuard
+{
+    public const float CrawlBelow = 100;
+    public const double WindowSeconds = 1, RestSeconds = 15;
+    private Vector3? _from;
+    private double _at, _restUntil = double.MinValue;
+
+    /// <summary>Call every tick. <paramref name="running"/> is whether Shift and W are both down now.</summary>
+    public bool MayRun(double now, Vector3 position, bool running)
+    {
+        if (now < _restUntil) return false;
+        if (!running || _from == null || now - _at > WindowSeconds * 3) { _from = running ? position : null; _at = now; return true; }
+        if (now - _at < WindowSeconds) return true;
+        bool crawling = PointNavigation.Distance(position, _from.Value) / (now - _at) < CrawlBelow;
+        _from = position; _at = now;
+        if (!crawling) return true;
+        _from = null;
+        _restUntil = now + RestSeconds;
+        return false;
+    }
+}
+
 /// <summary>Sudden moves of your character: one is the game correcting it, several close together are not.</summary>
 internal sealed class PositionJumps
 {
@@ -98,7 +124,7 @@ internal static class CameraAim
         return size > FarAbove ? error * FarShare : Math.Clamp(error * NearShare, -MaxNearTurn, MaxNearTurn);
     }
 
-    /// <summary>A position is at the feet (seen live): this is about the middle of a standing character.</summary>
+    /// <summary>A position is at the feet (seen live: aiming there shot at a mob's feet and sometimes missed): this is about the middle of a standing character. The list gives no height, so small mobs get the same.</summary>
     public const float BodyMiddle = 50;
     public const double CastEverySeconds = 30, CastHoldSeconds = 1.5;
 

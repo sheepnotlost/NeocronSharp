@@ -323,6 +323,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             float lookahead = Steering.Lookahead(calibration.Speed);
             var rider = new LiftRider(Guard, Wait, Turn, input, turns, pulse, (k, at, d) => Record(k, at, d), text => hud.Show(Hud.Cyan, title, text, "F8 stops"));
             var doors = new DoorOpener(nav.Doors);
+            var stamina = new SprintGuard();
             int lastPixels = 0;
             var first = Guard();
             Vector3 lastForward = first.Forward;
@@ -438,7 +439,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     continue;
                 }
                 // Walking: the same pure pursuit and capped turning as LiveSteer.
-                input.Sprint(gap - band.Distance > 120);
+                bool rested = stamina.MayRun(now, s.Position, input.Sprinting);
+                input.Sprint(rested && gap - band.Distance > 120);
                 turns.Observe(lastPixels, PointNavigation.SignedAngle(lastForward, s.Forward));
                 lastForward = s.Forward;
                 // Walk to a lift's start exactly: the look-ahead would cut past it into the beam.

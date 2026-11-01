@@ -37,6 +37,18 @@ class PickTests(unittest.TestCase):
         self.assertFalse(dropped((800, 900), None))
 
 
+class WalkTests(unittest.TestCase):
+    def test_a_hunt_runs_and_passes_on_the_first_calibration(self):
+        engine = loot_runner.Engine(None, None)
+        sent = []
+        engine.live = lambda args, tick: sent.append(args) or "calibration 300 0.002\nReached Rat, 190 units away."
+        engine.walk(actor("Rat"), 200, None)
+        engine.walk(actor("Rat"), 200, None)
+        self.assertIn("--run", sent[0])
+        self.assertNotIn("--calibration", sent[0])
+        self.assertEqual(sent[1][-2:], ["--calibration", "300,0.002"])
+
+
 class ScreenTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

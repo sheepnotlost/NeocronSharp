@@ -233,7 +233,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
                 float yawError = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt) - view.Pitch;
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0)) - view.Pitch;
                 int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
                 input.LookPulse(x, y);
                 if (watch.Health < lowest) { lowest = watch.Health; lastHurt = clock.ElapsedMilliseconds; }

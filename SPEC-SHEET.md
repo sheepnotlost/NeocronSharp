@@ -47,6 +47,10 @@ NeoSharp ([sheepnotlost/neosharp](https://github.com/sheepnotlost/neosharp), `Do
 
 Runs with its own buttons, through traversal.exe's `camera`, `heal` and `follow --heal` commands (traversal/README.md) and loot_runner.py. Everything here reads positions from the game's memory. The actor list covers the whole zone. Stop leaves `traversal/stop.request`.
 
+All aiming at a target is at `CameraAim.BodyMiddle`, 50 units above the position the game gives, which is at its feet. The actor list gives no height, so small mobs get the same.
+
+`Make VM Copy.cmd` (tools/make_vm_copy.py) makes the `NeocronSharp VM` folder for a PC or VM with no .NET: the tracked files without tests, research or styling, and a self-contained traversal.exe.
+
 ### Track
 
 - `camera <id>` keeps the crosshair on the chosen player or NPC with mouse movement only. It sends no movement keys and needs mouse-look.
@@ -63,12 +67,12 @@ Runs with its own buttons, through traversal.exe's `camera`, `heal` and `follow 
 
 ### Follow and heal, one client (VM mode)
 
-`follow <id> --heal` is chosen when one client is open, for a healer alone on its own machine or VM. It uses real input and writes no memory, and Neocron must keep focus there. It takes Follow's routes to the character named in the Fighter box (`fighter.txt`, not committed) anywhere in the zone, stops 120 units away, aims with the mouse, and holds left click for 1.5 s every 30 s while in reach. It refuses anyone else. It walks without Shift, because sprinting empties stamina and then crawls at 35 units/s. If a follow ends for any reason but Stop, F8 or focus loss, the tab looks for the fighter every 10 s and starts again once they are alive in the zone, passing the first run's calibration and gains so there are no more test moves. It cannot change zone. Not yet run: no VM to test on.
+`follow <id> --heal` is chosen when one client is open, for a healer alone on its own machine or VM. It uses real input and writes no memory, and Neocron must keep focus there. It takes Follow's routes to the character named in the Fighter box (`fighter.txt`, not committed) anywhere in the zone, stops 120 units away, aims with the mouse, and holds left click for 1.5 s every 30 s while in reach. It refuses anyone else. It runs with Shift when more than 120 units beyond its distance. Sprinting empties stamina and then crawls at 35 units/s, and stamina is not read, so `SprintGuard` rests 15 s with W alone when a run falls under 100 units/s. If a follow ends for any reason but Stop, F8 or focus loss, the tab looks for the fighter every 10 s and starts again once they are alive in the zone, passing the first run's calibration and gains so there are no more test moves. It cannot change zone. Not yet run: no VM to test on.
 
 ### Hunt
 
 - The enemy list groups the living NPCs the client can see by name, with a count and the nearest distance. Ticks replace typed names and outlive a Refresh. Players are never listed, and `pick_target` and `follow --arrive` refuse them anyway.
-- Takes the nearest ticked NPC anywhere in the zone. Beyond Attack from (default 200 units, 40 to 2,000), `follow --arrive` walks there on Follow's routes without Shift and ends on arrival. The first walk's calibration is passed to the later ones, so only the first has a test step.
+- Takes the nearest ticked NPC anywhere in the zone. Beyond Attack from (default 200 units, 40 to 2,000), `follow --arrive --run` goes there on Follow's routes, running as in VM mode, and ends on arrival. The first walk's calibration is passed to the later ones, so only the first has a test step.
 - Attacks with `camera --hold-left --give-up 20`. If health is still falling, it kills the nearest ticked NPC within 200 units first. A target that is close on the flat but undamaged gets one `follow --arrive` and one more try. A target with no route, or undamaged for 20 s after that, is skipped for the rest of the hunt. `ONE_TARGET` in loot_runner.py lists the endings that are about one target: any other ending stops the hunt.
 - `camera --box` runs to the body and right-clicks it, the one exception to the doors-and-train rule. T, E, A and L parts are read from the loot window with the Research letter reading and dragged to Inventory. Nothing else is taken.
 - Stops on Stop, F8, focus loss, a zone change, health under 35% (also read while looting and waiting), unreadable health at the start, health falling with no ticked NPC near, no room in Inventory, a loot box that will not close, or 10 minutes with no ticked NPC to fight. Not yet run live.

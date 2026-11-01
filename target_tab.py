@@ -349,7 +349,7 @@ class TargetTab:
         self.update_buttons()
 
     def start_alone(self, fighter_id):
-        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", *self.measured])
+        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", "--run", *self.measured])
 
     def remember(self, line):
         found = re.match(r"\s*(calibration|gains) (\S+) (\S+)\s*$", line)

@@ -100,7 +100,7 @@ class TargetTabTests(unittest.TestCase):
                 patch.object(self.tab, "start_live") as start:
             self.tab.heal()
             self.assertEqual(target_tab.FIGHTER_FILE.read_text(encoding="utf-8"), "Buddy")
-        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24"])
+        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24", "--run"])
 
     def test_a_healer_alone_goes_back_to_the_fighter_until_stopped(self):
         self.tab.heal_name = "Buddy"
@@ -137,7 +137,7 @@ class TargetTabTests(unittest.TestCase):
         self.tab.remember("gains 0.002 0.0015\n")
         with patch.object(self.tab, "start_live") as start:
             self.tab.start_alone("p1")
-        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24",
+        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24", "--run",
                                        "--calibration", "178.5,0.0024", "--gains", "0.002,0.0015"])
 
     def test_a_failed_read_clears_busy_whatever_it_was(self):
@@ -218,6 +218,21 @@ class TargetTabTests(unittest.TestCase):
         self.assertFalse(self.tab.tree.get_children())
         self.tab.show_nearby(("error", "The engine printed nothing."))
         self.assertEqual(self.tab.status.get(), "The engine printed nothing.")
+
+
+class NoDotNetTests(unittest.TestCase):
+    def test_says_what_to_do_with_no_sdk(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(target_tab.tt, "EXE", Path(folder) / "traversal.exe"), \
+                patch.object(target_tab.tt.subprocess, "run", side_effect=FileNotFoundError):
+            self.assertIn("Make VM Copy.cmd", target_tab.tt.build_tool())
+
+    def test_the_vm_copy_leaves_out_what_only_a_developer_needs(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("make_vm_copy", target_tab.tt.ROOT / "tools" / "make_vm_copy.py")
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        self.assertTrue(tool.wanted("target_tab.py") and tool.wanted("traversal/Follow.cs") and tool.wanted("runtime/python.exe"))
+        self.assertFalse(tool.wanted("tests/test_macro.py") or tool.wanted("Research/notes.md"))
 
 
 class ClientTests(unittest.TestCase):

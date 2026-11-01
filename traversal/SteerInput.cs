@@ -27,6 +27,8 @@ internal sealed class SteerInput : IDisposable
     public bool Walking { get; private set; }
     public bool LeftHeld { get; private set; }
     private bool _sprint = true;
+    /// <summary>Shift and W are both down.</summary>
+    public bool Sprinting => Run && _sprint && Walking;
     public SteerInput(PlayerReader reader, int pulse, bool run = false)
     {
         Run = run;

@@ -42,6 +42,9 @@ def build_tool(progress=None):
     try:
         done = subprocess.run(["dotnet", "build", "-c", "Release", "-nologo", "-v", "q"], cwd=PROJECT,
                               capture_output=True, text=True, timeout=600, creationflags=NO_WINDOW)
+    except FileNotFoundError:
+        return ("traversal.exe is missing, and this PC has no .NET 9 SDK to build it. On your main PC, double-click "
+                "Make VM Copy.cmd and use the NeocronSharp VM folder it makes.")
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"Could not build the Traversal engine: {exc}"
     return None if EXE.exists() else "Building the Traversal engine failed: " + (done.stdout + done.stderr)[-400:].strip()
