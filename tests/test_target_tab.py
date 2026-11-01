@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import tempfile
+import threading
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -122,14 +123,39 @@ class TargetTabTests(unittest.TestCase):
         self.assertIsNone(self.tab.heal_name)
         self.assertFalse(self.tab.steering())
 
-    def test_f8_or_lost_focus_ends_a_healer_alone(self):
-        for words in ("Stopped: Stop pressed.", "Stopped: Neocron lost focus. Movement stopped; it will not resume automatically."):
-            self.tab.heal_name = "Buddy"
-            self.tab.last_line = words
-            with patch.object(self.tab, "refresh"):
-                self.tab.finished()
-            self.assertIsNone(self.tab.heal_name)
-            self.assertIsNone(self.tab.heal_retry)
+    def test_f8_ends_a_healer_alone(self):
+        self.tab.heal_name = "Buddy"
+        self.tab.last_line = "Stopped: Stop pressed."
+        with patch.object(self.tab, "refresh"):
+            self.tab.finished()
+        self.assertIsNone(self.tab.heal_name)
+        self.assertIsNone(self.tab.heal_retry)
+
+    def test_lost_focus_takes_it_back_and_follows_again(self):
+        self.tab.heal_name = "Buddy"
+        self.tab.last_line = "Stopped: Neocron lost focus. Movement stopped; it will not resume automatically."
+        self.tab.finished()
+        self.assertEqual(self.tab.heal_name, "Buddy")
+        self.assertIsNotNone(self.tab.heal_retry)
+        self.assertIn("Bringing Neocron back to the front and looking for Buddy again", self.tab.log.get("1.0", "end"))
+        self.root.after_cancel(self.tab.heal_retry)
+        with patch.object(target_tab.clients, "focus", return_value=True) as focus, \
+                patch.object(target_tab.tt, "run_tool", return_value={"live": True, "entities": []}):
+            self.tab.find_fighter()
+            for thread in [t for t in threading.enumerate() if t.name == "target-fighter"]:
+                thread.join(5)
+        focus.assert_called_once_with()
+        self.assertEqual(self.tab.queue.get_nowait()[0], "fighter")
+        self.tab.heal_name = None
+
+    def test_any_other_ending_leaves_the_focus_alone(self):
+        self.tab.last_line = "Stopped: The camera's angles could not be read on this game build."
+        with patch.object(target_tab.clients, "focus") as focus, patch.object(target_tab.tt, "run_tool", return_value={"live": False, "why": "x"}):
+            self.tab.find_fighter()
+            for thread in [t for t in threading.enumerate() if t.name == "target-fighter"]:
+                thread.join(5)
+        focus.assert_not_called()
+        self.tab.queue.get_nowait()
 
     def test_a_retry_makes_no_test_moves(self):
         self.tab.remember("Following Buddy (player) at 120 units.")
@@ -158,13 +184,8 @@ class TargetTabTests(unittest.TestCase):
     def test_ticks_start_the_hunt_and_outlive_a_refresh(self):
         started = []
         self.tab.loot_runner = lambda names, reach, emit, control: started.append((names, reach))
-        self.tab.update_buttons()
-        self.assertEqual(str(self.tab.hunt_button.cget("state")), "disabled")
         self.tab.tick_enemy("Copbot")
         self.assertEqual(self.tab.enemies.item("e0", "values")[0], target_tab.TICKED)
-        self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
-        self.tab.reach.set("nope")
-        self.assertEqual(str(self.tab.hunt_button.cget("state")), "disabled")
         self.tab.reach.set("300")
         self.tab.show_nearby(("ok", NEARBY))
         self.assertEqual(self.tab.enemies.item("e0", "values")[0], target_tab.TICKED)
@@ -173,6 +194,37 @@ class TargetTabTests(unittest.TestCase):
         self.assertTrue(self.tab.steering())
         self.assertEqual(after.call_args.args[2:], (["Copbot"], 300))
         self.tab.loot_event("done", "0 killed.")
+
+    def test_start_hunt_says_why_it_cannot_start(self):
+        self.tab.loot_runner = lambda names, reach, emit, control: None
+        self.tab.update_buttons()
+        self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
+        with patch.object(self.tab.root, "after") as after:
+            self.tab.start_hunt()
+            self.assertIn("Tick an enemy", self.tab.status.get())
+            self.tab.tick_enemy("Copbot")
+            self.tab.reach.set("nope")
+            self.tab.start_hunt()
+            self.assertIn("Attack from", self.tab.status.get())
+            self.tab.reach.set("200")
+            self.tab.heal_name = "Buddy"
+            self.tab.start_hunt()
+            self.assertIn("Press Stop", self.tab.status.get())
+            self.tab.heal_name = None
+        after.assert_not_called()
+        self.assertFalse(self.tab.steering())
+
+    def test_a_hunt_that_fails_to_start_reports_it_and_frees_the_button(self):
+        def broken(names, reach, emit, control):
+            raise ImportError("no module")
+        self.tab.loot_runner = broken
+        self.tab.tick_enemy("Copbot")
+        self.tab.looting = target_tab.Control()
+        with patch.object(self.tab, "refresh"):
+            self.tab.begin_hunt(["Copbot"], 200)
+        self.assertIsNone(self.tab.looting)
+        self.assertIn("Hunt could not start: no module", self.tab.log.get("1.0", "end"))
+        self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
 
     def test_a_named_fighter_means_real_input_even_with_a_second_client_listed(self):
         self.tab.clients = [{"pid": 1, "label": "a"}, {"pid": 2, "label": "b"}]

@@ -43,6 +43,32 @@ def windows():
     return found
 
 
+def focus():
+    """Put the chosen client, or the only one, in front again. True if it is. Sends no key: an Alt tap would reach the game."""
+    found = windows()
+    chosen = os.environ.get("NEOCRON_PID")
+    hwnd = found.get(int(chosen)) if chosen else next(iter(found.values()), None)
+    if hwnd is None:
+        return False
+    user32, kernel32 = ctypes.WinDLL("user32"), ctypes.WinDLL("kernel32")
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.c_void_p]
+    for call in (user32.IsIconic, user32.ShowWindow, user32.SetForegroundWindow, user32.BringWindowToTop):
+        call.argtypes = [wintypes.HWND, ctypes.c_int] if call is user32.ShowWindow else [wintypes.HWND]
+    user32.SwitchToThisWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
+    user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    mine, front = kernel32.GetCurrentThreadId(), user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+    user32.AttachThreadInput(mine, front, True)
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9)      # SW_RESTORE
+    user32.SetForegroundWindow(hwnd)
+    user32.AttachThreadInput(mine, front, False)
+    if user32.GetForegroundWindow() != hwnd:
+        user32.SwitchToThisWindow(hwnd, True)       # exempt from Windows' foreground lock
+        user32.BringWindowToTop(hwnd)
+    return user32.GetForegroundWindow() == hwnd
+
+
 def capture(hwnd):
     """A window's picture, focused or not."""
     import numpy as np

@@ -10,6 +10,8 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [ ] A healer alone takes focus back (1 Nov): Kaiori followed and healed in the VM, then stopped on "Neocron lost focus" with the VM behind other windows. The retry now puts Neocron in front first, with no key press. What takes focus in the VM is still unknown, and "Unexpected position jumps" and "camera's angles could not be read" still stop a follow until its retry 10 s later.
+- [x] Start hunt had no reaction (1 Nov): greyed out with nothing ticked, and silent when it could not start. It now stays clickable and says why, and any failure at the end of the countdown is reported.
 - [ ] Hunt (1 Nov), replacing the typed loot sequence's name box and 400 unit limit: an enemy list to tick, Attack from, and `follow --arrive` for the walk, so it goes anywhere in the zone. Not yet tried live: everything in the loot sequence's item below, plus the walk and fight joined up, and how long each walk's navmesh bake takes.
 - [ ] Aim at the middle of the mob (1 Nov), after the user saw shots at its feet missing: `camera` now aims 50 units up, as the healer already did. Not yet tried live, and small mobs may need less.
 - [x] `Make VM Copy.cmd` (1 Nov), after the VM showed "[WinError 2]": it has no .NET, and a GitHub download has no engine. The copy carries traversal.exe with .NET inside it, and a PC with neither now says what to do.

@@ -184,7 +184,8 @@ class TargetTab:
             return
         idle = not self.busy and not self.steering()
         actor = self.selected()
-        self.hunt_button.configure(state="normal" if idle and self.hunted and self.reach_units() and self.loot_runner else "disabled")
+        # Stays clickable so a hunt that cannot start says why: greyed out with nothing ticked looked like a dead button (1 Nov).
+        self.hunt_button.configure(state="normal" if self.loot_runner and self.looting is None else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
@@ -365,9 +366,12 @@ class TargetTab:
     def find_fighter(self):
         """A healer alone, some time after its follow ended: is the fighter here and alive?"""
         self.heal_retry = None
+        refocus = "lost focus" in self.last_line
 
         def work():
             try:
+                if refocus and not clients.focus():
+                    self.queue.put(("log", "Could not bring Neocron to the front. Trying again.\n"))
                 data = tt.run_tool(["nearby"], track=self.offline)
             except Exception as exc:
                 data = {"live": False, "why": str(exc)}
@@ -410,23 +414,36 @@ class TargetTab:
 
     def start_hunt(self):
         names, reach = list(self.hunted.values()), self.reach_units()
-        if self.busy or self.steering() or not names or reach is None or self.loot_runner is None:
-            return
-        if self.other_live():
-            self.append("A walk or follow is running on the Traversal tab. Stop it first.")
+        problem = self.hunt_problem(names, reach)
+        if problem:
+            self.status.set(problem)
+            self.append(problem)
             return
         self.looting = Control()
         self.append(f"Hunt: {', '.join(names)}. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
         self.loot_start = self.root.after(5000, self.begin_hunt, names, reach)
 
+    def hunt_problem(self, names, reach):
+        if self.busy:
+            return "Still reading who is around you. Try Start hunt again in a moment."
+        if self.steering():
+            return "Press Stop first: a follow or heal is running on this tab."
+        if self.other_live():
+            return "A walk or follow is running on the Traversal tab. Stop it first."
+        if not names:
+            return "Tick an enemy first: click its row in the Enemies list. If the list is empty, press Refresh."
+        if reach is None:
+            return "Attack from must be a whole number from 40 to 2000."
+        return None
+
     def begin_hunt(self, names, reach):
         self.loot_start = None
         try:
             runner = self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
             threading.Thread(target=runner.run, daemon=True, name="hunt").start()
-        except (ValueError, RuntimeError) as exc:
-            self.loot_event("done", str(exc))
+        except Exception as exc:
+            self.loot_event("done", f"Hunt could not start: {exc}")
 
     def loot_event(self, kind, payload):
         if kind in ("log", "status"):
@@ -459,9 +476,10 @@ class TargetTab:
     def finished(self):
         self.process = None
         self.append("Ended.")
-        # Losing focus inside a VM means someone is using it: taking focus back would fight them.
-        if self.heal_name is not None and not any(end in self.last_line for end in ("Stop pressed", "lost focus")):
-            self.append(f"Looking for {self.heal_name} again in {HEAL_RETRY} s. Stop ends this.")
+        # A VM left running behind other windows lost focus again and again (1 Nov): the next look takes it back.
+        if self.heal_name is not None and "Stop pressed" not in self.last_line:
+            what = "Bringing Neocron back to the front and looking" if "lost focus" in self.last_line else "Looking"
+            self.append(f"{what} for {self.heal_name} again in {HEAL_RETRY} s. Stop ends this.")
             self.heal_retry = self.root.after(HEAL_RETRY * 1000, self.find_fighter)
             self.update_buttons()
             return
