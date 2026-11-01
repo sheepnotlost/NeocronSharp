@@ -17,6 +17,14 @@ except ImportError as exc:
     raise RuntimeError("Bundled visual dependencies could not be loaded. Use Launch.cmd and keep the complete runtime folder.") from exc
 
 
+def read_gray(path):
+    """cv2.imread, which can't open a path with non-ASCII letters. None when the file can't be read."""
+    try:
+        return cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+    except (OSError, ValueError):
+        return None
+
+
 class NotFound(RuntimeError):
     pass
 
@@ -54,18 +62,18 @@ class Detector:
                      "constructed_weaponpart", "constructed_holy_heal", "construction_tool", "empty_datacube",
                      "loaded_blueprint_red", "loaded_blueprint_green", "tooltip_prefix",
                      "tooltip_weaponpart_7", "tooltip_weaponpart_9", "tooltip_holy_heal"):
-            data = cv2.imread(str(ROOT / "assets" / f"{name}.png"), cv2.IMREAD_GRAYSCALE)
+            data = read_gray(ROOT / "assets" / f"{name}.png")
             if data is None:
                 raise RuntimeError(f"Missing visual template: {name}.")
             self.templates[name] = data
         self.labels = {}
         self.gray_labels = {}
         for name in "TEAL":
-            data = cv2.imread(str(ROOT / "assets" / f"label_{name}.png"), cv2.IMREAD_GRAYSCALE)
+            data = read_gray(ROOT / "assets" / f"label_{name}.png")
             if data is None:
                 raise RuntimeError(f"Missing stack-label template: {name}.")
             self.labels[name] = self.normalize_glyph(data > 127)
-            gray = cv2.imread(str(ROOT / "assets" / f"glyph_{name}.png"), cv2.IMREAD_GRAYSCALE)
+            gray = read_gray(ROOT / "assets" / f"glyph_{name}.png")
             if gray is None:
                 raise RuntimeError(f"Missing grayscale stack-label template: {name}.")
             self.gray_labels[name] = gray.astype(np.float32)
@@ -82,7 +90,7 @@ class Detector:
         self.last_tooltip_text=""
         self.ocr_cache={}
         self.scaled = {}
-        one = cv2.imread(str(ROOT / "assets" / "quantity_one.png"), cv2.IMREAD_GRAYSCALE)
+        one = read_gray(ROOT / "assets" / "quantity_one.png")
         if one is None:
             raise RuntimeError("Missing quantity-one reference.")
         self.quantity_one = self.normalize_glyph(one > 127)
@@ -1093,6 +1101,11 @@ class Detector:
         # weak for the cheap re-check and would report "moved" on every hover.
         return Anchor(anchor.x, anchor.y, anchor.scale, anchor.score, None, anchor.heading)
 
+    def cell_empty(self, frame, anchor, row, col):
+        """Nothing but the window's background in an Inventory cell."""
+        x, y = 39+col*44.6, 63+row*45.5
+        return self.gray(self.region(frame, anchor, (x+9, y+9, x+36, y+37))).std() < 8
+
     def stacks(self, frame, checkpoint=lambda: None):
         anchor = self.inventory(frame, checkpoint=checkpoint)
         found = {name: [] for name in "TEAL"}
@@ -1149,10 +1162,8 @@ class Detector:
             return stack[0]
         for row in range(6):
             for col in range(8):
-                x, y = 39+col*44.6, 63+row*45.5
-                patch = self.gray(self.region(frame, anchor, (x+9, y+9, x+36, y+37)))
-                if patch.std() < 8:
-                    return anchor.point(x+22.3, y+22.75)
+                if self.cell_empty(frame, anchor, row, col):
+                    return anchor.point(39+col*44.6+22.3, 63+row*45.5+22.75)
         return None
 
     def quantity(self, frame, checkpoint=lambda: None, expected=False):

@@ -117,6 +117,16 @@ internal static class FollowTests
             Check(watch.Read() == "crossed from 9", "and counts as gone, with the zone-exit reason when there is one");
         });
 
+        test("Target watch: an NPC is never swapped for an unnamed character at its address", () =>
+        {
+            long now = 0;
+            var rat = Actor("Rat", new Vector3(5, 0, 5), EntityKind.Npc);
+            IReadOnlyList<WorldEntity> seen = [rat with { Identity = rat.Identity with { Kind = EntityKind.UnclassifiedCharacter }, Name = "?", Position = new Vector3(900, 0, 900) }];
+            var watch = new TargetWatch(rat, () => seen, () => now, 100, "Stopped.");
+            for (int i = 0; i < 3; i++) { Check(watch.Read() == null && watch.SeenAt.X == 5, "the aim stays where it was"); now += 100; }
+            Check(watch.Read() != null, "and it counts as gone");
+        });
+
         test("Follow band: stops inside the distance and only sets off again past the resume line", () =>
         {
             var band = new FollowBand(150);

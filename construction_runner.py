@@ -359,10 +359,9 @@ class ConstructionRunner(VisualRunner):
                 occupied.add((row,col))
                 if re.fullmatch(r"[A-Za-z]{3}",text.strip()) and text.strip().upper()==code:
                     return inventory.point(39+col*44.6+22.3,63+row*45.5+22.75)
-        snapshot=self.detector.inventory_occupancy(frame,inventory) if hasattr(self.detector,"inventory_occupancy") else None
         for row in range(6):
             for col in range(8):
-                busy=(row,col) in occupied or (snapshot is not None and snapshot[(row,col)])
+                busy=(row,col) in occupied or not self.detector.cell_empty(frame,inventory,row,col)
                 if not busy:return inventory.point(39+col*44.6+22.3,63+row*45.5+22.75)
         return None
 

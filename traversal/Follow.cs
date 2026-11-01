@@ -83,18 +83,20 @@ internal static class FollowCommand
         static float Round(float v) => MathF.Round(v, 1);
     }
 
-    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N] [--arrive] [--calibration speed,gain]: live, until F8, Stop, focus loss, the target going, or a zone change. --arrive ends on reaching an NPC, for the hunt, which passes on the first run's calibration so each walk needs no test step.</summary>
+    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N] [--arrive] [--calibration speed,gain] [--gains yaw,pitch]: live, until F8, Stop, focus loss, the target going, or a zone change. --arrive ends on reaching an NPC, for the hunt, which passes on the first run's calibration so each walk needs no test step. A healer's retry passes both, for no test moves at all.</summary>
     public static int Follow(List<string> rest, string root, int pulse, bool run)
     {
         bool heal = rest.Remove("--heal"), arrive = rest.Remove("--arrive");
-        LiveSteer.Calibration? known = null;
-        int c = rest.IndexOf("--calibration");
-        if (c >= 0 && c + 1 < rest.Count)
+        (float, float)? Pair(string name)
         {
-            var parts = rest[c + 1].Split(',');
-            known = new(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
-            rest.RemoveRange(c, 2);
+            int i = rest.IndexOf(name);
+            if (i < 0 || i + 1 >= rest.Count) return null;
+            var parts = rest[i + 1].Split(',');
+            rest.RemoveRange(i, 2);
+            return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
         }
+        LiveSteer.Calibration? known = Pair("--calibration") is { } c ? new(c.Item1, c.Item2) : null;
+        (float Yaw, float Pitch)? aim = heal ? Pair("--gains") : null;
         float distance = FollowBand.DefaultDistance;
         int d = rest.IndexOf("--distance");
         if (d >= 0 && d + 1 < rest.Count)
@@ -130,17 +132,17 @@ internal static class FollowCommand
         {
             // LiveSteer's own countdown and calibration (test step + turn probe), then nothing else.
             var calibrate = new LiveSteer(reader, nav, sector, sample.Position, true, target.Name, pulse,
-                Path.Combine(logs, $"steer-{stamp}-follow-calibration.jsonl"), hud, run) { CalibrateOnly = true };
+                Path.Combine(logs, $"steer-{stamp}-follow-calibration.jsonl"), hud, run, countdown: !arrive) { CalibrateOnly = true };
             calibrate.Run();
             calibration = calibrate.Measured ?? throw new InvalidOperationException("Calibration did not finish.");
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"calibration {calibration.Speed} {calibration.Gain}"));
         }
-        (float Yaw, float Pitch)? aim = null;
-        if (heal)
+        if (heal && aim == null)
         {
             var measure = new CameraWatch(reader, target, pulse, new CameraPlan(Now: true, MeasureOnly: true), hud, Path.Combine(logs, $"camera-{stamp}-gain.jsonl"));
             measure.Run();
             aim = measure.Measured;
+            if (aim is { } measured) Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {measured.Yaw} {measured.Pitch}"));
         }
 
         var exits = nav.World.Summary.Features.Where(f => f.Kind == "WorldChange"
@@ -236,6 +238,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
     private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
     private const int MaxStalls = 3, MaxOffRoutePer20s = 6;
+    private const float RouteRanOut = 20;
 
     private sealed record Plan(RouteFollower Route, Vector3 Goal, float Miss, double At);
 
@@ -304,7 +307,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Follow stopped.", Crossed);
 
         // ---- the route ----
-        Plan? plan = null;
+        Plan? plan = null, doorPlan = null;
         double unreachableSince = -1, retryAt = 0;
         Plan? MakePlan(Vector3 from)
         {
@@ -372,15 +375,20 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     }
                 }
 
-                bool moving = band.Update(gap);
-                if (arrive && !moving)
+                // The hunt needs the target itself in reach, unless the route has run out; a route's end can be short of an NPC off the mesh.
+                if (arrive && gap <= band.Distance && (straight <= band.Distance || plan == null || plan.Route.Remaining < RouteRanOut))
                 {
                     input.Walk(false);
-                    Record("arrived", s, new { gap });
-                    return $"Reached {target.Name}, {gap:F0} units away.";
+                    Record("arrived", s, new { gap, straight });
+                    return $"Reached {target.Name}, {straight:F0} units away.";
                 }
+                bool moving = arrive || band.Update(gap);
+                // A blocking step ahead (a lift, a door) must not start with the cast's button down.
+                if (moving && castEnds >= 0) { input.HoldLeft(false); castEnds = -1; }
                 if (moving != wasMoving)
                 {
+                    doors.Reset();
+                    if (moving && unreachableSince >= 0) unreachableSince = now;   // Time spent standing is not time spent looking for a way.
                     Record(moving ? "resume" : "hold", s, new { gap });
                     Console.WriteLine(moving ? $"{target.Name} is {gap:F0} units away: following." : $"Within {gap:F0} units of {target.Name}: waiting.");
                     wasMoving = moving;
@@ -455,7 +463,9 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 // Held W but went nowhere: replan from here; a few times running means the game blocks us.
                 // A door inside the sector: when the gap stops shrinking near one, face it, step up
                 // to it and right-click it (the game says "already in use" while it moves).
-                if (doors.Blocking(s.Position, gap, (long)(now * 1000)) is { } door)
+                // Judged on this route's own progress: the gap also stays flat behind a target walking at your speed.
+                if (!ReferenceEquals(plan, doorPlan)) { doors.Reset(); doorPlan = plan; }
+                if (doors.Blocking(s.Position, plan.Route.Remaining, (long)(now * 1000)) is { } door)
                 {
                     if (!doors.Try(door)) throw new InvalidOperationException($"{DoorOpener.Failed} {target.Name} is beyond it, {gap:F0} units away. Follow stopped.");
                     hud.Post(Hud.Amber, title, $"A door is in the way: opening it (right click, try {doors.Tries(door)} of {DoorOpener.MaxTries}).");

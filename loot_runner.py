@@ -4,6 +4,7 @@ bodies and take T, E, A and L parts.
 traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
 next and works the game's windows. NPCs only: a player is never picked, whatever the list says.
 """
+import ctypes
 import re
 import subprocess
 import threading
@@ -22,7 +23,11 @@ HEALTH_EVERY = 1.0           # seconds between readings during a fight
 ATTACK_CHECK = 2.0           # seconds your health is watched after a kill
 GIVE_UP = 20                 # seconds of no damage before a target is left alone
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
-ENDS_THE_HUNT = ("Stop pressed", "changed zone")   # a walk that ends with these is not one target's problem
+START_TRIES = 3              # readings of your health before the hunt refuses to start without one
+# How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
+ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
+              "Nobody with id", " is dead", " is still alive", "The door did not open", "Kept leaving the route", "Could not face the route",
+              "Could not reach the body", "Could not aim at the body")
 MOST = 99                    # typed into the amount box: the game keeps it to the size of the stack
 AWAY = (24, 80)              # where the pointer waits, off every window
 
@@ -125,8 +130,24 @@ class LootRunner(VisualRunner):
         self.next_health = 0.
         self.kills = 0
 
+    def guard(self):
+        super().guard()
+        if ctypes.windll.user32.GetAsyncKeyState(0x77) & 0x8000:
+            raise Interrupted("F8 pressed.")
+
     def reader(self):
         return self.detector.text_reader()
+
+    def hide_pointer(self):
+        if not self.set_ui(self.reader(), False):
+            raise Interrupted("Could not hide the pointer for mouse-look.")
+
+    def ended(self, text):
+        """The last line of a run, or Interrupted when it did not end over one target."""
+        last = text.splitlines()[-1] if text else "The engine said nothing."
+        if not any(word in last for word in ONE_TARGET):
+            raise Interrupted(last)
+        return last
 
     def my_health(self):
         reading = self.health(self.reader(), self.frame())
@@ -139,57 +160,71 @@ class LootRunner(VisualRunner):
             self.next_health = self.clock()+HEALTH_EVERY
             self.my_health()
 
-    def approach(self, actor):
-        """True once within reach. A target with no way to it is one target's problem, unless the walk says otherwise."""
-        if actor["distance"] <= self.reach:
-            return True
+    def walk_to(self, actor):
+        """True on arrival."""
         self.emit("log", f"Walking to {actor['name']}, {actor['distance']:.0f} units away.")
-        result = self.engine.walk(actor, self.reach, self.watch_health)
-        last = result.splitlines()[-1] if result else "The engine said nothing."
-        if any(reason in result for reason in ENDS_THE_HUNT):
-            raise Interrupted(last)
-        self.guard()
+        last = self.ended(self.engine.walk(actor, self.reach, self.watch_health))
         self.emit("log", last)
         return last.startswith("Reached ")
 
     def fight(self, actor):
-        """True when it died."""
+        """How it ended."""
         self.emit("log", f"Attacking {actor['name']}.")
-        result = self.engine.fight(actor, self.watch_health)
-        self.emit("log", result.splitlines()[-1] if result else "The engine said nothing.")
-        return " died." in result
+        last = self.ended(self.engine.fight(actor, self.watch_health))
+        self.emit("log", last)
+        return last
+
+    def attack(self, actor):
+        """True when it died. Close on the flat can still be round a corner or a floor away, so hurting nothing from
+        there earns one walk and one more try."""
+        near = actor["distance"] <= self.reach
+        if not near and not self.walk_to(actor):
+            return False
+        last = self.fight(actor)
+        if near and "No damage to" in last and self.walk_to(actor):
+            last = self.fight(actor)
+        return " died." in last
 
     def under_attack(self):
         before = self.my_health()
         self.wait(ATTACK_CHECK)
         return dropped(before, self.my_health())
 
-    def take_stack(self):
-        """Answer the game's amount box, when it asks: all of them."""
-        elapsed = 0.
-        while elapsed < self.settings["dialog_timeout"]:
-            dialog = self.detector.quantity(self.frame(), checkpoint=self.guard, expected=True)
+    def answer_amount(self, dialog):
+        self.click(dialog["field"])
+        self.type_number(MOST)
+        self.move(AWAY)
+        self.wait(self.settings["settle_seconds"])
+        dialog = self.detector.quantity(self.frame(), checkpoint=self.guard)
+        if dialog is None:
+            raise Interrupted("The amount box closed before it was confirmed.")
+        self.click(dialog["ok"])
+        self.move(AWAY)
+        self.wait(self.settings["settle_seconds"])
+        if self.detector.quantity(self.frame(), checkpoint=self.guard) is not None:
+            raise Interrupted("The amount box did not close.")
+
+    def take_stack(self, window, count):
+        """Answer the game's amount box, when it asks: all of them. A single part never asks, and just leaves the box."""
+        ends = self.clock()+self.settings["dialog_timeout"]
+        while self.clock() < ends:
+            self.watch_health()
+            frame = self.frame()
+            dialog = self.detector.quantity(frame, checkpoint=self.guard)
             if dialog is not None:
-                self.click(dialog["field"])
-                self.type_number(MOST)
-                self.move(AWAY)
-                self.wait(self.settings["settle_seconds"])
-                dialog = self.detector.quantity(self.frame(), checkpoint=self.guard)
-                if dialog is None:
-                    raise Interrupted("The amount box closed before it was confirmed.")
-                self.click(dialog["ok"])
-                self.move(AWAY)
-                self.wait(self.settings["settle_seconds"])
-                if self.detector.quantity(self.frame(), checkpoint=self.guard) is not None:
-                    raise Interrupted("The amount box did not close.")
+                return self.answer_amount(dialog)
+            if len(self.detector.loot_parts(frame, window)) < count:
                 return
             self.wait(.1)
-            elapsed += .1
+        dialog = self.detector.quantity(self.frame(), checkpoint=self.guard, expected=True)
+        if dialog is not None:
+            self.answer_amount(dialog)
 
     def take_parts(self, window):
         """Drag every T, E, A and L part into Inventory. Each move shifts the box, so read it again each time."""
         taken = 0
         for _ in range(16):
+            self.watch_health()
             frame = self.frame()
             parts = self.detector.loot_parts(frame, window)
             if not parts:
@@ -198,11 +233,11 @@ class LootRunner(VisualRunner):
             inventory = self.detector.inventory(frame, checkpoint=self.guard)
             drop = self.detector.inventory_drop(frame, inventory, part["letter"], checkpoint=self.guard)
             if drop is None:
-                raise Interrupted("Inventory is full.")
+                raise Interrupted("Inventory has no room in view.")
             self.emit("log", f"Taking a {part['letter']} part.")
             self.drag(part["point"], drop)
             self.move(AWAY)
-            self.take_stack()
+            self.take_stack(window, len(parts))
             after = self.detector.loot_parts(self.frame(), window)
             if len(after) >= len(parts):
                 raise Interrupted(f"The {part['letter']} part did not leave the loot box.")
@@ -215,15 +250,14 @@ class LootRunner(VisualRunner):
         if actor["id"] not in actors or not actors[actor["id"]]["dead"]:
             self.emit("log", f"The body of {actor['name']} is gone.")
             return
-        try:
-            self.emit("log", self.engine.box(actor, self.watch_health).splitlines()[-1])
-        except (RuntimeError, IndexError) as exc:
-            if isinstance(exc, Interrupted):
-                raise
-            self.emit("log", f"Could not open the body of {actor['name']}: {exc}")
+        self.hide_pointer()
+        last = self.ended(self.engine.box(actor, self.watch_health))
+        self.emit("log", last)
+        if not last.startswith("Right-clicked"):
             return
         window = None
         for attempt in range(6):
+            self.watch_health()
             self.wait(.5)
             window = self.detector.loot_window(self.frame())
             if window:
@@ -235,28 +269,45 @@ class LootRunner(VisualRunner):
             raise Interrupted("Could not free the pointer to use the loot window.")
         taken = self.take_parts(window)
         self.emit("log", f"Took {taken} part stack{'' if taken == 1 else 's'} from {actor['name']}.")
-        self.click(window["close"])
-        self.move(AWAY)
-        self.wait(self.settings["settle_seconds"])
+        self.close_box(window)
+
+    def close_box(self, window):
+        for attempt in range(3):
+            self.click(window["close"])
+            self.move(AWAY)
+            self.wait(self.settings["settle_seconds"])
+            window = self.detector.loot_window(self.frame())
+            if window is None:
+                return
+        raise Interrupted("The loot box did not close.")
+
+    def check_health(self):
+        """Every stop for your own safety rests on this reading, so no hunt starts without one."""
+        for attempt in range(START_TRIES):
+            if self.my_health():
+                return
+            self.wait(.5)
+        raise Interrupted("Could not read your health from the screen. Stopped.")
 
     def execute(self):
-        skip, idle = set(), 0.
+        skip, waiting = set(), None
+        self.hide_pointer()
+        self.check_health()
         while True:
             self.checkpoint()
-            if not self.set_ui(self.reader(), False):
-                raise Interrupted("Could not hide the pointer for mouse-look.")
+            self.hide_pointer()
             target = pick_target(self.engine.nearby(), self.names, skip=skip)
             if target is None:
-                if idle >= IDLE_LIMIT:
-                    self.emit("done", f"No ticked NPCs left in this zone. {self.kills} killed.")
+                waiting = self.clock() if waiting is None else waiting
+                if self.clock()-waiting >= IDLE_LIMIT:
+                    self.emit("done", f"Nothing left to hunt: {len(skip)} left alone. {self.kills} killed.")
                     return
-                if idle == 0:
-                    self.emit("status", "No ticked NPCs alive here: waiting for one to appear.")
+                self.emit("status", "No ticked NPC to fight here: waiting for one to appear.")
+                self.my_health()
                 self.wait(3)
-                idle += 3
                 continue
-            idle = 0.
-            if not self.approach(target) or not self.fight(target):
+            waiting = None
+            if not self.attack(target):
                 skip.add(target["id"])
                 continue
             self.kills += 1
@@ -266,15 +317,14 @@ class LootRunner(VisualRunner):
                 if threat is None:
                     raise Interrupted("Your health is dropping and no ticked NPC is near. Stopped.")
                 self.emit("log", "Still under attack.")
-                if self.fight(threat):
+                if self.attack(threat):
                     self.kills += 1
                     bodies.append(threat)
                 else:
                     skip.add(threat["id"])
             for body in bodies:
                 self.loot(body)
-                if not self.set_ui(self.reader(), False):
-                    raise Interrupted("Could not hide the pointer for mouse-look.")
+                self.hide_pointer()
 
     def run(self):
         try:

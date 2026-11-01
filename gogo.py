@@ -87,7 +87,7 @@ def parse_materials(text):
             continue
         name, sep, code = part.partition("=")
         name, code = name.strip(), code.strip().upper()
-        if not sep or not name or len(name) > 40 or not re.fullmatch(r"[A-Z0-9]{2,4}", code):
+        if not sep or not name or len(name) > 60 or not re.fullmatch(r"[A-Z0-9]{2,4}", code):
             raise ValueError(f"Materials: use Name=LABEL (2-4 letters/digits), separated by commas. Problem with '{part}'.")
         result[name] = code
     if len(result) > 12:

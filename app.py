@@ -974,7 +974,9 @@ class App:
 
     def loot_runner(self,names,reach,emit,control):
         from loot_runner import LootRunner
+        import clients,os
         self.ensure_bound()
+        if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
 
     def ensure_bound(self):

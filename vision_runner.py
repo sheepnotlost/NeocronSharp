@@ -31,7 +31,10 @@ class VisualRunner(ResearchRunner):
         try:
             self.diagnostic_dir.mkdir(parents=True, exist_ok=True)
             path = self.diagnostic_dir / "latest.png"
-            if not cv2.imwrite(str(path), cv2.cvtColor(self.last_frame, cv2.COLOR_RGB2BGR)):
+            written, data = cv2.imencode(".png", cv2.cvtColor(self.last_frame, cv2.COLOR_RGB2BGR))
+            if written:
+                data.tofile(path)
+            if not written:
                 return None
             metadata = {"saved_at_utc": datetime.now(timezone.utc).isoformat(),
                         "error": str(error), "completed_cycles": self.completed,

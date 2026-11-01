@@ -122,13 +122,31 @@ class TargetTabTests(unittest.TestCase):
         self.assertIsNone(self.tab.heal_name)
         self.assertFalse(self.tab.steering())
 
-    def test_f8_ends_a_healer_alone_too(self):
-        self.tab.heal_name = "Buddy"
-        self.tab.last_line = "Stop pressed."
-        with patch.object(self.tab, "refresh"):
-            self.tab.finished()
-        self.assertIsNone(self.tab.heal_name)
-        self.assertIsNone(self.tab.heal_retry)
+    def test_f8_or_lost_focus_ends_a_healer_alone(self):
+        for words in ("Stopped: Stop pressed.", "Stopped: Neocron lost focus. Movement stopped; it will not resume automatically."):
+            self.tab.heal_name = "Buddy"
+            self.tab.last_line = words
+            with patch.object(self.tab, "refresh"):
+                self.tab.finished()
+            self.assertIsNone(self.tab.heal_name)
+            self.assertIsNone(self.tab.heal_retry)
+
+    def test_a_retry_makes_no_test_moves(self):
+        self.tab.remember("Following Buddy (player) at 120 units.")
+        self.tab.remember("calibration 178.5 0.0024\n")
+        self.tab.remember("gains 0.002 0.0015\n")
+        with patch.object(self.tab, "start_live") as start:
+            self.tab.start_alone("p1")
+        start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24",
+                                       "--calibration", "178.5,0.0024", "--gains", "0.002,0.0015"])
+
+    def test_a_failed_read_clears_busy_whatever_it_was(self):
+        with patch.object(target_tab.tt, "build_tool", side_effect=KeyError("boom")):
+            self.tab.refresh()
+            while self.tab.busy:
+                self.root.update()
+                self.tab.poll()
+        self.assertIn("boom", self.tab.status.get())
 
     def test_enemy_list_groups_living_npcs_and_never_lists_players(self):
         actors = [{"name": "Rat", "kind": "npc", "distance": 900., "dead": False}, {"name": "rat", "kind": "npc", "distance": 40., "dead": False},

@@ -83,7 +83,7 @@ def validate_profile(profile, require_ready=True):
         raise ValueError("Invalid materials list.")
     for key, row in materials.items():
         if (not isinstance(key, str) or not isinstance(row, dict) or len(row) > 12 or any(
-                not isinstance(n, str) or not 1 <= len(n) <= 40 or not isinstance(c, str)
+                not isinstance(n, str) or not 1 <= len(n) <= 60 or not isinstance(c, str)
                 or not 2 <= len(c) <= 4 for n, c in row.items())):
             raise ValueError("Invalid materials list.")
     if type(construction.get("gogo_refill",False)) is not bool:

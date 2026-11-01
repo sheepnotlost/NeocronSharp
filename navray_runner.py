@@ -583,6 +583,7 @@ class NavRayRunner(VisualRunner):
         return None
 
     def press(self, name):
+        self.checkpoint()
         self.backend.key(name, True)
         try:
             self.wait(.05)

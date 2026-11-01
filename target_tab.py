@@ -11,6 +11,7 @@ ends for any reason but Stop, it looks for the fighter again, so a healer left a
 """
 import os
 import queue
+import re
 import subprocess
 import threading
 import tkinter as tk
@@ -50,6 +51,7 @@ class TargetTab:
         self.heal_name = None               # the fighter a healer alone keeps going back to
         self.heal_retry = None              # its next look
         self.last_line = ""                 # the engine's latest words
+        self.measured = []                  # the first follow's calibration and gains, so a retry needs no test moves
         self.looting = None                 # the running hunt's Control
         self.loot_start = None              # its 5 s countdown
         self.queue = queue.Queue()
@@ -184,6 +186,7 @@ class TargetTab:
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
+        self.client_box.configure(state="readonly" if idle else "disabled")
         self.stop_button.configure(state="normal" if self.steering() else "disabled")
 
     def append(self, text):
@@ -200,6 +203,7 @@ class TargetTab:
                 kind, payload = self.queue.get_nowait()
                 if kind == "log":
                     self.last_line = payload
+                    self.remember(payload)
                     self.append(payload)
                 elif kind == "clients":
                     self.show_clients(payload)
@@ -235,7 +239,7 @@ class TargetTab:
                     clients.choose(max(found, key=lambda c: c["psi"])["pid"] if len(found) > 1 else None)
                 self.queue.put(("clients", found))
                 result = ("ok", tt.run_tool(["nearby"], track=self.offline))
-            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            except Exception as exc:        # busy must clear whatever went wrong, or the tab stays locked
                 result = ("error", str(exc))
             self.queue.put(("nearby", result))
         threading.Thread(target=work, daemon=True, name="target-nearby").start()
@@ -345,7 +349,12 @@ class TargetTab:
         self.update_buttons()
 
     def start_alone(self, fighter_id):
-        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24"])
+        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", *self.measured])
+
+    def remember(self, line):
+        found = re.match(r"\s*(calibration|gains) (\S+) (\S+)\s*$", line)
+        if found:
+            self.measured += [f"--{found.group(1)}", f"{found.group(2)},{found.group(3)}"]
 
     def find_fighter(self):
         """A healer alone, some time after its follow ended: is the fighter here and alive?"""
@@ -354,8 +363,8 @@ class TargetTab:
         def work():
             try:
                 data = tt.run_tool(["nearby"], track=self.offline)
-            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
-                data = {}
+            except Exception as exc:
+                data = {"live": False, "why": str(exc)}
             self.queue.put(("fighter", data))
         threading.Thread(target=work, daemon=True, name="target-fighter").start()
 
@@ -367,12 +376,13 @@ class TargetTab:
         try:
             if found is not None:
                 self.append(f"Going back to {name}.")
+                self.status.set(f"Following {name}.")
                 self.start_alone(str(found["id"]))
                 return
         except (OSError, RuntimeError) as exc:
             self.process = None
             self.append("Could not start: " + str(exc))
-        self.status.set(f"Waiting for {name} to be alive in this zone.")
+        self.status.set(f"Cannot read the game: {data.get('why')}" if data.get("live") is False else f"Waiting for {name} to be alive in this zone.")
         self.heal_retry = self.root.after(HEAL_RETRY * 1000, self.find_fighter)
 
     def start_live(self, args):
@@ -380,6 +390,7 @@ class TargetTab:
         if problem:
             raise RuntimeError(problem)
         tt.clear_stop()
+        self.last_line = ""
         self.process = subprocess.Popen([str(tt.EXE), *args], cwd=tt.PROJECT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                         text=True, encoding="utf-8", errors="replace", creationflags=tt.NO_WINDOW)
 
@@ -442,12 +453,14 @@ class TargetTab:
     def finished(self):
         self.process = None
         self.append("Ended.")
-        if self.heal_name is not None and "Stop pressed" not in self.last_line:
+        # Losing focus inside a VM means someone is using it: taking focus back would fight them.
+        if self.heal_name is not None and not any(end in self.last_line for end in ("Stop pressed", "lost focus")):
             self.append(f"Looking for {self.heal_name} again in {HEAL_RETRY} s. Stop ends this.")
             self.heal_retry = self.root.after(HEAL_RETRY * 1000, self.find_fighter)
             self.update_buttons()
             return
         self.heal_name = None
+        self.measured = []
         self.track_button.configure(text="Track")
         self.heal_button.configure(text="Follow and heal")
         self.update_buttons()

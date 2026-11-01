@@ -96,6 +96,7 @@ class Engine:
         self.fights, self.seen = list(fights), seen
         self.dead = set()
         self.walks = []
+        self.boxes = []
         self.distance = 50.
 
     def nearby(self):
@@ -107,6 +108,8 @@ class Engine:
 
     def fight(self, target, tick):
         self.seen.append(("fight", target["name"]))
+        if isinstance(self.fights[0], str):
+            return self.fights.pop(0)
         died = self.fights.pop(0)
         if died:
             self.dead.add(target["name"])
@@ -114,7 +117,8 @@ class Engine:
 
     def box(self, target, tick):
         self.seen.append(("box", target["name"]))
-        return "Right-clicked."
+        self.detect.shut = False
+        return self.boxes.pop(0) if self.boxes else "Right-clicked."
 
 
 class Sequence(LootRunner):
@@ -133,27 +137,30 @@ class Sequence(LootRunner):
 
 class Detect:
     last_scale = None
+    shut = False
+    stuck = False
 
     def loot_window(self, frame):
-        return {"close": (1, 1)}
+        return None if self.shut else {"close": (1, 1)}
 
     def loot_parts(self, frame, window):
         return []
 
 
 class SequenceTests(unittest.TestCase):
-    def run_sequence(self, fights, health=(), names=("Rat", "Spider"), distance=50., walks=()):
+    def run_sequence(self, fights, health=(), names=("Rat", "Spider"), distance=50., walks=(), boxes=(), stuck=False):
         seen, events, clock = [], [], {"now": 0.}
         engine = Engine(fights, seen)
-        engine.distance, engine.walks = distance, list(walks)
+        detect = Detect()
+        engine.distance, engine.walks, engine.boxes, engine.detect = distance, list(walks), list(boxes), detect
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
         control = Control()
         runner = Sequence(profile, Backend(), control, lambda kind, text: events.append((kind, text)), names=names,
-                          engine=engine, detector=Detect(),
+                          engine=engine, detector=detect,
                           clock=lambda: clock["now"], sleep=lambda s: clock.__setitem__("now", clock["now"]+s))
-        runner.health_readings = list(health)
-        runner.click = lambda point: seen.append(("close",))
+        runner.health_readings = [(900, 900), *health]
+        runner.click = lambda point: (seen.append(("close",)), setattr(detect, "shut", not stuck))
         runner.move = lambda point: None
         runner.diagnostic_dir = Path("nowhere")
         runner.save_failure = lambda error: None
@@ -175,11 +182,42 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual([s[:2] for s in seen[:3]], [("walk", "Rat"), ("walk", "Spider"), ("fight", "Spider")])
         self.assertIn("1 killed", events[-1][1])
 
-    def test_stop_or_a_zone_change_on_the_way_ends_the_hunt(self):
-        for reason in ("Stop pressed.", "You changed zone. Follow stopped."):
+    def test_anything_not_about_the_target_ends_the_hunt_wherever_it_happens(self):
+        for reason in ("Stopped: Stop pressed.", "Stopped: You changed zone. Follow stopped.",
+                       "Stopped: Your character could not be read (zoning?). Follow stopped.",
+                       "Stopped: The test step went 0 units. Is a menu, chat or the free pointer active?", "Stopped: Neocron lost focus."):
             seen, events = self.run_sequence([], distance=5000., walks=[reason])
             self.assertEqual(seen, [("walk", "Rat", 200)])
             self.assertIn(reason, events[-1][1])
+            seen, events = self.run_sequence([reason])
+            self.assertEqual(seen, [("fight", "Rat")])
+            self.assertIn(reason, events[-1][1])
+            seen, events = self.run_sequence([True], names=("Rat",), boxes=[reason])
+            self.assertEqual(seen, [("fight", "Rat"), ("box", "Rat")])
+            self.assertIn(reason, events[-1][1])
+
+    def test_a_body_it_could_not_aim_at_is_left_and_the_hunt_goes_on(self):
+        seen, events = self.run_sequence([True, True], boxes=["Stopped: Could not aim at the body of Rat."])
+        self.assertEqual(seen, [("fight", "Rat"), ("box", "Rat"), ("fight", "Spider"), ("box", "Spider"), ("close",)])
+        self.assertIn("2 killed", events[-1][1])
+
+    def test_a_loot_box_that_will_not_close_stops_it(self):
+        seen, events = self.run_sequence([True], names=("Rat",), stuck=True)
+        self.assertEqual(seen.count(("close",)), 3)
+        self.assertIn("did not close", events[-1][1])
+
+    def test_no_hunt_without_a_health_reading(self):
+        events = []
+        profile = default_profile()
+        profile["client_size"] = [2000, 1125]
+        clock = {"now": 0.}
+        runner = Sequence(profile, Backend(), Control(), lambda kind, text: events.append((kind, text)), names=["Rat"],
+                          engine=Engine([], []), detector=Detect(), clock=lambda: clock["now"],
+                          sleep=lambda s: clock.__setitem__("now", clock["now"]+s))
+        runner.my_health = lambda: None
+        runner.save_failure = lambda error: None
+        runner.run()
+        self.assertIn("Could not read your health", events[-1][1])
 
     def test_kill_then_loot_then_the_next(self):
         seen, events = self.run_sequence([True, True], names=("Rat", "Spider"))
@@ -197,9 +235,13 @@ class SequenceTests(unittest.TestCase):
         self.assertIn("no ticked NPC", events[-1][1])
 
     def test_a_target_it_cannot_hurt_is_left_alone(self):
-        seen, events = self.run_sequence([False], names=("Rat",))
-        self.assertEqual(seen, [("fight", "Rat")])
+        seen, events = self.run_sequence([False, False], names=("Rat",))
+        self.assertEqual(seen, [("fight", "Rat"), ("walk", "Rat", 200), ("fight", "Rat")])
         self.assertIn("0 killed", events[-1][1])
+
+    def test_a_far_target_it_cannot_hurt_gets_no_second_walk(self):
+        seen, _ = self.run_sequence([False], names=("Rat",), distance=5000.)
+        self.assertEqual(seen, [("walk", "Rat", 200), ("fight", "Rat")])
 
     def test_stops_on_low_health(self):
         profile = default_profile()

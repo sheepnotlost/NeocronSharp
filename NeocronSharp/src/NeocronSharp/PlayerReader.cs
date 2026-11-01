@@ -24,7 +24,8 @@ internal sealed partial class PlayerReader : IDisposable
     {
         var matches = System.Diagnostics.Process.GetProcessesByName("neocronclient");
         // With two clients open, NEOCRON_PID says which one to read.
-        if (client == null && int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int chosen)) client = chosen;
+        // A chosen client that has since closed says nothing about the ones still open.
+        if (client == null && int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int chosen) && matches.Any(p => p.Id == chosen)) client = chosen;
         if (client != null)
         {
             var kept = matches.Where(p => p.Id == client).ToArray();

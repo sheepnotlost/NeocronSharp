@@ -44,8 +44,11 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
         }
         _unreadable = 0;
         // A different actor at a reused address is not the target. (A player's name can fail to
-        // read for a moment, showing as an unclassified character; that is still them.)
-        if (live != null && live.Name != target.Name && live.Identity.Kind != EntityKind.UnclassifiedCharacter) live = null;
+        // read for a moment, showing as an unclassified character; that is still them. Never for
+        // an NPC: the unnamed character could be a player, with the left button held.)
+        if (live != null && (target.Identity.Kind == EntityKind.Npc
+                ? live.Identity.Kind != EntityKind.Npc || live.Name != target.Name
+                : live.Name != target.Name && live.Identity.Kind != EntityKind.UnclassifiedCharacter)) live = null;
         if (live == null)
         {
             if (++_misses < MissesToLose) return null;
@@ -79,8 +82,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     public const float TooClose = 5;
     /// <summary>Radians per pixel of mouse, once measured.</summary>
     public (float Yaw, float Pitch)? Measured { get; private set; }
-    /// <summary>Where a run to a loot box stops. Not yet set live: the view stops at 43 degrees down, so too close and the crosshair cannot reach the box.</summary>
-    public const float BoxReach = 60;
+    /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
+    public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
     private const int StuckAfterMs = 3000, BoxAimMs = 2000;
     private const float StuckBelow = 15;
@@ -179,15 +182,17 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 Wait(Tick);
             }
             input.Walk(false);
-            for (long until = clock.ElapsedMilliseconds + BoxAimMs; clock.ElapsedMilliseconds < until; Wait(Tick))
+            bool aimed = false;
+            for (long until = clock.ElapsedMilliseconds + BoxAimMs; !aimed && clock.ElapsedMilliseconds < until; Wait(Tick))
             {
                 var s = Guard();
                 var view = View(s);
-                float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), box - s.Position);
+                float yawError = PointNavigation.Distance(s.Position, box) < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), box - s.Position);
                 float pitchError = CameraAim.PitchTo(s.Position, box) - view.Pitch;
-                if (CameraAim.OnTarget(yawError, pitchError)) break;
-                input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / yawGain), (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain));
+                aimed = CameraAim.OnTarget(yawError, pitchError);
+                if (!aimed) input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / yawGain), (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain));
             }
+            if (!aimed) throw new InvalidOperationException($"Could not aim at the body of {target.Name}.");   // A right-click lands on whatever is there.
             Record("box", previous, new { target = target.Name });
             input.Use();
             return $"Right-clicked the body of {target.Name}.";

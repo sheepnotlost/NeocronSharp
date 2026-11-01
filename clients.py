@@ -69,6 +69,8 @@ def capture(hwnd):
     user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.c_void_p]
     user32.GetClientRect(hwnd, ctypes.byref(box))
     width, height = box.right, box.bottom
+    if width < 1 or height < 1:         # minimized
+        return np.zeros((0, 0, 3), dtype=np.uint8)
     screen = user32.GetDC(hwnd)
     memory = gdi.CreateCompatibleDC(screen)
     picture = gdi.CreateCompatibleBitmap(screen, width, height)
@@ -88,6 +90,8 @@ def capture(hwnd):
 def stats(frame, detector):
     """{"HLT": maximum, "PSI": maximum} from a client's readout; a row it can't read is left out."""
     height, width = frame.shape[:2]
+    if not height:
+        return {}
     gray, found = detector.gray(frame), {}
     for name, top, bottom in STATS:
         crop = gray[int(top*height):int(bottom*height), int(.85*width):int(.95*width)]
