@@ -94,6 +94,20 @@ class TargetTabTests(unittest.TestCase):
             self.tab.client_chosen()
         refresh.assert_called_once()
         self.assertEqual(os.environ["NEOCRON_PID"], "11")
+        self.tab.show_nearby(("ok", NEARBY))
+        self.assertTrue(self.tab.status.get().endswith("around you (seen by HLT 768, PSI 433 (11))"))
+
+    def test_two_clients_start_on_the_healer(self):
+        found = [{"pid": 22, "label": "HLT 913, PSI 7 (22)", "psi": 7}, {"pid": 30, "label": "HLT 768, PSI 433 (30)", "psi": 433}]
+        self.addCleanup(clients.choose, None)
+        clients.choose(None)
+        with patch.object(target_tab.tt, "build_tool", return_value=None), patch.object(clients, "list_clients", return_value=found),                 patch.object(target_tab.tt, "run_tool", return_value=NEARBY):
+            self.tab.refresh()
+            while self.tab.busy:
+                self.root.update()
+                self.tab.poll()
+        self.assertEqual(os.environ["NEOCRON_PID"], "30")
+        self.assertEqual(self.tab.client.get(), found[1]["label"])
 
     def test_will_not_start_while_a_walk_steers_the_same_mouse(self):
         self.walking = True
@@ -122,7 +136,7 @@ class ClientTests(unittest.TestCase):
 
     def test_only_one_client_needs_no_reading(self):
         with patch.object(clients, "windows", return_value={7: 1}), patch.object(clients, "capture") as capture:
-            self.assertEqual(clients.list_clients(), [{"pid": 7, "label": "Client 7"}])
+            self.assertEqual(clients.list_clients(), [{"pid": 7, "label": "Client 7", "psi": 0}])
         capture.assert_not_called()
 
 

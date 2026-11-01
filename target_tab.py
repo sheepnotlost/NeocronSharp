@@ -177,9 +177,10 @@ class TargetTab:
                 if problem:
                     raise RuntimeError(problem)
                 found = clients.list_clients()
-                # Keep a choice that is still open; with no choice to make, there is nothing to name.
+                # Keep a choice that is still open; with no choice to make, there is nothing to name. Two clients
+                # start on the healer: a list never shows its own character, so its list is the one with the fighter.
                 if os.environ.get("NEOCRON_PID") not in [str(c["pid"]) for c in found]:
-                    clients.choose(found[0]["pid"] if len(found) > 1 else None)
+                    clients.choose(max(found, key=lambda c: c["psi"])["pid"] if len(found) > 1 else None)
                 self.queue.put(("clients", found))
                 result = ("ok", tt.run_tool(["nearby"], track=self.offline))
             except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
@@ -208,8 +209,9 @@ class TargetTab:
             self.actors = [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
                             "dead": bool(e.get("dead"))} for e in data.get("entities", [])]
             players = sum(1 for a in self.actors if a["kind"] == "player")
+            seen_by = f" (seen by {self.client.get()})" if len(self.clients) > 1 else ""
             self.status.set(f"{data.get('sectorName') or 'This zone'}  ·  {tt.plural(players, 'player')} and "
-                            f"{tt.plural(len(self.actors) - players, 'NPC')} around you")
+                            f"{tt.plural(len(self.actors) - players, 'NPC')} around you{seen_by}")
         self.show_actors()
 
     def show_actors(self):

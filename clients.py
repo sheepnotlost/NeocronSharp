@@ -99,10 +99,11 @@ def stats(frame, detector):
 
 
 def list_clients():
-    """[{"pid", "label"}], and only worth reading labels for when there is a choice to make."""
+    """[{"pid", "label", "psi"}], and only worth reading the windows for when there is a choice to make."""
     found = windows()
     if len(found) < 2:
-        return [{"pid": pid, "label": label(pid, {})} for pid in found]
+        return [{"pid": pid, "label": label(pid, {}), "psi": 0} for pid in found]
     from vision import Detector
     detector = Detector()
-    return [{"pid": pid, "label": label(pid, stats(capture(hwnd), detector))} for pid, hwnd in sorted(found.items())]
+    rows = [(pid, stats(capture(hwnd), detector)) for pid, hwnd in sorted(found.items())]
+    return [{"pid": pid, "label": label(pid, read), "psi": read.get("PSI", 0)} for pid, read in rows]
