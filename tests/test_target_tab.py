@@ -174,6 +174,16 @@ class TargetTabTests(unittest.TestCase):
         self.assertEqual(after.call_args.args[2:], (["Copbot"], 300))
         self.tab.loot_event("done", "0 killed.")
 
+    def test_a_named_fighter_means_real_input_even_with_a_second_client_listed(self):
+        self.tab.clients = [{"pid": 1, "label": "a"}, {"pid": 2, "label": "b"}]
+        self.tab.fighter.set("Buddy")
+        self.tab.tree.selection_set(self.tab.tree.get_children()[0])
+        self.root.update()
+        with tempfile.TemporaryDirectory() as folder, patch.object(target_tab, "FIGHTER_FILE", Path(folder) / "fighter.txt"), \
+                patch.object(self.tab, "start_live") as start:
+            self.tab.heal()
+        self.assertEqual(start.call_args.args[0][:3], ["follow", "p1", "--heal"])
+
     def test_two_clients_are_told_apart_and_the_choice_reaches_the_engine(self):
         found = [{"pid": 11, "label": "HLT 768, PSI 433 (11)"}, {"pid": 22, "label": "HLT 913, PSI 7 (22)"}]
         self.addCleanup(clients.choose, None)

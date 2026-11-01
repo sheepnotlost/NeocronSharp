@@ -166,7 +166,10 @@ class TargetTab:
         """A living player. Two clients here: the engine checks it is your other one. One: it must be the fighter you named."""
         if actor is None or actor["dead"] or actor["kind"] != "player":
             return False
-        return len(self.clients) > 1 or actor["name"].lower() == self.fighter.get().strip().lower()
+        return len(self.clients) > 1 or self.named_fighter(actor)
+
+    def named_fighter(self, actor):
+        return actor["name"].lower() == self.fighter.get().strip().lower()
 
     def steering(self):
         return self.process is not None or self.looting is not None or self.heal_name is not None
@@ -334,7 +337,9 @@ class TargetTab:
             return
         self.append(f"Tracking {actor['name']} and following. Casting every 30 s.")
         try:
-            if len(self.clients) > 1:
+            # A name in the box means the fighter is elsewhere, whatever else is open here: a leftover or closing client
+            # made a healer alone in a VM count two (1 Nov), and the engine then looked for the fighter in that one.
+            if len(self.clients) > 1 and not self.named_fighter(actor):
                 self.start_live(["heal", actor["id"]])
             else:
                 FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
