@@ -19,6 +19,7 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
         Shift = new(0x10, 0x2a), Shoot = new(0x2d, 0x52, true);   // keys.ini: INSERT = Shoot
     private const uint KeyDown = 0x100, KeyUp = 0x101, SetFocus = 0x07, KillFocus = 0x08;
     private readonly HashSet<Key> _held = new();
+    private bool _focused;
 
     [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
     private static extern nint SendMessageTimeout(nint window, uint message, nuint wParam, nint lParam, uint flags, uint millis, out nint result);
@@ -28,8 +29,6 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
 
     private static nint Bits(Key key) => (nint)(1 | key.Scan << 16 | (key.Extended ? 1u << 24 : 0));
 
-    /// <summary>The focus message alone is what keys need (tested with each message on its own, 1 Nov).</summary>
-    public void TellFocused(bool focused) => Send(focused ? SetFocus : KillFocus, 0);
 
     public void Set(Key key, bool down)
     {
@@ -40,16 +39,24 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
     /// <summary>
     /// Held keys repeat, as a held key does on a keyboard: one key-down alone does nothing (1 Nov). Sent, not posted: an unfocused
     /// game works through posted messages late, and a backlog of them kept it walking for over a second after the key-up.
+    /// The focus message alone lets keys through, but a client in mouse-look that thinks it has focus pulls the real cursor to
+    /// the middle of the screen, so it only thinks so while a key is down (all tested one at a time, 1 Nov).
     /// </summary>
     public void Repeat()
     {
+        if (_held.Count == 0)
+        {
+            if (_focused) { Send(KillFocus, 0); _focused = false; }
+            return;
+        }
+        if (!_focused) { Send(SetFocus, 0); _focused = true; }
         foreach (var key in _held) Send(KeyDown, key.Vk, Bits(key));
     }
 
     public void Dispose()
     {
         foreach (var key in _held.ToList()) Set(key, false);
-        TellFocused(false);
+        Send(KillFocus, 0);
     }
 }
 
@@ -94,7 +101,7 @@ internal sealed class CameraWriter : IDisposable
 /// </summary>
 internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string logPath)
 {
-    private const int Tick = 33, ReadEveryMs = 100, CastEveryMs = 30000, CastHoldMs = 1500, ActiveEveryMs = 5000;
+    private const int Tick = 33, ReadEveryMs = 100, CastEveryMs = 30000, CastHoldMs = 1500;
     /// <summary>A position is at the feet (seen live): this is about the middle of a standing character.</summary>
     private const float BodyMiddle = 50;
 
@@ -116,7 +123,7 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
         var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Heal follow stopped.");
         Record("start", origin, new { target = target.Name, hold.Distance });
         Console.WriteLine($"Keeping the crosshair on {target.Name} and {hold.Distance:F0} units away. Casting every {CastEveryMs / 1000} s.");
-        long nextCast = 0, castEnds = -1, nextActive = 0;
+        long nextCast = 0, castEnds = -1;
         int casts = 0, ticks = 0;
         var last = origin;
         try
@@ -125,7 +132,6 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
             {
                 if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
                 long now = clock.ElapsedMilliseconds;
-                if (now >= nextActive) { keys.TellFocused(true); nextActive = now + ActiveEveryMs; }
                 PlayerSample s;
                 try { s = reader.ReadSteady(); }
                 catch (InvalidOperationException) { throw new InvalidOperationException("The healer could not be read (zoning?). Heal follow stopped."); }
