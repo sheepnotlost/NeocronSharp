@@ -174,6 +174,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         var previous = origin;
         double previousAt = 0;
         bool riding = false;   // in a gravity lift: only a sideways jump is a teleport
+        var jumps = new PositionJumps();
 
         void Record(string kind, PlayerSample s, object? detail = null) => log.WriteLine(JsonSerializer.Serialize(new {
             timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
@@ -183,7 +184,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         // As LiveSteer's guard on an ordinary walk: F8, focus, identity, sector, teleports.
         PlayerSample Guard()
         {
-            if (StopRequest.Made()) throw new OperationCanceledException("F8 stop pressed.");
+            if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
             reader.RequireForeground();
             PlayerSample s;
             try { s = reader.ReadSteady(); }
@@ -195,7 +196,12 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 throw new InvalidOperationException($"You changed zone, to {(now is { } n ? sectorName(n) : "a loading screen")}. Follow stopped; following through zones is not supported yet.");
             double t = clock.Elapsed.TotalSeconds, dt = previousAt == 0 ? 0 : t - previousAt;
             float jump = riding ? PointNavigation.Distance(s.Position, previous.Position) : Vector3.Distance(s.Position, previous.Position);
-            if (jump > 60 + 900 * (float)Math.Min(dt, 2)) throw new InvalidOperationException($"Unexpected position jump ({jump:F0} units in {dt:F2} s). Stopped.");
+            if (jump > 60 + 900 * (float)Math.Min(dt, 2))
+            {
+                // One jump is the game correcting your position (live: 70 units on stairs, standing still). A route plans on from anywhere.
+                if (jumps.TooMany(t)) throw new InvalidOperationException($"Unexpected position jumps ({jump:F0} units in {dt:F2} s, the third in {PositionJumps.WithinSeconds:F0} s). Stopped.");
+                Record("jump", s, new { jump, dt });
+            }
             previous = s; previousAt = t;
             return s;
         }

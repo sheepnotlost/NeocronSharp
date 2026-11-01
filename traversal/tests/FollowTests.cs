@@ -12,6 +12,15 @@ internal static class FollowTests
 
     public static void Run(Action<string, Action> test)
     {
+        test("Position jumps: one or two are the game correcting you, a third close by is not", () =>
+        {
+            var jumps = new PositionJumps();
+            Check(!jumps.TooMany(0) && !jumps.TooMany(4), "two are allowed");
+            Check(jumps.TooMany(8), "the third within 10 s stops");
+            var spread = new PositionJumps();
+            Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
+        });
+
         test("Camera aim: small steady corrections near the target, a quick swing when far off, nothing on it", () =>
         {
             Check(CameraAim.Turn(0.005f) == 0 && CameraAim.Turn(-0.005f) == 0, "within the deadband nothing moves");

@@ -84,7 +84,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
 
         PlayerSample Guard()
         {
-            if (F8()) throw new OperationCanceledException("F8 stop pressed.");
+            if (F8()) throw new OperationCanceledException("Stop pressed.");
             reader.RequireForeground();
             PlayerSample s;
             try { s = reader.ReadSteady(); }
@@ -143,7 +143,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             for (int i = 5; i > 0; i--)
             {
                 hud.Post(Hud.Amber, $"CAMERA  starting in {i} s", "Click into Neocron now; press Tab so the pointer is hidden.", "F8 stops at any time.");
-                for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("F8 stop pressed."); Thread.Sleep(50); }
+                for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("Stop pressed."); Thread.Sleep(50); }
             }
 
             var reference = CameraAim.Facing(View(Guard()).Yaw);
@@ -153,6 +153,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Camera follow stopped.");
             Record("start", previous, new { target = target.Name, id = FollowCommand.Id(target), yawGain, pitchGain });
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
+            int ticks = 0;
             while (true)
             {
                 var s = Guard();
@@ -164,7 +165,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
                 input.LookPulse(x, y);
                 hud.Show(Hud.Green, title, $"{away:F0} units away, {MathF.Abs(yawError) * 180 / MathF.PI:F0} deg across, {MathF.Abs(pitchError) * 180 / MathF.PI:F0} deg up/down", "F8 stops");
-                Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
+                // A few lines a second: every tick would be 40 MB an hour.
+                if (ticks++ % 10 == 0) Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
                 Wait(Tick);
             }
         }

@@ -88,7 +88,7 @@ internal sealed class LiveSteer
 
         PlayerSample Guard()
         {
-            if (F8()) throw new OperationCanceledException("F8 stop pressed.");
+            if (F8()) throw new OperationCanceledException("Stop pressed.");
             _reader.RequireForeground();
             if (clock.Elapsed.TotalSeconds > deadline) throw new InvalidOperationException("Steering exceeded its time limit.");
             PlayerSample s;
@@ -138,9 +138,15 @@ internal sealed class LiveSteer
         PlayerSample Settle()
         {
             input.Walk(false);
-            var s = Wait(300); var c = Wait(100);
-            if (Vector3.Distance(s.Position, c.Position) > 0.4f) throw new InvalidOperationException("The character did not settle after releasing W.");
-            return c;
+            // Pressed against an NPC or a wall it slides on a while (live: beside a Copbot, every time).
+            var s = Wait(300);
+            for (int i = 0; i < 8; i++)
+            {
+                var c = Wait(100);
+                if (Vector3.Distance(s.Position, c.Position) <= 0.4f) return c;
+                s = c;
+            }
+            throw new InvalidOperationException("The character did not settle after releasing W.");
         }
 
         // Send up to `pulses` mouse pulses toward `pixels`, sampling between them; returns pixels sent.
@@ -158,7 +164,7 @@ internal sealed class LiveSteer
             {
                 Console.Write($"{i}… ");
                 _hud.Post(Hud.Amber, $"TRAVERSAL  starting in {i} s", "Click into Neocron now; press Tab so the pointer is hidden.", "F8 stops at any time.");
-                for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("F8 stop pressed."); Thread.Sleep(50); }
+                for (int j = 0; j < 20; j++) { if (F8()) throw new OperationCanceledException("Stop pressed."); Thread.Sleep(50); }
             }
             if (_countdown) Console.WriteLine();
             // The jump guard is for steering, not the countdown: re-anchor on a fresh

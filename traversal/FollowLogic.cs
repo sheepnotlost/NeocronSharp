@@ -34,6 +34,22 @@ internal sealed class FollowBand
     }
 }
 
+/// <summary>Sudden moves of your character: one is the game correcting it, several close together are not.</summary>
+internal sealed class PositionJumps
+{
+    public const int Limit = 3;
+    public const double WithinSeconds = 10;
+    private readonly Queue<double> _at = new();
+
+    /// <summary>Count a jump at this time; true when it makes too many.</summary>
+    public bool TooMany(double now)
+    {
+        while (_at.Count > 0 && now - _at.Peek() > WithinSeconds) _at.Dequeue();
+        _at.Enqueue(now);
+        return _at.Count >= Limit;
+    }
+}
+
 /// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
 internal static class CameraAim
 {

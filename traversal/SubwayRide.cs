@@ -296,7 +296,7 @@ internal sealed class SubwayRide(PlayerReader reader, NavWorld nav, Travel trave
         {
             for (int i = 0; i < 20; i++)
             {
-                if (F8()) throw new OperationCanceledException("F8 stop pressed.");
+                if (F8()) throw new OperationCanceledException("Stop pressed.");
                 var s = reader.ReadSteady();
                 float angle = PointNavigation.SignedAngle(s.Forward, point - s.Position);
                 if (MathF.Abs(angle) < 0.08f) return;
@@ -304,7 +304,7 @@ internal sealed class SubwayRide(PlayerReader reader, NavWorld nav, Travel trave
                 int pixels = turns.Pixels(angle * 0.8f, 3000);
                 for (int sent = 0; sent != pixels;)
                 {
-                    if (F8()) throw new OperationCanceledException("F8 stop pressed.");
+                    if (F8()) throw new OperationCanceledException("Stop pressed.");
                     sent += input.TurnPulse(pixels - sent); Thread.Sleep(16);
                 }
                 Thread.Sleep(120);
@@ -325,7 +325,7 @@ internal sealed class SubwayRide(PlayerReader reader, NavWorld nav, Travel trave
         {
             while (true)
             {
-                if (F8()) throw new OperationCanceledException("F8 stop pressed.");
+                if (F8()) throw new OperationCanceledException("Stop pressed.");
                 reader.RequireForeground();
                 Vector3? at = null;
                 try
