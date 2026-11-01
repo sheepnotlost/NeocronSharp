@@ -1,6 +1,6 @@
 # NeocronSharp — specification sheet
 
-Revision: 27 October 2026. Platform: Windows x64. This is the current consolidated specification. SPEC.md retains earlier implementation notes; TASKS.md is the delivery checklist. Proposed ideas are separated in FEATURE-IDEAS.md.
+Revision: 1 November 2026. Platform: Windows x64. This is the current consolidated specification. SPEC.md retains earlier implementation notes; TASKS.md is the delivery checklist. Proposed ideas are separated in FEATURE-IDEAS.md.
 
 ## Product
 
@@ -8,9 +8,11 @@ A portable, foreground desktop macro for Neocron Evolution / Neocron 2 research,
 
 The application is named NeocronSharp. The primary folder, local shortcut, portable ZIP and ZIP root use that name. The tool icon retains the screen-like green top requested earlier.
 
+NeoSharp ([sheepnotlost/neosharp](https://github.com/sheepnotlost/neosharp), `Documents\NeoSharp`) is the lite client: Research and Construction only, copied from this repository at c6688e6 and kept separately. Fixes here do not reach it on their own.
+
 ## Shared interface and controls
 
-- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal and Target Acquisition use their own buttons (traversal.exe; Target Acquisition's `camera` command sends mouse movement only, plus a held left mouse button on NPCs when ticked, and only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
+- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal and Target Acquisition use their own buttons (traversal.exe; see Target Acquisition below; only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
 
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
@@ -40,6 +42,34 @@ The application is named NeocronSharp. The primary folder, local shortcut, porta
 6. Hidden, clipped or ambiguous controls cannot count as a valid target or completion. Localization retries are bounded.
 7. Drags are always plain left drags (no button/modifier options; collect() saves left/none). Release only inputs the macro pressed, including after interruptions.
 8. UI settling/polling waits are permitted. Fixed research/build timers and repeated Start clicks on an ignored attempt are not.
+
+## Target Acquisition
+
+Runs with its own buttons, through traversal.exe's `camera`, `heal` and `follow --heal` commands (traversal/README.md) and loot_runner.py. Everything here reads positions from the game's memory. The actor list covers the whole zone. Stop leaves `traversal/stop.request`.
+
+### Track
+
+- `camera <id>` keeps the crosshair on the chosen player or NPC with mouse movement only. It sends no movement keys and needs mouse-look.
+- Hold left mouse button is for NPCs only: the box is disabled on players and the engine refuses them too, because on a real player it would be an aimbot. The button goes down once the crosshair is within 2 degrees and is released however the run ends.
+
+### Follow and heal, two clients on one PC
+
+- `heal <id>` needs no focus and refuses any target but the character in the user's other open client. Real focus never moves.
+- `clients.py` tells clients apart from the readout in a background capture; the Client box starts on the highest PSI. `NEOCRON_PID` picks the client for every engine command.
+- Camera: mouse input cannot reach an unfocused client and no key turns the camera, so `CameraWriter` writes the healer's angles (player+0x278 and +0x9d4). This is the project's only memory write. It was the user's informed choice on 1 Nov, knowing a server may treat it as cheating.
+- Keys: `SendMessage` with repeated key-downs, because a single key-down does nothing and posted repeats back up and overshoot. Focus is told to the window only while a key is down, then taken away, because a client in mouse-look that thinks it has focus pulls the real cursor to the screen centre.
+- Casts: Insert, bound to Shoot in `ini/keys.ini` (set with both clients closed, since the game writes that file around client start). One 1.5 s hold every 30 s, only when on target and within reach.
+- Walking: `HoldDistance` keeps the distance it started at (40 to 400 units), sprints beyond 250 and backs off only under 40. It walks straight at the target. The healer's menus must stay closed, because keys do nothing while they are open.
+
+### Follow and heal, one client (VM mode)
+
+`follow <id> --heal` is chosen when one client is open, for a healer alone on its own machine or VM. It uses real input and writes no memory, and Neocron must keep focus there. It takes Follow's routes to the character named in the Fighter box (`fighter.txt`, not committed) anywhere in the zone, stops 120 units away, aims with the mouse, and holds left click for 1.5 s every 30 s while in reach. It refuses anyone else. Not yet run: no VM to test on.
+
+### Loot sequence
+
+- Attacks the nearest listed NPC within 400 units with `camera --hold-left --give-up 20`. If health is still falling, it kills the nearest listed NPC within 200 units first. Only NPC names can be listed.
+- `camera --box` runs to the body and right-clicks it, the one exception to the doors-and-train rule. T, E, A and L parts are read from the loot window with the Research letter reading and dragged to Inventory. Nothing else is taken.
+- Stops on Stop, focus loss, health under 35%, health falling with no listed NPC near, a full Inventory, or 60 s with nothing to fight. Not yet run live.
 
 ## Tech Counter
 

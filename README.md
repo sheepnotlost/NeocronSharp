@@ -1,5 +1,7 @@
 # NeocronSharp
 
+Only want Research and Construction? [NeoSharp](https://github.com/sheepnotlost/neosharp) is the lite client.
+
 One program, three engines, started from **Launch.cmd**:
 
 - **Screen automation (Python, this folder):** Research, Construction, Recycling and Tech Counter

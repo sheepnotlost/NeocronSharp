@@ -124,3 +124,7 @@ Regression from 2026-10-26 15-06-38.mp4: accept +/-1px width as well as height v
 ## Later change (26 Oct 2026)
 
 Favorites (tab, buttons, shortcuts, profile field) and the Drag button / Drag modifier selectors were removed at the user's request. Profiles with an old "favorites" key load and drop it; drags are always plain left drags. Current behavior is in SPEC-SHEET.md.
+
+## Later change (1 Nov 2026)
+
+Research and Construction were copied out as NeoSharp, a separate lite client. Target Acquisition's follow and heal modes and the loot sequence are specified in SPEC-SHEET.md.
