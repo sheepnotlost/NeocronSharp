@@ -132,7 +132,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         {
             float last = value(Wait(60));
             int calm = 0;
-            for (int i = 0; i < 25 && calm < 2; i++)
+            for (int i = 0; i < 25 && calm < (plan.MeasureOnly ? 10 : 2); i++)   // A healer may be in a VM, where a frame can take half a second.
             {
                 float now = value(Wait(60));
                 calm = MathF.Abs(now - last) < 0.0015f ? calm + 1 : 0;
