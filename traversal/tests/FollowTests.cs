@@ -28,9 +28,11 @@ internal static class FollowTests
             Check(hold.Keys(110, 0) == (1, false), "keeps walking until nearly there");
             Check(hold.Keys(103, 0) == (0, false), "stops when there");
             Check(hold.Keys(110, 0) == (0, false), "and does not start again for a small drift");
-            Check(hold.Keys(80, 0) == (-1, false), "too close: backs off");
-            Check(hold.Keys(300, 1) == (0, true), "does not walk until it faces the target");
-            Check(hold.Keys(300, 0) == (1, true), "runs when far off");
+            Check(hold.Keys(70, 0) == (0, false), "a target coming closer is left to come");
+            Check(hold.Keys(30, 0) == (-1, false), "only right on top of you does it back off");
+            Check(hold.Keys(300, 1) == (0, false), "does not walk until it faces the target");
+            Check(hold.Keys(300, 0) == (1, false), "walks after the target without burning stamina");
+            Check(hold.Keys(400, 0) == (1, true), "sprints only to catch up from far off");
             Check(hold.InReach(150) && !hold.InReach(200), "does not cast out of reach");
             Check(new HoldDistance(5).Distance == HoldDistance.MinDistance && new HoldDistance(9000).Distance == HoldDistance.MaxDistance, "the distance is kept sensible");
             var at = new Vector3(100, 0, 100);

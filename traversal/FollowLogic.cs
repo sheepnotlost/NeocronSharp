@@ -50,10 +50,11 @@ internal sealed class PositionJumps
     }
 }
 
-/// <summary>The healer's walk: forward and back along the camera, which faces the target, to keep a distance.</summary>
+/// <summary>The healer's walk: after the target when it gets further than the distance, and back only when it is right on top of you.</summary>
 internal sealed class HoldDistance(float distance)
 {
-    public const float MinDistance = 40, MaxDistance = 400, StartOff = 14, StopOff = 6, RunBeyond = 90, CastBeyond = 60;
+    public const float MinDistance = 40, MaxDistance = 400, StartOff = 14, StopOff = 6, CastBeyond = 60,
+        RunBeyond = 250;   // Shift sprints and burns stamina, and with none left it crawls at 35 units/s (live, 1 Nov): only to catch up
     /// <summary>Facing further off than this, W would walk past the target.</summary>
     public const float MaxYawToWalk = 0.35f;
     /// <summary>The other client's position against the same character in this client's list, which arrives late.</summary>
@@ -66,9 +67,9 @@ internal sealed class HoldDistance(float distance)
     public (int Forward, bool Run) Keys(float away, float yawError)
     {
         float off = away - Distance;
-        _forward = MathF.Abs(off) >= StartOff ? Math.Sign(off) : MathF.Abs(off) < StopOff ? 0 : _forward;
+        _forward = away < MinDistance ? -1 : off >= StartOff ? 1 : off < StopOff ? 0 : Math.Max(_forward, 0);
         if (_forward > 0 && MathF.Abs(yawError) > MaxYawToWalk) _forward = 0;
-        return (_forward, MathF.Abs(off) > RunBeyond);
+        return (_forward, off > RunBeyond);
     }
 
     public bool InReach(float away) => away - Distance < CastBeyond;

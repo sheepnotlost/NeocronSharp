@@ -9,7 +9,7 @@ using NeocronSharp.Core;
 namespace NavmeshPrototype;
 
 /// <summary>
-/// Keys for a client that does not have focus: window messages, after telling the window it is active. Real focus
+/// Keys for a client that does not have focus: window messages, after telling the window it has focus. Real focus
 /// stays where it is. W, A, S, D and a Shoot key get through; the mouse does not (1 Nov).
 /// </summary>
 internal sealed class BackgroundKeys(nint window) : IDisposable
@@ -17,7 +17,7 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
     internal sealed record Key(uint Vk, uint Scan, bool Extended = false);
     public static readonly Key W = new(0x57, 0x11), S = new(0x53, 0x1f),
         Shift = new(0x10, 0x2a), Shoot = new(0x2d, 0x52, true);   // keys.ini: INSERT = Shoot
-    private const uint KeyDown = 0x100, KeyUp = 0x101, Activate = 0x06, SetFocus = 0x07, ActivateApp = 0x1c;
+    private const uint KeyDown = 0x100, KeyUp = 0x101, SetFocus = 0x07, KillFocus = 0x08;
     private readonly HashSet<Key> _held = new();
 
     [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
@@ -28,12 +28,8 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
 
     private static nint Bits(Key key) => (nint)(1 | key.Scan << 16 | (key.Extended ? 1u << 24 : 0));
 
-    public void TellActive(bool active)
-    {
-        Send(ActivateApp, active ? 1u : 0u);
-        Send(Activate, active ? 1u : 0u);
-        if (active) Send(SetFocus, 0);
-    }
+    /// <summary>The focus message alone is what keys need (tested with each message on its own, 1 Nov).</summary>
+    public void TellFocused(bool focused) => Send(focused ? SetFocus : KillFocus, 0);
 
     public void Set(Key key, bool down)
     {
@@ -53,7 +49,7 @@ internal sealed class BackgroundKeys(nint window) : IDisposable
     public void Dispose()
     {
         foreach (var key in _held.ToList()) Set(key, false);
-        TellActive(false);
+        TellFocused(false);
     }
 }
 
@@ -129,7 +125,7 @@ internal sealed class HealWatch(PlayerReader reader, WorldEntity target, string 
             {
                 if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
                 long now = clock.ElapsedMilliseconds;
-                if (now >= nextActive) { keys.TellActive(true); nextActive = now + ActiveEveryMs; }
+                if (now >= nextActive) { keys.TellFocused(true); nextActive = now + ActiveEveryMs; }
                 PlayerSample s;
                 try { s = reader.ReadSteady(); }
                 catch (InvalidOperationException) { throw new InvalidOperationException("The healer could not be read (zoning?). Heal follow stopped."); }
