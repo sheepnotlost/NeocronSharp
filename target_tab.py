@@ -19,7 +19,7 @@ from tkinter import ttk
 
 import clients
 import traversal_tab as tt
-from loot_runner import REACH
+from loot_runner import REACH, REACH_MOST
 from macro_core import Control
 
 
@@ -175,9 +175,9 @@ class TargetTab:
         return self.process is not None or self.looting is not None or self.heal_name is not None
 
     def reach_units(self):
-        """The Attack from box, or None while it does not hold a usable distance (Follow stops 40 to 2,000 units away)."""
+        """The Attack from box, or None while it does not hold a usable distance."""
         text = self.reach.get().strip()
-        return int(text) if text.isdigit() and 40 <= int(text) <= 2000 else None
+        return int(text) if text.isdigit() and 40 <= int(text) <= REACH_MOST else None
 
     def update_buttons(self):
         if not getattr(self, "ready", False):
@@ -434,7 +434,7 @@ class TargetTab:
         if not names:
             return "Tick an enemy first: click its row in the Enemies list. If the list is empty, press Refresh."
         if reach is None:
-            return "Attack from must be a whole number from 40 to 2000."
+            return f"Attack from must be a whole number from 40 to {REACH_MOST}."
         return None
 
     def begin_hunt(self, names, reach):

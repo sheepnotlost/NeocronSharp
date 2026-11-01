@@ -10,7 +10,7 @@ namespace NavmeshPrototype;
 /// </summary>
 internal sealed class FollowBand
 {
-    public const float MinDistance = 40, MaxDistance = 2000, DefaultDistance = 150;
+    public const float MinDistance = 40, MaxDistance = 6000, DefaultDistance = 150;
 
     public float Distance { get; }
     public float Resume { get; }
@@ -114,18 +114,28 @@ internal static class CameraAim
     /// spider being followed. The game stops the view at <see cref="MaxPitch"/> up or down.
     /// </summary>
     public const float EyeHeight = 82, MaxPitch = 43 * MathF.PI / 180;
-    public const float Deadband = 0.006f, FarAbove = 0.35f, FarShare = 0.5f, NearShare = 0.3f, MaxNearTurn = 0.1f;
+    public const float Deadband = 0.006f, FineDeadband = 0.0025f, AimWithin = 15, FarAbove = 0.35f, FarShare = 0.5f, NearShare = 0.3f, MaxNearTurn = 0.1f;
 
-    /// <summary>The turn for this tick: part of the error, so the camera settles on the target instead of swinging past it.</summary>
-    public static float Turn(float error)
+    /// <summary>The turn for this tick: part of the error, so the camera settles on the target instead of swinging past it.
+    /// Given the range, the deadband narrows to stay on the body: 0.006 radians is 36 units at 6,000, more than half a mob's width.</summary>
+    public static float Turn(float error, float away = 0)
     {
         float size = MathF.Abs(error);
-        if (size < Deadband) return 0;
+        if (size < (away > 0 ? Math.Clamp(AimWithin / away, FineDeadband, Deadband) : Deadband)) return 0;
         return size > FarAbove ? error * FarShare : Math.Clamp(error * NearShare, -MaxNearTurn, MaxNearTurn);
+    }
+
+    /// <summary>A turn in mouse pixels. Never rounded away to nothing, or a small error at long range is never corrected.</summary>
+    public static int Pixels(float turn, float gain)
+    {
+        int pixels = (int)MathF.Round(turn / gain);
+        return pixels == 0 && turn != 0 ? MathF.Sign(turn / gain) : pixels;
     }
 
     /// <summary>A position is at the feet (seen live: aiming there shot at a mob's feet and sometimes missed): this is about the middle of a standing character. The list gives no height, so small mobs get the same.</summary>
     public const float BodyMiddle = 50;
+    /// <summary>Where shots go, above a mob's feet. At 50 the crosshair sat on its lower legs (screenshot, 1 Nov). Not yet tried live.</summary>
+    public const float ShotHeight = 75;
     public const double CastEverySeconds = 30, CastHoldSeconds = 1.5;
 
     /// <summary>The first aim must land before the left button goes down: the test moves leave the camera well off the target.</summary>

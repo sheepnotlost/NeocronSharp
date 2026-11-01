@@ -205,7 +205,9 @@ class TargetTabTests(unittest.TestCase):
             self.tab.tick_enemy("Copbot")
             self.tab.reach.set("nope")
             self.tab.start_hunt()
-            self.assertIn("Attack from", self.tab.status.get())
+            self.assertIn("40 to 6000", self.tab.status.get())
+            self.tab.reach.set("6000")
+            self.assertEqual(self.tab.reach_units(), 6000)
             self.tab.reach.set("200")
             self.tab.heal_name = "Buddy"
             self.tab.start_hunt()

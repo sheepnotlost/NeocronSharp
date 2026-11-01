@@ -64,6 +64,9 @@ internal static class FollowTests
             Check(MathF.Abs(CameraAim.Turn(0.1f) - 0.03f) < 1e-5f, "near it, a share of the error");
             Check(CameraAim.Turn(0.34f) == CameraAim.MaxNearTurn && CameraAim.Turn(-0.34f) == -CameraAim.MaxNearTurn, "capped near it");
             Check(CameraAim.Turn(1f) == CameraAim.FarShare && CameraAim.Turn(-1f) == -CameraAim.FarShare, "far off, a big share");
+            Check(CameraAim.Turn(0.005f, 6000) != 0 && CameraAim.Turn(0.005f, 1000) == 0, "the deadband narrows at long range");
+            Check(CameraAim.Turn(0.002f, 6000) == 0, "but stays over a pixel, or the aim would shake");
+            Check(CameraAim.Pixels(0.0002f, -0.0014f) == -1 && CameraAim.Pixels(0.01f, 0.002f) == 5 && CameraAim.Pixels(0, 0.002f) == 0, "a turn is at least a pixel");
             Check(MathF.Abs(CameraAim.Facing(MathF.PI / 2).Z - 1) < 1e-5f && MathF.Abs(PointNavigation.SignedAngle(CameraAim.Facing(0), CameraAim.Facing(0.5f)) - 0.5f) < 1e-5f, "a heading as a flat direction");
         });
 

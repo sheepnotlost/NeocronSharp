@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 import loot_runner
-from loot_runner import LootRunner, dropped, pick_target
+from loot_runner import LootRunner, pick_target
 from macro_core import Control, Interrupted, default_profile
 from vision import Detector
 
@@ -31,11 +31,6 @@ class PickTests(unittest.TestCase):
     def test_anywhere_in_the_zone_unless_limited(self):
         self.assertEqual(pick_target([actor("Rat", distance=30000)], ["Rat"])["distance"], 30000)
 
-    def test_health(self):
-        self.assertTrue(dropped((800, 900), (700, 900)))
-        self.assertFalse(dropped((800, 900), (795, 900)))
-        self.assertFalse(dropped((800, 900), None))
-
 
 class WalkTests(unittest.TestCase):
     def test_a_hunt_runs_and_passes_on_the_first_calibration(self):
@@ -47,6 +42,14 @@ class WalkTests(unittest.TestCase):
         self.assertIn("--run", sent[0])
         self.assertNotIn("--calibration", sent[0])
         self.assertEqual(sent[1][-2:], ["--calibration", "300,0.002"])
+        self.assertNotIn("--body", sent[0])
+
+    def test_a_walk_to_a_body_says_so(self):
+        engine = loot_runner.Engine(None, None)
+        sent = []
+        engine.live = lambda args, tick: sent.append(args) or "Reached Rat, 100 units away."
+        engine.walk(actor("Rat", dead=True), 110, None)
+        self.assertIn("--body", sent[0])
 
 
 class ScreenTests(unittest.TestCase):
@@ -182,15 +185,15 @@ class SequenceTests(unittest.TestCase):
         return seen, events
 
     def test_walks_to_a_far_target_before_attacking(self):
-        seen, _ = self.run_sequence([True], names=("Rat",), distance=5000.)
-        self.assertEqual(seen[:2], [("walk", "Rat", 200), ("fight", "Rat")])
+        seen, _ = self.run_sequence([True], names=("Rat",), distance=9000.)
+        self.assertEqual(seen[:2], [("walk", "Rat", 5000), ("fight", "Rat")])
 
     def test_a_target_in_reach_needs_no_walk(self):
         seen, _ = self.run_sequence([True], names=("Rat",))
         self.assertEqual(seen[0], ("fight", "Rat"))
 
     def test_a_target_with_no_way_to_it_is_left_alone_and_the_next_is_tried(self):
-        seen, events = self.run_sequence([True], distance=5000., walks=["No walkable way to Rat for 15 s. Follow stopped."])
+        seen, events = self.run_sequence([True], distance=9000., walks=["No walkable way to Rat for 15 s. Follow stopped."])
         self.assertEqual([s[:2] for s in seen[:3]], [("walk", "Rat"), ("walk", "Spider"), ("fight", "Spider")])
         self.assertIn("1 killed", events[-1][1])
 
@@ -198,8 +201,8 @@ class SequenceTests(unittest.TestCase):
         for reason in ("Stopped: Stop pressed.", "Stopped: You changed zone. Follow stopped.",
                        "Stopped: Your character could not be read (zoning?). Follow stopped.",
                        "Stopped: The test step went 0 units. Is a menu, chat or the free pointer active?", "Stopped: Neocron lost focus."):
-            seen, events = self.run_sequence([], distance=5000., walks=[reason])
-            self.assertEqual(seen, [("walk", "Rat", 200)])
+            seen, events = self.run_sequence([], distance=9000., walks=[reason])
+            self.assertEqual(seen, [("walk", "Rat", 5000)])
             self.assertIn(reason, events[-1][1])
             seen, events = self.run_sequence([reason])
             self.assertEqual(seen, [("fight", "Rat")])
@@ -236,24 +239,36 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(seen, [("fight", "Rat"), ("box", "Rat"), ("close",), ("fight", "Spider"), ("box", "Spider"), ("close",)])
         self.assertIn("2 killed", events[-1][1])
 
-    def test_a_threat_dies_before_any_looting(self):
+    def test_loots_before_the_next_even_while_hurt(self):
         hurt = [(900, 900), (800, 900), (800, 900), (800, 900)]
         seen, _ = self.run_sequence([True, True], hurt)
-        self.assertEqual(seen, [("fight", "Rat"), ("fight", "Spider"), ("box", "Rat"), ("close",), ("box", "Spider"), ("close",)])
+        self.assertEqual(seen, [("fight", "Rat"), ("box", "Rat"), ("close",), ("fight", "Spider"), ("box", "Spider"), ("close",)])
 
-    def test_stops_when_hurt_with_nothing_listed_near(self):
-        seen, events = self.run_sequence([True], [(900, 900), (800, 900)], names=("Rat",))
-        self.assertEqual(seen, [("fight", "Rat")])
-        self.assertIn("no ticked NPC", events[-1][1])
+    def test_a_far_body_gets_a_route_then_the_run(self):
+        seen, _ = self.run_sequence([True], names=("Rat",), distance=1000.)
+        self.assertEqual(seen, [("fight", "Rat"), ("walk", "Rat", 110), ("box", "Rat"), ("close",)])
+
+    def test_a_body_with_no_way_to_it_is_left(self):
+        seen, events = self.run_sequence([True], names=("Rat",), distance=1000., walks=["No walkable way to Rat for 15 s. Follow stopped."])
+        self.assertEqual(seen, [("fight", "Rat"), ("walk", "Rat", 110)])
+        self.assertIn("1 killed", events[-1][1])
 
     def test_a_target_it_cannot_hurt_is_left_alone(self):
         seen, events = self.run_sequence([False, False], names=("Rat",))
         self.assertEqual(seen, [("fight", "Rat"), ("walk", "Rat", 200), ("fight", "Rat")])
         self.assertIn("0 killed", events[-1][1])
 
-    def test_a_far_target_it_cannot_hurt_gets_no_second_walk(self):
-        seen, _ = self.run_sequence([False], names=("Rat",), distance=5000.)
-        self.assertEqual(seen, [("walk", "Rat", 200), ("fight", "Rat")])
+    def test_a_target_it_cannot_hurt_is_closed_on_before_any_other(self):
+        seen, _ = self.run_sequence([False, True, True])
+        self.assertEqual(seen[:3], [("fight", "Rat"), ("walk", "Rat", 200), ("fight", "Rat")])
+        seen, _ = self.run_sequence([False]*5 + [True], names=("Rat",), distance=9000.)
+        self.assertEqual([s for s in seen if s[0] == "walk"][:6], [("walk", "Rat", r) for r in (5000, 2500, 1250, 625, 312, 200)])
+        self.assertEqual([s[1] for s in seen if s[0] == "fight"], ["Rat"]*6)
+
+    def test_the_range_that_worked_is_kept(self):
+        seen, _ = self.run_sequence([False, True, True], distance=9000.)
+        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 5000), ("walk", "Rat", 2500)])
+        self.assertIn(("walk", "Spider", 2500), seen)
 
     def test_stops_on_low_health(self):
         profile = default_profile()

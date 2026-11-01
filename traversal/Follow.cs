@@ -83,10 +83,10 @@ internal static class FollowCommand
         static float Round(float v) => MathF.Round(v, 1);
     }
 
-    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N] [--arrive] [--calibration speed,gain] [--gains yaw,pitch]: live, until F8, Stop, focus loss, the target going, or a zone change. --arrive ends on reaching an NPC, for the hunt, which passes on the first run's calibration so each walk needs no test step. A healer's retry passes both, for no test moves at all.</summary>
+    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N] [--arrive] [--body] [--calibration speed,gain] [--gains yaw,pitch]: live, until F8, Stop, focus loss, the target going, or a zone change. --arrive ends on reaching an NPC, or with --body a dead one, for the hunt, which passes on the first run's calibration so each walk needs no test step. A healer's retry passes both, for no test moves at all.</summary>
     public static int Follow(List<string> rest, string root, int pulse, bool run)
     {
-        bool heal = rest.Remove("--heal"), arrive = rest.Remove("--arrive");
+        bool heal = rest.Remove("--heal"), arrive = rest.Remove("--arrive"), body = arrive && rest.Remove("--body");
         (float, float)? Pair(string name)
         {
             int i = rest.IndexOf(name);
@@ -109,7 +109,7 @@ internal static class FollowCommand
         using var reader = new PlayerReader(ClientExecutable());
         var sample = reader.ReadSteady();
         int sector = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
-        var target = Pick(reader, rest[0]);
+        var target = Pick(reader, rest[0], body);
         string fighterFile = Path.Combine(root, FighterFile);
         if (heal && !CameraAim.IsFighter(File.Exists(fighterFile) ? File.ReadAllText(fighterFile) : null, target.Name, target.Identity.Kind))
             throw new InvalidOperationException($"{target.Name} is not the fighter named on the tab. Follow and heal only works on your own fighter.");
@@ -308,7 +308,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         string? Crossed(Vector3 seenAt) => FollowLogic.NearestExit(seenAt, exits) is { } x
             ? $"{target.Name} crossed the zone line toward {sectorName(x.To)} (last seen {PointNavigation.Distance(seenAt, x.Position):F0} units from that exit). Follow stopped; following through zones is not supported yet."
             : null;
-        var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Follow stopped.", Crossed);
+        var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Follow stopped.", Crossed, arrive && target.Stats?.Dead == true);
 
         // ---- the route ----
         Plan? plan = null, doorPlan = null;

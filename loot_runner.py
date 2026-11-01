@@ -1,5 +1,5 @@
-"""Hunt: walk to the nearest ticked NPC anywhere in the zone, kill it, kill whatever is still hurting you, run to the
-bodies and take T, E, A and L parts.
+"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, kill it, run to its body, take
+the T, E, A and L parts, and only then pick the next.
 
 traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
 next and works the game's windows. NPCs only: a player is never picked, whatever the list says.
@@ -15,13 +15,14 @@ from navray_runner import NavRayRunner
 from vision import NotFound
 from vision_runner import VisualRunner
 
-REACH = 200                  # units: how close to walk before attacking
-THREAT_RADIUS = 200          # units: how far away something still hurting you is looked for
+REACH = 5000                 # units: how close to go before attacking
+REACH_MOST = 6000            # units: about where the game stops letting you target (seen live, 1 Nov)
+CLOSE = 200                  # units: the closest a target that takes no damage is walked to
+LOOT_WALK = 300              # units: a body further than this gets Follow's routes, not a straight run
+BODY_NEAR = 110              # units: where that walk ends, inside the run's own stopping distance
 HEALTH_FLOOR = .35           # stop for good below this share of your health
-HEALTH_DROP = .01            # a smaller fall than this share of the maximum is rounding, not an attack
 HEALTH_EVERY = 1.0           # seconds between readings during a fight
-ATTACK_CHECK = 2.0           # seconds your health is watched after a kill
-GIVE_UP = 20                 # seconds of no damage before a target is left alone
+GIVE_UP = 20                 # seconds of no damage before going closer
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
 START_TRIES = 3              # readings of your health before the hunt refuses to start without one
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
@@ -38,11 +39,6 @@ def pick_target(actors, names, within=float("inf"), skip=()):
     found = [a for a in actors if a["kind"] == "npc" and not a["dead"] and a["name"].lower() in wanted
              and a["distance"] <= within and a["id"] not in skip]
     return min(found, key=lambda a: a["distance"], default=None)
-
-
-def dropped(before, after):
-    """Did your health fall between two (current, maximum) readings? False when either could not be read."""
-    return bool(before and after) and after[0] < before[0] - after[1]*HEALTH_DROP
 
 
 class Engine:
@@ -100,8 +96,10 @@ class Engine:
         return text
 
     def walk(self, actor, reach, tick):
-        """Follow's routes to an NPC, running while it is far, ending within reach."""
+        """Follow's routes to an NPC or its body, running while it is far, ending within reach."""
         args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", "24", "--run"]
+        if actor["dead"]:
+            args.append("--body")
         if self.calibration:
             args += ["--calibration", self.calibration]
         text = self.live(args, tick)
@@ -160,10 +158,10 @@ class LootRunner(VisualRunner):
             self.next_health = self.clock()+HEALTH_EVERY
             self.my_health()
 
-    def walk_to(self, actor):
+    def walk_to(self, actor, reach):
         """True on arrival."""
         self.emit("log", f"Walking to {actor['name']}, {actor['distance']:.0f} units away.")
-        last = self.ended(self.engine.walk(actor, self.reach, self.watch_health))
+        last = self.ended(self.engine.walk(actor, reach, self.watch_health))
         self.emit("log", last)
         return last.startswith("Reached ")
 
@@ -175,20 +173,24 @@ class LootRunner(VisualRunner):
         return last
 
     def attack(self, actor):
-        """True when it died. Close on the flat can still be round a corner or a floor away, so hurting nothing from
-        there earns one walk and one more try."""
-        near = actor["distance"] <= self.reach
-        if not near and not self.walk_to(actor):
-            return False
-        last = self.fight(actor)
-        if near and "No damage to" in last and self.walk_to(actor):
-            last = self.fight(actor)
-        return " died." in last
-
-    def under_attack(self):
-        before = self.my_health()
-        self.wait(ATTACK_CHECK)
-        return dropped(before, self.my_health())
+        """True when it died. Hurting nothing means out of range or out of sight, so it goes closer and tries again, as
+        far as CLOSE, instead of leaving for the next enemy. The range that worked is kept for the rest of the hunt."""
+        reach, close, closer = self.reach, min(CLOSE, self.reach), False
+        while True:
+            here = next((a for a in self.engine.nearby() if a["id"] == actor["id"]), None)
+            if here is None:
+                return False
+            if here["dead"]:
+                return True
+            if (closer or here["distance"] > reach) and not self.walk_to(here, reach):
+                return False
+            last = self.fight(here)
+            if " died." in last:
+                self.reach = reach
+                return True
+            if "No damage to" not in last or (closer and reach <= close):
+                return False
+            reach, closer = max(close, min(reach, int(here["distance"]))//2), True
 
     def answer_amount(self, dialog):
         self.click(dialog["field"])
@@ -251,6 +253,9 @@ class LootRunner(VisualRunner):
             self.emit("log", f"The body of {actor['name']} is gone.")
             return
         self.hide_pointer()
+        body = actors[actor["id"]]
+        if body["distance"] > LOOT_WALK and not self.walk_to(body, BODY_NEAR):
+            return
         last = self.ended(self.engine.box(actor, self.watch_health))
         self.emit("log", last)
         if not last.startswith("Right-clicked"):
@@ -308,23 +313,12 @@ class LootRunner(VisualRunner):
                 continue
             waiting = None
             if not self.attack(target):
+                self.emit("log", f"Leaving {target['name']} alone: it can't be reached or hurt.")
                 skip.add(target["id"])
                 continue
             self.kills += 1
-            bodies = [target]
-            while self.under_attack():
-                threat = pick_target(self.engine.nearby(), self.names, THREAT_RADIUS, skip)
-                if threat is None:
-                    raise Interrupted("Your health is dropping and no ticked NPC is near. Stopped.")
-                self.emit("log", "Still under attack.")
-                if self.attack(threat):
-                    self.kills += 1
-                    bodies.append(threat)
-                else:
-                    skip.add(threat["id"])
-            for body in bodies:
-                self.loot(body)
-                self.hide_pointer()
+            self.loot(target)
+            self.hide_pointer()
 
     def run(self):
         try:

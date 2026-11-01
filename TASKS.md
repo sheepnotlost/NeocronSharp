@@ -10,6 +10,7 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [ ] Hunt, after the first live go (1 Nov): Attack from goes to 6,000 (default 5,000), as the user saw targeting end about there. Shots aim 75 units up after the crosshair sat on a mob's legs at 50. One enemy at a time: it no longer fights back before looting, and no damage now means going closer, not the next mob. A mob's healing no longer reads as no damage. Bodies get a route to them. Not yet tried live, and the first hunts should show whether 5,000 is too far for the weapon.
 - [ ] A healer alone takes focus back (1 Nov): Kaiori followed and healed in the VM, then stopped on "Neocron lost focus" with the VM behind other windows. The retry now puts Neocron in front first, with no key press. What takes focus in the VM is still unknown, and "Unexpected position jumps" and "camera's angles could not be read" still stop a follow until its retry 10 s later.
 - [x] Start hunt had no reaction (1 Nov): greyed out with nothing ticked, and silent when it could not start. It now stays clickable and says why, and any failure at the end of the countdown is reported.
 - [ ] Hunt (1 Nov), replacing the typed loot sequence's name box and 400 unit limit: an enemy list to tick, Attack from, and `follow --arrive` for the walk, so it goes anywhere in the zone. Not yet tried live: everything in the loot sequence's item below, plus the walk and fight joined up, and how long each walk's navmesh bake takes.

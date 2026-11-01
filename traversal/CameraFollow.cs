@@ -15,7 +15,7 @@ namespace NavmeshPrototype;
 /// <param name="stopped">The end of every message saying the follow is over, e.g. "Follow stopped."</param>
 /// <param name="crossed">Why the target is gone when it vanished at a zone exit, if it did.</param>
 internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEntity>> read, Func<long> millis, int everyMs,
-    string stopped, Func<Vector3, string?>? crossed = null)
+    string stopped, Func<Vector3, string?>? crossed = null, bool corpse = false)
 {
     private const int MissesToLose = 4, UnreadableToStop = 20;
     private long _readAt = -everyMs;
@@ -55,7 +55,7 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
             return crossed?.Invoke(SeenAt) ?? $"{target.Name} is gone (out of range, logged off, despawned, or went through a door). {stopped}";
         }
         _misses = 0;
-        if (live.Stats?.Dead == true || live.Player?.Dead == true) return $"{target.Name} died. {stopped}";
+        if (!corpse && (live.Stats?.Dead == true || live.Player?.Dead == true)) return $"{target.Name} died. {stopped}";
         SeenAt = live.Position;
         Health = live.Stats?.Health?.RawCurrent ?? Health;
         return null;
@@ -224,7 +224,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             Record("start", previous, new { target = target.Name, id = FollowCommand.Id(target), yawGain, pitchGain });
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
             int ticks = 0;
-            int? lowest = watch.Health;
+            int? health = watch.Health;
             long lastHurt = 0;
             while (true)
             {
@@ -233,10 +233,12 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
                 float yawError = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0)) - view.Pitch;
-                int x = (int)MathF.Round(CameraAim.Turn(yawError) / yawGain), y = (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain);
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.ShotHeight, 0)) - view.Pitch;
+                int x = CameraAim.Pixels(CameraAim.Turn(yawError, away), yawGain), y = CameraAim.Pixels(CameraAim.Turn(pitchError, away), pitchGain);
                 input.LookPulse(x, y);
-                if (watch.Health < lowest) { lowest = watch.Health; lastHurt = clock.ElapsedMilliseconds; }
+                // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
+                if (watch.Health < health) lastHurt = clock.ElapsedMilliseconds;
+                health = watch.Health;
                 if (input.LeftHeld && plan.GiveUpSeconds > 0 && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
                 {
                     string missed = $"No damage to {target.Name} for {plan.GiveUpSeconds:F0} s. Camera follow stopped.";
