@@ -83,10 +83,18 @@ internal static class FollowCommand
         static float Round(float v) => MathF.Round(v, 1);
     }
 
-    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N]: live, until F8, Stop, focus loss, the target going, or a zone change.</summary>
+    /// <summary>follow &lt;entity id&gt; [--distance 150] [--run] [--pulse N] [--arrive] [--calibration speed,gain]: live, until F8, Stop, focus loss, the target going, or a zone change. --arrive ends on reaching an NPC, for the hunt, which passes on the first run's calibration so each walk needs no test step.</summary>
     public static int Follow(List<string> rest, string root, int pulse, bool run)
     {
-        bool heal = rest.Remove("--heal");
+        bool heal = rest.Remove("--heal"), arrive = rest.Remove("--arrive");
+        LiveSteer.Calibration? known = null;
+        int c = rest.IndexOf("--calibration");
+        if (c >= 0 && c + 1 < rest.Count)
+        {
+            var parts = rest[c + 1].Split(',');
+            known = new(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
+            rest.RemoveRange(c, 2);
+        }
         float distance = FollowBand.DefaultDistance;
         int d = rest.IndexOf("--distance");
         if (d >= 0 && d + 1 < rest.Count)
@@ -103,6 +111,7 @@ internal static class FollowCommand
         string fighterFile = Path.Combine(root, FighterFile);
         if (heal && !CameraAim.IsFighter(File.Exists(fighterFile) ? File.ReadAllText(fighterFile) : null, target.Name, target.Identity.Kind))
             throw new InvalidOperationException($"{target.Name} is not the fighter named on the tab. Follow and heal only works on your own fighter.");
+        if (arrive && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the hunt walks to NPCs only.");
         var band = new FollowBand(distance);
         Console.WriteLine($"Following {target.Name} ({Kind(target)}) at {band.Distance:F0} units{(band.Distance != distance ? $" (asked {distance:F0}; allowed {FollowBand.MinDistance:F0}-{FollowBand.MaxDistance:F0})" : "")}.");
 
@@ -116,11 +125,16 @@ internal static class FollowCommand
         string stamp = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}";
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        // LiveSteer's own countdown and calibration (test step + turn probe), then nothing else.
-        var calibrate = new LiveSteer(reader, nav, sector, sample.Position, true, target.Name, pulse,
-            Path.Combine(logs, $"steer-{stamp}-follow-calibration.jsonl"), hud, run) { CalibrateOnly = true };
-        calibrate.Run();
-        var calibration = calibrate.Measured ?? throw new InvalidOperationException("Calibration did not finish.");
+        var calibration = known;
+        if (calibration == null)
+        {
+            // LiveSteer's own countdown and calibration (test step + turn probe), then nothing else.
+            var calibrate = new LiveSteer(reader, nav, sector, sample.Position, true, target.Name, pulse,
+                Path.Combine(logs, $"steer-{stamp}-follow-calibration.jsonl"), hud, run) { CalibrateOnly = true };
+            calibrate.Run();
+            calibration = calibrate.Measured ?? throw new InvalidOperationException("Calibration did not finish.");
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"calibration {calibration.Speed} {calibration.Gain}"));
+        }
         (float Yaw, float Pitch)? aim = null;
         if (heal)
         {
@@ -134,7 +148,7 @@ internal static class FollowCommand
                 && int.TryParse(f.Properties.GetValueOrDefault("NextLevel"), out int to) && to > 0 && to != sector)
             .Select(f => (f.Position, int.Parse(f.Properties["NextLevel"]))).ToList();
         string why = new FollowWalk(reader, nav, sector, target, band, calibration, pulse, run, hud,
-            Path.Combine(logs, $"follow-{stamp}.jsonl"), exits, Name, aim).Run();
+            Path.Combine(logs, $"follow-{stamp}.jsonl"), exits, Name, aim, arrive).Run();
         Console.WriteLine(why);
         return 0;
     }
@@ -217,7 +231,7 @@ internal static class FollowCommand
 /// <summary>The live follow loop. Ends by returning why it stopped, or by throwing (F8, focus, zone change, stuck).</summary>
 internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, WorldEntity target, FollowBand band,
     LiveSteer.Calibration calibration, int pulse, bool run, Hud hud, string logPath,
-    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName, (float Yaw, float Pitch)? heal = null)
+    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName, (float Yaw, float Pitch)? heal = null, bool arrive = false)
 {
     private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
@@ -359,6 +373,12 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 }
 
                 bool moving = band.Update(gap);
+                if (arrive && !moving)
+                {
+                    input.Walk(false);
+                    Record("arrived", s, new { gap });
+                    return $"Reached {target.Name}, {gap:F0} units away.";
+                }
                 if (moving != wasMoving)
                 {
                     Record(moving ? "resume" : "hold", s, new { gap });

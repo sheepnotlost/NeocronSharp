@@ -972,10 +972,10 @@ class App:
             self.sync_start_button()
             self.show_build_recipe()
 
-    def loot_runner(self,names,emit,control):
+    def loot_runner(self,names,reach,emit,control):
         from loot_runner import LootRunner
         self.ensure_bound()
-        return LootRunner(self.profile,self.backend,control,emit,names=names)
+        return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
 
     def ensure_bound(self):
         title, size = self.backend.bind_foreground()

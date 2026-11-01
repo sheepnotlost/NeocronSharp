@@ -1,6 +1,7 @@
-"""Loot sequence: kill one ticked NPC, kill whatever is still hurting you, run to the bodies and take T, E, A and L parts.
+"""Hunt: walk to the nearest ticked NPC anywhere in the zone, kill it, kill whatever is still hurting you, run to the
+bodies and take T, E, A and L parts.
 
-traversal.exe does the fighting and the running (one short "camera" run at a time); this file decides what comes
+traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
 next and works the game's windows. NPCs only: a player is never picked, whatever the list says.
 """
 import re
@@ -13,20 +14,21 @@ from navray_runner import NavRayRunner
 from vision import NotFound
 from vision_runner import VisualRunner
 
-SEARCH_RADIUS = 400          # units: how far away a new target may be
+REACH = 200                  # units: how close to walk before attacking
 THREAT_RADIUS = 200          # units: how far away something still hurting you is looked for
 HEALTH_FLOOR = .35           # stop for good below this share of your health
 HEALTH_DROP = .01            # a smaller fall than this share of the maximum is rounding, not an attack
 HEALTH_EVERY = 1.0           # seconds between readings during a fight
 ATTACK_CHECK = 2.0           # seconds your health is watched after a kill
 GIVE_UP = 20                 # seconds of no damage before a target is left alone
-IDLE_LIMIT = 60              # seconds with nothing to fight before the sequence ends
+IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
+ENDS_THE_HUNT = ("Stop pressed", "changed zone")   # a walk that ends with these is not one target's problem
 MOST = 99                    # typed into the amount box: the game keeps it to the size of the stack
 AWAY = (24, 80)              # where the pointer waits, off every window
 
 
-def pick_target(actors, names, within, skip=()):
-    """The nearest living NPC with a ticked name. Never a player."""
+def pick_target(actors, names, within=float("inf"), skip=()):
+    """The nearest living NPC with a ticked name, anywhere in the zone unless limited. Never a player."""
     wanted = {name.lower() for name in names}
     found = [a for a in actors if a["kind"] == "npc" and not a["dead"] and a["name"].lower() in wanted
              and a["distance"] <= within and a["id"] not in skip]
@@ -44,6 +46,7 @@ class Engine:
     def __init__(self, log, control):
         self.log, self.control = log, control
         self.gains = None
+        self.calibration = None
 
     def nearby(self):
         data = tt.run_tool(["nearby"])
@@ -52,12 +55,9 @@ class Engine:
         return [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
                  "dead": bool(e.get("dead"))} for e in data.get("entities", [])]
 
-    def run(self, args, tick=lambda: None):
+    def live(self, args, tick):
         """Run one live command to its end and return what it printed. tick() runs while it does, and may raise."""
         tt.clear_stop()
-        args = ["camera", *args, "--pulse", "24", "--now"]
-        if self.gains:
-            args += ["--gains", self.gains]
         process = subprocess.Popen([str(tt.EXE), *args], cwd=tt.PROJECT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    text=True, encoding="utf-8", errors="replace", creationflags=tt.NO_WINDOW)
         lines = []
@@ -81,10 +81,28 @@ class Engine:
             tt.stop_walk(process)
             raise
         reader.join(2)
-        text = "\n".join(lines)
+        return "\n".join(lines)
+
+    def run(self, args, tick=lambda: None):
+        """A camera run, with the mouse gains the first one measured."""
+        args = ["camera", *args, "--pulse", "24", "--now"]
+        if self.gains:
+            args += ["--gains", self.gains]
+        text = self.live(args, tick)
         found = re.search(r"^gains (\S+) (\S+)$", text, re.M)
         if found:
             self.gains = f"{found.group(1)},{found.group(2)}"
+        return text
+
+    def walk(self, actor, reach, tick):
+        """Follow's routes to an NPC, ending within reach. Walked, not sprinted: Shift runs out of stamina on a long way."""
+        args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", "24"]
+        if self.calibration:
+            args += ["--calibration", self.calibration]
+        text = self.live(args, tick)
+        found = re.search(r"^calibration (\S+) (\S+)$", text, re.M)
+        if found:
+            self.calibration = f"{found.group(1)},{found.group(2)}"
         return text
 
     def fight(self, actor, tick):
@@ -99,9 +117,10 @@ class LootRunner(VisualRunner):
     menu_words, ui_visible, set_ui, press, health = (NavRayRunner.menu_words, NavRayRunner.ui_visible, NavRayRunner.set_ui,
                                                      NavRayRunner.press, NavRayRunner.health)
 
-    def __init__(self, *args, names=(), engine=None, **kwargs):
+    def __init__(self, *args, names=(), reach=REACH, engine=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.names = list(names)
+        self.reach = reach
         self.engine = engine or Engine(lambda text: self.emit("log", text), self.control)
         self.next_health = 0.
         self.kills = 0
@@ -120,9 +139,22 @@ class LootRunner(VisualRunner):
             self.next_health = self.clock()+HEALTH_EVERY
             self.my_health()
 
+    def approach(self, actor):
+        """True once within reach. A target with no way to it is one target's problem, unless the walk says otherwise."""
+        if actor["distance"] <= self.reach:
+            return True
+        self.emit("log", f"Walking to {actor['name']}, {actor['distance']:.0f} units away.")
+        result = self.engine.walk(actor, self.reach, self.watch_health)
+        last = result.splitlines()[-1] if result else "The engine said nothing."
+        if any(reason in result for reason in ENDS_THE_HUNT):
+            raise Interrupted(last)
+        self.guard()
+        self.emit("log", last)
+        return last.startswith("Reached ")
+
     def fight(self, actor):
         """True when it died."""
-        self.emit("log", f"Attacking {actor['name']}, {actor['distance']:.0f} units away.")
+        self.emit("log", f"Attacking {actor['name']}.")
         result = self.engine.fight(actor, self.watch_health)
         self.emit("log", result.splitlines()[-1] if result else "The engine said nothing.")
         return " died." in result
@@ -213,17 +245,18 @@ class LootRunner(VisualRunner):
             self.checkpoint()
             if not self.set_ui(self.reader(), False):
                 raise Interrupted("Could not hide the pointer for mouse-look.")
-            target = pick_target(self.engine.nearby(), self.names, SEARCH_RADIUS, skip)
+            target = pick_target(self.engine.nearby(), self.names, skip=skip)
             if target is None:
                 if idle >= IDLE_LIMIT:
-                    self.emit("done", f"Nothing left to fight within {SEARCH_RADIUS} units. {self.kills} killed.")
+                    self.emit("done", f"No ticked NPCs left in this zone. {self.kills} killed.")
                     return
-                self.emit("status", "Looking for a target.")
+                if idle == 0:
+                    self.emit("status", "No ticked NPCs alive here: waiting for one to appear.")
                 self.wait(3)
                 idle += 3
                 continue
             idle = 0.
-            if not self.fight(target):
+            if not self.approach(target) or not self.fight(target):
                 skip.add(target["id"])
                 continue
             self.kills += 1

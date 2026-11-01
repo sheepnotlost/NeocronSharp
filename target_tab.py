@@ -3,10 +3,11 @@
 Follow's target list without the walk: the work is done by traversal.exe's "camera" command,
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
-The loot sequence (loot_runner.py) repeats fight, run and loot on the NPC names you add.
+The hunt (loot_runner.py) repeats walk, fight, run and loot on the NPC names ticked in the enemy list, anywhere in the zone.
 Follow and heal has two forms. With two clients open here it runs without focus: traversal.exe's "heal" keeps the crosshair on your
 other client's character, walks after it and casts every 30 s. With one (a healer in a VM, its fighter elsewhere) it is "follow --heal",
-with real mouse input: Follow's routes to the fighter named here, then aiming and a click every 30 s when in reach.
+with real mouse input: Follow's routes to the fighter named here, then aiming and a click every 30 s when in reach. If that
+ends for any reason but Stop, it looks for the fighter again, so a healer left alone keeps going.
 """
 import os
 import queue
@@ -17,16 +18,26 @@ from tkinter import ttk
 
 import clients
 import traversal_tab as tt
+from loot_runner import REACH
 from macro_core import Control
 
 
 FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
+HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
+TICKED, UNTICKED = "\u2611", "\u2610"
 
 
-def loot_names(text):
-    """"Small Spider, Rat" -> ["Small Spider", "Rat"], without repeats."""
-    return list(dict.fromkeys(name.strip() for name in text.split(",") if name.strip()))
+def enemy_rows(actors, ticked=()):
+    """One row per NPC name, living ones only, nearest first, then any ticked name with none alive here now."""
+    rows = {}
+    for actor in actors:
+        if actor["kind"] == "npc" and not actor["dead"]:
+            row = rows.setdefault(actor["name"].lower(), {"name": actor["name"], "alive": 0, "nearest": actor["distance"]})
+            row["alive"] += 1
+            row["nearest"] = min(row["nearest"], actor["distance"])
+    found = sorted(rows.values(), key=lambda row: row["nearest"])
+    return found + [{"name": name, "alive": 0, "nearest": None} for name in ticked if name.lower() not in rows]
 
 
 class TargetTab:
@@ -34,8 +45,12 @@ class TargetTab:
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk or follow is steering the same mouse
-        self.loot_runner = loot_runner      # makes a LootRunner(names, emit, control) bound to the game
-        self.looting = None                 # the running loot sequence's Control
+        self.loot_runner = loot_runner      # makes a LootRunner(names, reach, emit, control) bound to the game
+        self.hunted = {}                    # ticked enemies: lower-case name -> name
+        self.heal_name = None               # the fighter a healer alone keeps going back to
+        self.heal_retry = None              # its next look
+        self.last_line = ""                 # the engine's latest words
+        self.looting = None                 # the running hunt's Control
         self.loot_start = None              # its 5 s countdown
         self.queue = queue.Queue()
         self.process = None                 # the live camera follow
@@ -73,7 +88,7 @@ class TargetTab:
         holder.columnconfigure(0, weight=1)
         holder.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(holder, columns=("name", "type", "distance"), show="headings", selectmode="browse", height=8)
-        for column, text, width, anchor in (("name", "Name", 420, "w"), ("type", "Type", 100, "w"), ("distance", "Distance", 110, "e")):
+        for column, text, width, anchor in (("name", "Name", 260, "w"), ("type", "Type", 70, "w"), ("distance", "Distance", 90, "e")):
             self.tree.heading(column, text=text, anchor=anchor)
             self.tree.column(column, width=width, anchor=anchor, stretch=column == "name")
         self.tree.tag_configure("grey", foreground=tt.GREY)
@@ -83,6 +98,22 @@ class TargetTab:
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_buttons())
         self.tree.bind("<Double-1>", lambda e: self.track())
+        hunting = ttk.Frame(holder)
+        hunting.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
+        hunting.columnconfigure(0, weight=1)
+        hunting.rowconfigure(1, weight=1)
+        ttk.Label(hunting, text="Enemies in this zone: click to tick who to hunt").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
+        for column, text, width, anchor in (("hunt", "Hunt", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
+                                            ("nearest", "Nearest", 70, "e")):
+            self.enemies.heading(column, text=text, anchor=anchor)
+            self.enemies.column(column, width=width, anchor=anchor, stretch=column == "name")
+        self.enemies.grid(row=1, column=0, sticky="nsew")
+        enemy_scroll = ttk.Scrollbar(hunting, orient="vertical", command=self.enemies.yview)
+        enemy_scroll.grid(row=1, column=1, sticky="ns")
+        self.enemies.configure(yscrollcommand=enemy_scroll.set)
+        self.enemies.bind("<Button-1>", self.toggle_enemy)
+        self.enemy_names = {}
         buttons = ttk.Frame(host)
         buttons.grid(row=3, column=0, sticky="ew", pady=(6, 0))
         self.track_button = ttk.Button(buttons, text="Track", command=self.track)
@@ -99,22 +130,17 @@ class TargetTab:
         self.fighter = tk.StringVar(value=saved)
         self.fighter.trace_add("write", lambda *_: self.update_buttons())
         ttk.Entry(buttons, textvariable=self.fighter, width=16).pack(side="left", padx=6)
-        ttk.Label(buttons, text="Tab in-game first. You do the walking; F8 stops.").pack(side="left", padx=(6, 0))
-        loot = ttk.Frame(host)
-        loot.grid(row=4, column=0, sticky="ew", pady=(6, 0))
-        loot.columnconfigure(1, weight=1)
-        ttk.Label(loot, text="Loot sequence, NPCs:").grid(row=0, column=0, sticky="w")
-        self.loot_names = tk.StringVar()
-        self.loot_names.trace_add("write", lambda *_: self.update_buttons())
-        ttk.Entry(loot, textvariable=self.loot_names).grid(row=0, column=1, sticky="ew", padx=6)
-        self.add_loot_button = ttk.Button(loot, text="Add selected", command=self.add_loot_name)
-        self.add_loot_button.grid(row=0, column=2, padx=(0, 6))
-        self.loot_button = ttk.Button(loot, text="Start loot sequence", command=self.start_loot)
-        self.loot_button.grid(row=0, column=3)
+        self.hunt_button = ttk.Button(buttons, text="Start hunt", command=self.start_hunt)
+        self.hunt_button.pack(side="right")
+        ttk.Label(buttons, text="units").pack(side="right", padx=(0, 8))
+        self.reach = tk.StringVar(value=str(REACH))
+        self.reach.trace_add("write", lambda *_: self.update_buttons())
+        ttk.Entry(buttons, textvariable=self.reach, width=6).pack(side="right", padx=4)
+        ttk.Label(buttons, text="Attack from").pack(side="right")
         logs = ttk.Frame(host)
-        logs.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        logs.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         logs.columnconfigure(0, weight=1)
-        self.log = tk.Text(logs, height=5, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
+        self.log = tk.Text(logs, height=3, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
         self.log.grid(row=0, column=0, sticky="ew")
         bar = ttk.Scrollbar(logs, orient="vertical", command=self.log.yview)
         bar.grid(row=0, column=1, sticky="ns")
@@ -141,16 +167,19 @@ class TargetTab:
         return len(self.clients) > 1 or actor["name"].lower() == self.fighter.get().strip().lower()
 
     def steering(self):
-        return self.process is not None or self.looting is not None
+        return self.process is not None or self.looting is not None or self.heal_name is not None
+
+    def reach_units(self):
+        """The Attack from box, or None while it does not hold a usable distance (Follow stops 40 to 2,000 units away)."""
+        text = self.reach.get().strip()
+        return int(text) if text.isdigit() and 40 <= int(text) <= 2000 else None
 
     def update_buttons(self):
         if not getattr(self, "ready", False):
             return
         idle = not self.busy and not self.steering()
         actor = self.selected()
-        names = loot_names(self.loot_names.get())
-        self.add_loot_button.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
-        self.loot_button.configure(state="normal" if idle and names and self.loot_runner else "disabled")
+        self.hunt_button.configure(state="normal" if idle and self.hunted and self.reach_units() and self.loot_runner else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
@@ -170,6 +199,7 @@ class TargetTab:
             while True:
                 kind, payload = self.queue.get_nowait()
                 if kind == "log":
+                    self.last_line = payload
                     self.append(payload)
                 elif kind == "clients":
                     self.show_clients(payload)
@@ -180,6 +210,8 @@ class TargetTab:
                     self.finished()
                 elif kind == "loot":
                     self.loot_event(*payload)
+                elif kind == "fighter":
+                    self.fighter_seen(payload)
         except queue.Empty:
             pass
         self._after = self.root.after(100, self.poll)
@@ -247,6 +279,28 @@ class TargetTab:
             self.rows[iid] = actor
             if actor["id"] == keep:
                 self.tree.selection_set(iid)
+        self.show_enemies()
+        self.update_buttons()
+
+    def show_enemies(self):
+        self.enemies.delete(*self.enemies.get_children())
+        self.enemy_names = {}
+        for i, row in enumerate(enemy_rows(self.actors, self.hunted.values())):
+            iid = f"e{i}"
+            self.enemy_names[iid] = row["name"]
+            self.enemies.insert("", "end", iid=iid, values=(TICKED if row["name"].lower() in self.hunted else UNTICKED, row["name"], row["alive"],
+                                                            "" if row["nearest"] is None else f"{row['nearest']:,.0f}"))
+
+    def toggle_enemy(self, event):
+        name = self.enemy_names.get(self.enemies.identify_row(event.y))
+        if name is not None and not self.steering():
+            self.tick_enemy(name)
+        return "break"
+
+    def tick_enemy(self, name):
+        if self.hunted.pop(name.lower(), None) is None:
+            self.hunted[name.lower()] = name
+        self.show_enemies()
         self.update_buttons()
 
     def track(self):
@@ -281,12 +335,45 @@ class TargetTab:
             else:
                 FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
                 self.append("Starting in 5 s: Neocron must stay the focused window here.")
-                self.start_live(["follow", actor["id"], "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24"])
+                self.heal_name = actor["name"]
+                self.start_alone(actor["id"])
             self.heal_button.configure(text="Healing...")
         except (OSError, RuntimeError) as exc:
             self.process = None
+            self.heal_name = None
             self.append("Could not start: " + str(exc))
         self.update_buttons()
+
+    def start_alone(self, fighter_id):
+        self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24"])
+
+    def find_fighter(self):
+        """A healer alone, some time after its follow ended: is the fighter here and alive?"""
+        self.heal_retry = None
+
+        def work():
+            try:
+                data = tt.run_tool(["nearby"], track=self.offline)
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+                data = {}
+            self.queue.put(("fighter", data))
+        threading.Thread(target=work, daemon=True, name="target-fighter").start()
+
+    def fighter_seen(self, data):
+        name = self.heal_name
+        if name is None:
+            return
+        found = next((e for e in data.get("entities", []) if e["kind"] == "player" and not e.get("dead") and e["name"].lower() == name.lower()), None)
+        try:
+            if found is not None:
+                self.append(f"Going back to {name}.")
+                self.start_alone(str(found["id"]))
+                return
+        except (OSError, RuntimeError) as exc:
+            self.process = None
+            self.append("Could not start: " + str(exc))
+        self.status.set(f"Waiting for {name} to be alive in this zone.")
+        self.heal_retry = self.root.after(HEAL_RETRY * 1000, self.find_fighter)
 
     def start_live(self, args):
         problem = tt.build_tool()
@@ -304,28 +391,23 @@ class TargetTab:
             self.queue.put(("done", None))
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
 
-    def add_loot_name(self):
-        actor = self.selected()
-        if actor is not None and actor["kind"] == "npc":
-            self.loot_names.set(", ".join(loot_names(f"{self.loot_names.get()}, {actor['name']}")))
-
-    def start_loot(self):
-        names = loot_names(self.loot_names.get())
-        if self.busy or self.steering() or not names or self.loot_runner is None:
+    def start_hunt(self):
+        names, reach = list(self.hunted.values()), self.reach_units()
+        if self.busy or self.steering() or not names or reach is None or self.loot_runner is None:
             return
         if self.other_live():
             self.append("A walk or follow is running on the Traversal tab. Stop it first.")
             return
         self.looting = Control()
-        self.append("Loot sequence: click into Neocron now. Starting in 5 s...")
+        self.append(f"Hunt: {', '.join(names)}. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
-        self.loot_start = self.root.after(5000, self.begin_loot, names)
+        self.loot_start = self.root.after(5000, self.begin_hunt, names, reach)
 
-    def begin_loot(self, names):
+    def begin_hunt(self, names, reach):
         self.loot_start = None
         try:
-            runner = self.loot_runner(names, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
-            threading.Thread(target=runner.run, daemon=True, name="loot-sequence").start()
+            runner = self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
+            threading.Thread(target=runner.run, daemon=True, name="hunt").start()
         except (ValueError, RuntimeError) as exc:
             self.loot_event("done", str(exc))
 
@@ -343,30 +425,44 @@ class TargetTab:
             self.looting.stopped.set()
             if self.loot_start is not None:
                 self.root.after_cancel(self.loot_start)
-                self.loot_event("done", "Loot sequence stopped.")
+                self.loot_event("done", "Hunt stopped.")
             return
+        was_healing, self.heal_name = self.heal_name, None
+        if self.heal_retry is not None:
+            self.root.after_cancel(self.heal_retry)
+            self.heal_retry = None
         process = self.process
         if process is None:
+            if was_healing:
+                self.finished()
             return
         self.stop_button.configure(state="disabled")
         threading.Thread(target=tt.stop_walk, args=(process,), daemon=True, name="target-stop").start()
 
     def finished(self):
         self.process = None
+        self.append("Ended.")
+        if self.heal_name is not None and "Stop pressed" not in self.last_line:
+            self.append(f"Looking for {self.heal_name} again in {HEAL_RETRY} s. Stop ends this.")
+            self.heal_retry = self.root.after(HEAL_RETRY * 1000, self.find_fighter)
+            self.update_buttons()
+            return
+        self.heal_name = None
         self.track_button.configure(text="Track")
         self.heal_button.configure(text="Follow and heal")
-        self.append("Ended.")
         self.update_buttons()
         self.refresh()
 
     def close(self):
         """Stop a running camera follow and any actor read; the window is closing."""
         self.closed = True
-        if self._after is not None:
-            try:
-                self.root.after_cancel(self._after)
-            except tk.TclError:
-                pass
+        self.heal_name = None
+        for pending in (self._after, self.heal_retry):
+            if pending is not None:
+                try:
+                    self.root.after_cancel(pending)
+                except tk.TclError:
+                    pass
         if self.process is not None:
             tt.stop_walk(self.process)
             self.process = None

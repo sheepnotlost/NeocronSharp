@@ -102,6 +102,60 @@ class TargetTabTests(unittest.TestCase):
             self.assertEqual(target_tab.FIGHTER_FILE.read_text(encoding="utf-8"), "Buddy")
         start.assert_called_once_with(["follow", "p1", "--heal", "--distance", "120", "--pulse", "24"])
 
+    def test_a_healer_alone_goes_back_to_the_fighter_until_stopped(self):
+        self.tab.heal_name = "Buddy"
+        self.tab.process = object()
+        with patch.object(self.tab, "refresh"):
+            self.tab.finished()
+        self.assertIsNotNone(self.tab.heal_retry)
+        self.assertTrue(self.tab.steering())
+        with patch.object(self.tab, "start_alone") as start:
+            self.tab.fighter_seen({"entities": [{"id": "p1", "name": "Buddy", "kind": "player", "dead": True}]})
+            start.assert_not_called()
+            self.root.after_cancel(self.tab.heal_retry)
+            self.tab.fighter_seen({"entities": [{"id": "p9", "name": "buddy", "kind": "player", "dead": False}]})
+        start.assert_called_once_with("p9")
+        self.tab.heal_retry = self.root.after(60000, lambda: None)
+        with patch.object(self.tab, "refresh"):
+            self.tab.stop()
+        self.assertIsNone(self.tab.heal_retry)
+        self.assertIsNone(self.tab.heal_name)
+        self.assertFalse(self.tab.steering())
+
+    def test_f8_ends_a_healer_alone_too(self):
+        self.tab.heal_name = "Buddy"
+        self.tab.last_line = "Stop pressed."
+        with patch.object(self.tab, "refresh"):
+            self.tab.finished()
+        self.assertIsNone(self.tab.heal_name)
+        self.assertIsNone(self.tab.heal_retry)
+
+    def test_enemy_list_groups_living_npcs_and_never_lists_players(self):
+        actors = [{"name": "Rat", "kind": "npc", "distance": 900., "dead": False}, {"name": "rat", "kind": "npc", "distance": 40., "dead": False},
+                  {"name": "Rat", "kind": "npc", "distance": 1., "dead": True}, {"name": "Spider", "kind": "npc", "distance": 10., "dead": False},
+                  {"name": "Buddy", "kind": "player", "distance": 5., "dead": False}]
+        self.assertEqual([(r["name"], r["alive"], r["nearest"]) for r in target_tab.enemy_rows(actors, ["Ghoul"])],
+                         [("Spider", 1, 10.), ("Rat", 2, 40.), ("Ghoul", 0, None)])
+
+    def test_ticks_start_the_hunt_and_outlive_a_refresh(self):
+        started = []
+        self.tab.loot_runner = lambda names, reach, emit, control: started.append((names, reach))
+        self.tab.update_buttons()
+        self.assertEqual(str(self.tab.hunt_button.cget("state")), "disabled")
+        self.tab.tick_enemy("Copbot")
+        self.assertEqual(self.tab.enemies.item("e0", "values")[0], target_tab.TICKED)
+        self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
+        self.tab.reach.set("nope")
+        self.assertEqual(str(self.tab.hunt_button.cget("state")), "disabled")
+        self.tab.reach.set("300")
+        self.tab.show_nearby(("ok", NEARBY))
+        self.assertEqual(self.tab.enemies.item("e0", "values")[0], target_tab.TICKED)
+        with patch.object(self.tab.root, "after", return_value="id") as after:
+            self.tab.start_hunt()
+        self.assertTrue(self.tab.steering())
+        self.assertEqual(after.call_args.args[2:], (["Copbot"], 300))
+        self.tab.loot_event("done", "0 killed.")
+
     def test_two_clients_are_told_apart_and_the_choice_reaches_the_engine(self):
         found = [{"pid": 11, "label": "HLT 768, PSI 433 (11)"}, {"pid": 22, "label": "HLT 913, PSI 7 (22)"}]
         self.addCleanup(clients.choose, None)
