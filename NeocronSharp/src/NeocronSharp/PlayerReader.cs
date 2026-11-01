@@ -23,6 +23,13 @@ internal sealed partial class PlayerReader : IDisposable
     public PlayerReader(string expectedExecutable)
     {
         var matches = System.Diagnostics.Process.GetProcessesByName("neocronclient");
+        // With two clients open, NEOCRON_PID says which one to read.
+        if (int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int chosen))
+        {
+            var kept = matches.Where(p => p.Id == chosen).ToArray();
+            foreach (var item in matches.Except(kept)) item.Dispose();
+            matches = kept;
+        }
         if (matches.Length != 1)
         {
             foreach (var item in matches) item.Dispose();

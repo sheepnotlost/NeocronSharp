@@ -26,7 +26,7 @@ internal static class FollowCommand
     private static string ClientExecutable()
     {
         var procs = Process.GetProcessesByName("neocronclient");
-        try { return procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException(procs.Length == 0 ? "Neocron is not running." : "Open exactly one Neocron client."); }
+        try { return procs.Length == 1 || (procs.Length > 1 && Environment.GetEnvironmentVariable("NEOCRON_PID") != null) ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException(procs.Length == 0 ? "Neocron is not running." : "Open exactly one Neocron client."); }
         finally { foreach (var p in procs) p.Dispose(); }
     }
 
