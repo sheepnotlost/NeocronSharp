@@ -10,6 +10,7 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [x] Blueprint research kept going after a failure (2 Nov): "research process failed, datacube destroyed!" leaves no result, which stopped the batch. It's now a failed try, not a copy, and Start is clicked again.
 - [x] Hunt starts (2 Nov): "Focus Neocron before the countdown finishes" failed start after start, so the app now focuses it. "The character did not settle after releasing W" ended a hunt in its test step, so hunts have none.
 - [ ] Going round what the map doesn't know (2 Nov): Scooter stuck on K 16's Warp Garage at 4814, -7730, as its footprint isn't in the navmesh. Follows and runs to cover now map the spot and go round, one 80-unit square per hit. Not yet tried live: a big building may take several hits, each with a rebake.
 - [ ] Run to cover at 35% health (1 Nov), replacing standing still: a spot out of every NPC's sight from the terrain heights and props, then back to hunting at 70%. Not yet tried live. Only terrain and props hide a spot, not buildings, and friendly NPCs count as mobs. A long run empties stamina, as `LiveSteer` has no `SprintGuard`.

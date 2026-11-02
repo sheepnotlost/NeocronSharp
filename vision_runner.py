@@ -181,6 +181,7 @@ class BlueprintRunner(VisualRunner):
         return processor, state
 
     def await_blueprint(self, seen_busy=False):
+        """True with a blueprint in the result slot, False without: the research failed and took a datacube with it."""
         idle_samples = 0
         while True:
             _, state = self.blueprint_state()
@@ -190,29 +191,32 @@ class BlueprintRunner(VisualRunner):
             elif seen_busy:
                 idle_samples += 1
                 if idle_samples >= 3:
-                    if not state["result"]:
-                        raise Interrupted("Research ended without a visible blueprint result. Check the Processor before restarting.")
-                    return
+                    return bool(state["result"])
             self.wait(.05, safe_pause=True)
 
     def execute(self):
         target = self.profile["blueprints"]["count"]
+        failed = 0
         while target == 0 or self.completed < target:
             self.emit("status", "Blueprint: finding the Processor and checking its progress.")
             processor, state = self.blueprint_state()
             if state["busy"]:
                 # Adopt an existing run rather than clicking Start while it is processing.
                 self.emit("status", "Blueprint: research in progress; monitoring for completion.")
-                self.await_blueprint(seen_busy=True)
+                made = self.await_blueprint(seen_busy=True)
             else:
                 # Completion already has three idle observations. Re-verify the
                 # current location once before clicking, without an extra idle wait.
                 self.click(processor.start_point())
                 self.move((24, 80))
                 self.emit("status", "Blueprint: Start clicked; waiting for progress and a new blueprint result.")
-                self.await_blueprint()
+                made = self.await_blueprint()
+            if not made:
+                failed += 1
+                self.emit("status", f"Blueprint: research failed ({failed} so far); trying again.")
+                continue
             self.completed += 1
             remaining = max(0, target - self.completed) if target else 0
             self.emit("blueprint_cycle", {"completed": self.completed,
                                           "count": remaining, "continuous": target == 0})
-        self.emit("done", f"Finished {self.completed} blueprint copies. Final result remains in the Processor.")
+        self.emit("done", f"Finished {self.completed} blueprint copies, {failed} failed. Final result remains in the Processor.")

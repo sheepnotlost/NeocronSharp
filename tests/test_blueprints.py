@@ -185,13 +185,15 @@ class BlueprintRunnerTests(unittest.TestCase):
         self.assertEqual(self.backend.events.count(("left", True)), 1)
         self.assertIn("Stopped", self.errors()[0])
 
-    def test_research_ending_without_blueprint_stops_before_next_click(self):
+    def test_a_failed_research_is_not_a_copy_and_does_not_stop_the_batch(self):
         self.setup_run()
         self.backend.produce_result = False
+        self.clock.on_sleep = lambda: setattr(self.backend, "produce_result", len(self.backend.starts) >= 3)
         self.runner.run()
-        self.assertIn("without a visible blueprint", self.errors()[0])
-        self.assertEqual(len(self.backend.starts), 1)
-        self.assertEqual(self.runner.completed, 0)
+        self.assertFalse(self.errors(), self.messages)
+        self.assertEqual(self.runner.completed, 3)
+        self.assertEqual(len(self.backend.starts), 5)
+        self.assertIn("research failed (2 so far)", " ".join(str(m) for m in self.messages))
 
     def test_continuous_mode_stops_on_focus_loss(self):
         self.setup_run(count=0)
