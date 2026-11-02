@@ -3,7 +3,8 @@
 Start at the R.N. terminal with the crosshair on it. Each job: right-click the terminal, Missions, Easy, Download Missions,
 Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then both faction supply managers, and back.
 traversal.exe does the walking, the aiming and the right-clicks; this file works the game's windows.
-Places are in the 1920x1080 units of the video they were measured from, and scale with the client. No Esc: Tab closes the menus.
+Places are in the 1920x1080 units of the video they were measured from, and scale with the client. Tab closes the menus.
+Esc is sent only to leave the conversation with the second supply manager, as the user asked, and only while that window shows.
 """
 import difflib
 import re
@@ -34,7 +35,7 @@ OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words 
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
-SPEECH_INDENT = .0012        # of the client's width: an option starts with a ">", so it never lines up with the words above
+SPEECH_INDENT = .0008        # of the client's width: an option starts with a ">", so it never lines up with the words above
 JOB_MARK = re.compile(r"36|6[0O]{3}|T[^ ]{0,2}[6G][0O]")
 
 
@@ -107,7 +108,7 @@ def letters(text):
 
 def options(lines, width):
     """The lines to answer with. The first line is always speech, and speech that wraps starts level with it."""
-    return [line for line in lines[1:] if abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT]
+    return [line for line in lines[1:] if ">" in line["text"][:3] or abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT]
 
 
 def answer(lines, width):
@@ -296,6 +297,18 @@ class MissionRunner(LootRunner):
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
 
+    def glance(self, person):
+        """Open the conversation and leave: the job only needs it opened."""
+        self.hide_pointer()
+        self.open_talk(person)
+        for attempt in range(3):
+            if self.dialog_lines() is None:
+                return
+            self.press("esc")
+            self.wait(.5)
+        if self.dialog_lines() is not None:
+            raise Interrupted(f"The conversation with {person['name']} did not close.")
+
     def run_job(self, spot):
         self.take_job(spot)
         recruiters = self.people("Recruiter")
@@ -306,8 +319,11 @@ class MissionRunner(LootRunner):
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
+            if paid:
+                self.glance(manager)
+                continue
             said = " ".join(self.talk(manager)).lower()
-            paid = paid or "payment" in said or "credits" in said
+            paid = "payment" in said or "credits" in said
         if not paid:
             raise Interrupted("Neither faction supply manager paid. Are the blueprints in your Inventory? The job is still open.")
 
