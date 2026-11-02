@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 
 import mission_runner
-from mission_runner import MissionRunner, answer, dialog_open, is_job, place, rn_page, text_lines
+from mission_runner import MissionRunner, answer, dialog_box, dialog_open, is_job, place, rn_page, text_lines
 from macro_core import Control, Interrupted, default_profile
 
 BRIGHT, PANEL = (115, 255, 168), (41, 105, 62)
@@ -24,7 +24,7 @@ def button(frame, point):
     frame[y-14:y+14, x-30:x+30] = BRIGHT
 
 
-WIDTH = 2560
+WIDTH = mission_runner.TALK_WIDE
 SPEECH, OPTION, UNREAD = 216, 222, 244      # where each kind of line starts, measured on the video: an unread ">" leaves the words
 
 
@@ -42,19 +42,38 @@ class ReadingTests(unittest.TestCase):
         button(jobs, mission_runner.NEXT_SHOWS)
         self.assertEqual([rn_page(f) for f in (factions, jobs, accepted)], ["factions", "list", "accepted"])
 
-    def test_a_conversation_fills_its_window_with_green(self):
+    def test_the_terminal_window_is_the_same_pixels_on_every_client(self):
+        for high, wide, left, top in ((1440, 2560, 960, 480), (1080, 1920, 640, 300), (768, 1366, 363, 144), (1050, 1680, 520, 285)):
+            frame = np.zeros((high, wide, 3), np.uint8)
+            self.assertEqual(place(frame, (0, 0)), (left, top))
+            self.assertEqual(place(frame, mission_runner.MISSIONS_TAB), (left+400, top+21))
+            button(frame, mission_runner.DOWNLOAD_SHOWS)
+            self.assertEqual(rn_page(frame), "factions")
+
+    def test_a_conversation_is_found_wherever_it_sits(self):
         frame = blank()
-        self.assertFalse(dialog_open(frame))
-        frame[:] = PANEL
+        self.assertIsNone(dialog_box(frame))
+        frame[300:1100, 100:1300] = PANEL
+        frame[400:430, 200:900] = (230, 240, 230)       # words on it
         self.assertTrue(dialog_open(frame))
+        self.assertEqual(dialog_box(frame), (100, 300, 1200, 800))
+
+    def test_the_hud_is_no_conversation(self):
+        frame = blank()
+        frame[1200:1400, 280:800] = PANEL               # small
+        self.assertIsNone(dialog_box(frame))
+        frame[:] = 0
+        for x in range(1000, 2500, 60):                 # as wide, but broken up
+            frame[450:1400, x:x+30] = PANEL
+        self.assertIsNone(dialog_box(frame))
 
     def test_the_two_tl60_jobs_part_by_width(self):
-        self.assertTrue(is_job("TtGO 36", .0359))
-        self.assertFalse(is_job("TtGO 36", .0426))
+        self.assertTrue(is_job("TtGO 36", .144))
+        self.assertFalse(is_job("TtGO 36", .170))
 
     def test_other_research_jobs_are_not_it(self):
-        self.assertFalse(is_job("20", .0359))
-        self.assertFalse(is_job("", .0359))
+        self.assertFalse(is_job("20", .144))
+        self.assertFalse(is_job("", .144))
 
     def test_always_the_first_option_however_the_ocr_read_it(self):
         for first in (OPTION, UNREAD, 210):

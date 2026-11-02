@@ -3,28 +3,33 @@
 Start at the R.N. terminal with the crosshair on it. Each job: right-click the terminal, Missions, Easy, Download Missions,
 Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then the faction supply managers until one pays, and back.
 traversal.exe does the walking, the aiming and the right-clicks; this file works the game's windows.
-Places are in the 1920x1080 units of the video they were measured from, and scale with the client. No Esc: Tab closes the menus.
+The R.N. window is 640x480 pixels, centred, whatever the client's size or UI scale, so its places are pixels from its corner.
+A conversation sits where the UI scale puts it, so it is found by its colour. No Esc: Tab closes the menus.
 """
 import difflib
 import re
+
+import numpy as np
 
 import loot_runner
 from loot_runner import LootRunner
 from macro_core import Interrupted
 from vision import cv2
 
-MISSIONS_TAB = (1020, 376)
-EASY = (1081, 491)
-DOWNLOAD = (811, 691)
-ACCEPT = (792, 691)
-NEXT = (867, 691)
-DOWNLOAD_SHOWS, NEXT_SHOWS, BACK_SHOWS = (762, 691), (890, 691), (1140, 691)     # beside each button's word
-ROWS, ROW_TOP, ROW_STEP = 6, 490, 11.25
-TITLE, NUMBERS = (754, 975), (752, 1100)
-ROW_CLICK_X = 850
-RESEARCH_WIDE = (.033, .039)     # of the client: TL60 Research Job .036, TL60 Construction Job .043
-DIALOG_SPARE = (170, 620, 1290, 880)     # the empty lower part of a conversation window
-DIALOG_TEXT = (150, 225, 1310, 600)
+RN_WIDE, RN_HIGH = 640, 480
+MISSIONS_TAB = (400, 21)
+EASY = (481, 175)
+DOWNLOAD = (121, 441)
+ACCEPT = (96, 441)
+NEXT = (196, 441)
+DOWNLOAD_SHOWS, NEXT_SHOWS, BACK_SHOWS = (56, 441), (227, 441), (560, 441)     # beside each button's word
+ROWS, ROW_TOP, ROW_STEP = 6, 173, 15
+TITLE, NUMBERS = (45, 340), (43, 507)
+ROW_CLICK_X, ROW_BLUE_X = 173, 253
+RESEARCH_WIDE = (.132, .156)     # of the window: TL60 Research Job .144, TL60 Construction Job .170
+TALK_WIDE = 1547             # pixels: a conversation on the 2560x1440 client at UI scale 1.7
+TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
+TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
 TALK_CLOSE = 90              # and from here if the first try opened nothing
@@ -36,13 +41,14 @@ OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words 
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
-SPEECH_INDENT = .0008        # of the client's width: an option starts with a ">", so it never lines up with the words above
+SPEECH_INDENT = .0013        # of the conversation's width: an option starts with a ">", so it never lines up with the words above
 JOB_MARK = re.compile(r"36|6[0O]{3}|T[^ ]{0,2}[6G][0O]")
 
 
 def place(frame, point):
+    """A place in the R.N. window, on the client."""
     height, width = frame.shape[:2]
-    return round(point[0]/1920*width), round(point[1]/1080*height)
+    return round((width-RN_WIDE)/2+point[0]), round((height-RN_HIGH)/2+point[1])
 
 
 def area(frame, x0, y0, x1, y1):
@@ -53,7 +59,7 @@ def area(frame, x0, y0, x1, y1):
 def lit(frame, point):
     """A bright green button at this place?"""
     x, y = point
-    box = area(frame, x-5, y-3, x+5, y+3).astype(int)
+    box = area(frame, x-7, y-4, x+7, y+4).astype(int)
     return ((box[..., 1] > 200) & (box[..., 1]-box[..., 0] > 60)).mean() > .5
 
 
@@ -66,10 +72,21 @@ def rn_page(frame):
     return "factions" if lit(frame, DOWNLOAD_SHOWS) else None
 
 
-def dialog_open(frame):
-    box = area(frame, *DIALOG_SPARE).astype(int)
+def dialog_box(frame):
+    """The conversation's panel as (left, top, wide, high), or None. A big solid block of its green, which no other window is."""
+    box = frame.astype(int)
     red, green, blue = box[..., 0], box[..., 1], box[..., 2]
-    return ((green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)).mean() > .5
+    panel = ((green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)).astype(np.uint8)
+    size = frame.shape[1]//300 | 1      # closes over the words
+    count, _, stats, _ = cv2.connectedComponentsWithStats(cv2.morphologyEx(panel, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8)), connectivity=4)
+    if count < 2:
+        return None
+    left, top, wide, high, filled = (int(v) for v in stats[1+stats[1:, cv2.CC_STAT_AREA].argmax()])
+    return None if filled < TALK_SMALLEST*frame.shape[0]*frame.shape[1] or filled < TALK_SOLID*wide*high else (left, top, wide, high)
+
+
+def dialog_open(frame):
+    return dialog_box(frame) is not None
 
 
 def row_y(row):
@@ -77,16 +94,16 @@ def row_y(row):
 
 
 def row_is_blue(frame, row):
-    x, y = place(frame, (ROW_CLICK_X+60, row_y(row)))
+    x, y = place(frame, (ROW_BLUE_X, row_y(row)))
     red, green, blue = (int(v) for v in frame[y, x][:3])
     return blue > green and blue > red
 
 
 def title_width(frame, row):
-    """Of the client's width. The title's letters are near white on green."""
-    cell = area(frame, TITLE[0], row_y(row)-5, TITLE[1], row_y(row)+5)
+    """Of the window's width. The title's letters are near white on green."""
+    cell = area(frame, TITLE[0], row_y(row)-7, TITLE[1], row_y(row)+7)
     columns = (cell.min(axis=2) > 120).any(axis=0).nonzero()[0]
-    return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/frame.shape[1]
+    return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/RN_WIDE
 
 
 def is_job(words, width):
@@ -95,7 +112,7 @@ def is_job(words, width):
 
 
 def row_words(reader, frame, row):
-    cell = area(frame, NUMBERS[0], row_y(row)-7, NUMBERS[1], row_y(row)+7)
+    cell = area(frame, NUMBERS[0], row_y(row)-9, NUMBERS[1], row_y(row)+9)
     return " ".join(word[0] for image in (cell.max(axis=2), cell.min(axis=2)) for word in reader.read_words(image))
 
 
@@ -165,6 +182,7 @@ class MissionRunner(LootRunner):
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.pictures = set()        # list pages saved so far, for tuning what reads them
+        self.talk_wide = TALK_WIDE   # the open conversation's width
 
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
@@ -251,10 +269,14 @@ class MissionRunner(LootRunner):
     def dialog_lines(self):
         """The conversation's lines, or None with no conversation open."""
         frame = self.frame()
-        if not dialog_open(frame):
+        box = dialog_box(frame)
+        if box is None:
             return None
-        left, top = place(frame, DIALOG_TEXT[:2])
-        return text_lines(self.reader().read_words(self.detector.gray(area(frame, *DIALOG_TEXT)), up=2), left, top)
+        left, top, wide, high = box
+        self.talk_wide = wide
+        x0, y0 = left+round(wide*.017), max(0, top-round(high*.02))     # The lower part of the panel stays empty.
+        words = self.detector.gray(frame[y0:top+round(high*.55), x0:left+wide-round(wide*.01)])
+        return text_lines(self.reader().read_words(words, up=max(2, round(2*TALK_WIDE/wide))), x0, y0)
 
     def open_talk(self, person):
         """Walk up and right-click until the conversation shows."""
@@ -276,7 +298,7 @@ class MissionRunner(LootRunner):
         ends, before = self.clock()+OPTIONS_WAIT, None
         while True:
             lines = self.dialog_lines()
-            if lines is None or (lines == before and answer(lines, self.last_frame.shape[1])) or self.clock() >= ends:
+            if lines is None or (lines == before and answer(lines, self.talk_wide)) or self.clock() >= ends:
                 return lines
             before = lines
             self.wait(.2)
@@ -292,7 +314,7 @@ class MissionRunner(LootRunner):
                 return said
             words = " ".join(line["text"] for line in lines)
             said.append(words)
-            line = answer(lines, self.last_frame.shape[1])
+            line = answer(lines, self.talk_wide)
             if line is None:
                 raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
             self.click(line["point"])
