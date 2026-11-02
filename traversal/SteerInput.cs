@@ -20,12 +20,13 @@ internal static class StopRequest
 /// </summary>
 internal sealed class SteerInput : IDisposable
 {
-    private const ushort W = 0x11, S = 0x1f, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, SHIFT = Run, SPACE = Jump, 1 = Slot 1
+    private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, 1 = Slot 1
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
     public bool Walking { get; private set; }
     public bool Backing { get; private set; }
+    private int _strafe;
     public bool LeftHeld { get; private set; }
     private bool _sprint = true;
     /// <summary>Shift and W are both down.</summary>
@@ -55,6 +56,17 @@ internal sealed class SteerInput : IDisposable
         if (on) _reader.RequireForeground();
         Backing = on;
         Key(S, !on);
+    }
+
+    /// <summary>Strafe right (positive), left (negative) or not at all.</summary>
+    public void Strafe(int side)
+    {
+        side = Math.Sign(side);
+        if (side == _strafe) return;
+        if (side != 0) _reader.RequireForeground();
+        if (_strafe != 0) Key(_strafe > 0 ? D : A, true);
+        _strafe = side;
+        if (side != 0) Key(side > 0 ? D : A, false);
     }
 
     /// <summary>One tap of a slot's number key, 1 to 9.</summary>
@@ -148,6 +160,7 @@ internal sealed class SteerInput : IDisposable
         {
             if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); }
             if (Backing) { Backing = false; Key(S, true); }
+            Strafe(0);
         }
     }
 }

@@ -66,13 +66,29 @@ internal static class FollowTests
             Check(CameraAim.Turn(1f) == CameraAim.FarShare && CameraAim.Turn(-1f) == -CameraAim.FarShare, "far off, a big share");
             Check(CameraAim.Turn(0.005f, 6000) != 0 && CameraAim.Turn(0.005f, 1000) == 0, "the deadband narrows at long range");
             Check(CameraAim.Turn(0.002f, 6000) == 0, "but stays over a pixel, or the aim would shake");
+            var cactus = new SectorObjects.Prop("cactus3", new Vector3(500, 0, 0),
+                new[] { new Vector2(470, -30), new Vector2(530, -30), new Vector2(530, 30), new Vector2(470, 30) }, 0, 200);
+            var shots = new ShotLine(new[] { cactus });
+            var eye = new Vector3(0, 100, 0);
+            Check(shots.Blocker(eye, new Vector3(1000, 100, 0)) == "cactus3", "a cactus on the line blocks it");
+            Check(shots.Blocker(eye, new Vector3(1000, 100, 100)) == null, "one to the side does not");
+            Check(shots.Blocker(eye, new Vector3(1000, 900, 0)) == null, "nor does the line passing over it");
+            Check(shots.Blocker(eye, new Vector3(300, 100, 0)) == null, "nor one beyond the target");
+            Check(shots.Blocker(new Vector3(1000, 100, 0), new Vector3(2000, 100, 0)) == null, "nor one behind you");
+            float? side = shots.ClearSide(eye, new Vector3(1000, 100, 0));
+            Check(side is { } clear && shots.Blocker(eye + new Vector3(0, 0, -clear), new Vector3(1000, 100, 0)) == null, "a step to the right, looking along +x, is towards -z, and clears it");
+            Check(MathF.Abs(side ?? 999) <= 160, "the shortest step does: half way to the target it moves the line half as far");
+            var hedge = new ShotLine(Enumerable.Range(-9, 19).Select(i => cactus with { Position = new Vector3(100, 0, i * 50) }));
+            Check(hedge.ClearSide(eye, new Vector3(120, 100, 0)) == null, "a wall of them can't be stepped round");
+
             var sight = new SightWatch();
             Check(!sight.Seen(0), "nothing targeted yet");
             sight.Update(1, true); sight.Update(1.5, false);
             Check(sight.Seen(1.9) && !sight.Showing, "a gap in the target bar is not losing the target");
             Check(!sight.Seen(2.1), "a second without it is");
+            Check(sight.ClearToFire(1.3) && !sight.ClearToFire(1.5), "but firing stops much sooner");
 
-            var back = new BackOff(true);
+            var back = new BackOff(9000);
             back.Update(0, false, false, 1000, default);
             Check(back.Now == BackOff.Phase.Waiting, "no backing until the game targets the mob");
             back.Update(1, true, true, 1000, default);
@@ -84,20 +100,29 @@ internal static class FollowTests
             Check(back.Now == BackOff.Phase.Returning && back.Limit == 1130, "losing it is the target limit");
             back.Update(6.5, false, true, 1120, new Vector3(120, 0, 0));
             Check(back.Now == BackOff.Phase.Done, "forward until it is back");
-            var noticed = new BackOff(true);
+            var noticed = new BackOff(9000);
             noticed.Update(0, true, true, 1000, default);
             noticed.Update(1, true, true, 900, default);
             Check(noticed.Now == BackOff.Phase.Done && noticed.Limit == null, "a mob coming at you ends the backing");
-            var stuck = new BackOff(true);
+            var stuck = new BackOff(9000);
             stuck.Update(0, true, true, 1000, default);
             stuck.Update(4, true, true, 1000, default);
             Check(stuck.Now == BackOff.Phase.Done, "so does backing into something");
-            var late = new BackOff(true);
+            var late = new BackOff(9000);
             late.Update(0, true, true, 1000, default);
             late.Update(2, true, true, 1000, new Vector3(60, 0, 0));
             late.Update(181, true, true, 3000, new Vector3(9000, 0, 0));
             Check(late.Now == BackOff.Phase.Done, "and so does the time limit");
-            Check(new BackOff(false).Now == BackOff.Phase.Done, "only when asked for");
+            Check(new BackOff(0).Now == BackOff.Phase.Done, "only when asked for");
+            var safe = new BackOff(2500);
+            safe.Update(0, true, true, 2600, default);
+            Check(safe.Now == BackOff.Phase.Done, "a mob already far enough off needs none");
+            var near = new BackOff(2500);
+            near.Update(0, true, true, 2400, default);
+            near.Update(1, true, true, 2430, new Vector3(30, 0, 0));
+            Check(near.Now == BackOff.Phase.Backing, "a nearer one does");
+            near.Update(4, true, true, 2510, new Vector3(110, 0, 0));
+            Check(near.Now == BackOff.Phase.Done && near.Limit == null, "only as far as the safe distance");
 
             var cycle = new CastCycle();
             var order = new List<(int, bool)>();

@@ -53,7 +53,7 @@ class WalkTests(unittest.TestCase):
         self.assertNotIn("--back-off", sent[0])
         self.assertEqual(engine.limit, 4210)
         engine.fight(actor("Rat"), None, True)
-        self.assertIn("--back-off", sent[1])
+        self.assertEqual(sent[1][sent[1].index("--back-off")+1], "2500")
 
     def test_a_walk_to_a_body_says_so(self):
         engine = loot_runner.Engine(None, None)
@@ -201,7 +201,7 @@ class SequenceTests(unittest.TestCase):
 
     def test_walks_to_a_far_target_before_attacking(self):
         seen, _ = self.run_sequence([True], names=("Rat",), distance=9000.)
-        self.assertEqual(seen[:2], [("walk", "Rat", 5000), ("fight", "Rat")])
+        self.assertEqual(seen[:2], [("walk", "Rat", 4000), ("fight", "Rat")])
 
     def test_a_target_in_reach_needs_no_walk(self):
         seen, _ = self.run_sequence([True], names=("Rat",))
@@ -217,7 +217,7 @@ class SequenceTests(unittest.TestCase):
                        "Stopped: Your character could not be read (zoning?). Follow stopped.",
                        "Stopped: The test step went 0 units. Is a menu, chat or the free pointer active?", "Stopped: Neocron lost focus."):
             seen, events = self.run_sequence([], distance=9000., walks=[reason])
-            self.assertEqual(seen, [("walk", "Rat", 5000)])
+            self.assertEqual(seen, [("walk", "Rat", 4000)])
             self.assertIn(reason, events[-1][1])
             seen, events = self.run_sequence([reason])
             self.assertEqual(seen, [("fight", "Rat")])
@@ -277,26 +277,26 @@ class SequenceTests(unittest.TestCase):
         seen, _ = self.run_sequence([False, True, True])
         self.assertEqual(seen[:3], [("fight", "Rat"), ("walk", "Rat", 200), ("fight", "Rat")])
         seen, _ = self.run_sequence([False]*5 + [True], names=("Rat",), distance=9000.)
-        self.assertEqual([s for s in seen if s[0] == "walk"][:6], [("walk", "Rat", r) for r in (5000, 2500, 1250, 625, 312, 200)])
+        self.assertEqual([s for s in seen if s[0] == "walk"][:6], [("walk", "Rat", r) for r in (4000, 2000, 1000, 500, 250, 200)])
         self.assertEqual([s[1] for s in seen if s[0] == "fight"], ["Rat"]*6)
 
     def test_a_blocked_shot_goes_closer_without_giving_up_the_range(self):
         blocked = "No line of sight to Rat. Camera follow stopped."
         seen, _ = self.run_sequence([blocked, True, True], distance=9000.)
-        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 5000), ("walk", "Rat", 2500)])
-        self.assertIn(("walk", "Spider", 5000), seen)
+        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 4000), ("walk", "Rat", 2000)])
+        self.assertIn(("walk", "Spider", 4000), seen)
         self.assertEqual(self.engine.backs, [True, False, True])
 
-    def test_a_measured_target_limit_is_where_later_walks_stop(self):
+    def test_a_target_limit_only_ever_brings_the_range_in(self):
         real = Engine.fight
 
         def measured(engine, target, tick, back=False):
-            engine.limit = 4000
+            engine.limit = 3000
             return real(engine, target, tick, back)
         self.addCleanup(setattr, Engine, "fight", real)
         Engine.fight = measured
         seen, _ = self.run_sequence([True, True], distance=9000.)
-        self.assertIn(("walk", "Spider", 3900), seen)
+        self.assertIn(("walk", "Spider", 2900), seen)
 
     def test_a_weapon_shorter_than_the_target_limit_stops_the_backing(self):
         seen, _ = self.run_sequence([False, True, True])
@@ -304,8 +304,8 @@ class SequenceTests(unittest.TestCase):
 
     def test_the_range_that_worked_is_kept(self):
         seen, _ = self.run_sequence([False, True, True], distance=9000.)
-        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 5000), ("walk", "Rat", 2500)])
-        self.assertIn(("walk", "Spider", 2500), seen)
+        self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 4000), ("walk", "Rat", 2000)])
+        self.assertIn(("walk", "Spider", 2000), seen)
 
     def test_stops_on_low_health(self):
         profile = default_profile()

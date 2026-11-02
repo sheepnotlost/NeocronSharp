@@ -65,7 +65,7 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 /// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
-    bool MeasureOnly = false, bool Sight = false, bool BackOff = false);
+    bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null);
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -87,7 +87,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     private const float FacingToRun = 0.35f;
     private const int StuckAfterMs = 3000, BoxAimMs = 2000, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
-    private const double BlindSeconds = 4;
+    private const double BlindSeconds = 4, StepAsideSeconds = 6;
     private const float StuckBelow = 15;
 
     public string Run()
@@ -229,8 +229,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             int? health = watch.Health;
             long lastHurt = 0, lookAt = 0;
             var sight = new SightWatch();
-            var backOff = new BackOff(plan.BackOff);
-            double aimedAt = -1;
+            var backOff = new BackOff(plan.BackTo);
+            double aimedAt = -1, clearAt = -1, stepFrom = -1;
+            float stepSide = 0;
             while (true)
             {
                 var s = Guard();
@@ -245,6 +246,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (watch.Health < health) lastHurt = clock.ElapsedMilliseconds;
                 health = watch.Health;
                 bool onTarget = CameraAim.OnTarget(yawError, pitchError);
+                var shotFrom = s.Position + new Vector3(0, CameraAim.EyeHeight, 0);
+                var shotTo = watch.SeenAt + new Vector3(0, CameraAim.ShotHeight, 0);
+                string? blocker = plan.Shots?.Blocker(shotFrom, shotTo);
                 if (plan.Sight)
                 {
                     double now = clock.Elapsed.TotalSeconds;
@@ -255,13 +259,36 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     }
                     if (onTarget && aimedAt < 0) aimedAt = now;
                     var was = backOff.Now;
-                    backOff.Update(now, sight.Seen(now), sight.Showing, away, s.Position);
+                    // A cactus dropping the target bar is not the target limit.
+                    backOff.Update(now, sight.Seen(now) || blocker != null, sight.Showing, away, s.Position);
                     input.Back(backOff.Now == BackOff.Phase.Backing);
                     input.Walk(backOff.Now == BackOff.Phase.Returning);
                     if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
                         Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
-                    if (input.LeftHeld && !sight.Seen(now)) input.HoldLeft(false);   // Terrain in the way: the shots would only hit that.
-                    if (aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(aimedAt, sight.SeenAt) > BlindSeconds)
+                    if (input.LeftHeld && (!sight.ClearToFire(now) || blocker != null)) input.HoldLeft(false);   // Something in the way: the shots would only hit that.
+                    if (blocker == null) { input.Strafe(0); stepFrom = -1; }
+                    else
+                    {
+                        clearAt = now;
+                        if (backOff.Now is BackOff.Phase.Waiting or BackOff.Phase.Done)
+                        {
+                            if (stepFrom < 0)
+                            {
+                                stepFrom = now;
+                                stepSide = plan.Shots!.ClearSide(shotFrom, shotTo) ?? 0;
+                                Record("in-the-way", s, new { blocker, stepSide });
+                                Console.WriteLine($"{blocker} is in the way of {target.Name}: stepping aside.");
+                            }
+                            if (stepSide == 0 || now - stepFrom > StepAsideSeconds)
+                            {
+                                string blocked = $"No line of sight to {target.Name}: {blocker} is in the way. Camera follow stopped.";
+                                Record("blocked", s, new { away, blocker });
+                                return blocked;
+                            }
+                            input.Strafe((int)stepSide);
+                        }
+                    }
+                    if (aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(Math.Max(aimedAt, sight.SeenAt), clearAt) > BlindSeconds)
                     {
                         string blocked = $"No line of sight to {target.Name}. Camera follow stopped.";
                         Record("blocked", s, new { away });
@@ -274,7 +301,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     Record("gave-up", s, new { missed });
                     return missed;
                 }
-                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (sight.Seen(clock.Elapsed.TotalSeconds) && backOff.Now == BackOff.Phase.Done)))
+                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && sight.ClearToFire(clock.Elapsed.TotalSeconds) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
                     if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;

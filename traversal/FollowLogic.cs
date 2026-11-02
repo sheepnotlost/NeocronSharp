@@ -162,9 +162,48 @@ internal static class CameraAim
         Math.Clamp(MathF.Atan2(target.Y - (from.Y + EyeHeight), Math.Max(1, PointNavigation.Distance(from, target))), -MaxPitch, MaxPitch);
 }
 
+/// <summary>
+/// Is a prop from the zone's spawn file in the line of fire? A cactus doesn't always drop the game's target bar, and the
+/// shots then only hit it (screenshot, 1 Nov), so the line is checked against the map as well.
+/// </summary>
+internal sealed class ShotLine(IEnumerable<SectorObjects.Prop> props)
+{
+    private const float SideStep = 40, FarthestStep = 320;
+    private readonly (SectorObjects.Prop Prop, float Radius)[] _props =
+        props.Select(p => (p, p.Footprint.Select(c => Vector2.Distance(c, new Vector2(p.Position.X, p.Position.Z))).DefaultIfEmpty().Max())).ToArray();
+
+    /// <summary>The name of the first prop between these points, or null. Nothing behind or beyond them counts.</summary>
+    public string? Blocker(Vector3 from, Vector3 to)
+    {
+        var line = new Vector2(to.X - from.X, to.Z - from.Z);
+        float length = line.LengthSquared();
+        if (length < 1) return null;
+        foreach (var (prop, radius) in _props)
+        {
+            var offset = new Vector2(prop.Position.X - from.X, prop.Position.Z - from.Z);
+            float along = Vector2.Dot(offset, line) / length;
+            if (along <= 0 || along >= 1 || Vector2.Distance(offset, line * along) > radius) continue;
+            float height = from.Y + (to.Y - from.Y) * along;
+            if (height >= prop.Bottom && height <= prop.Top) return prop.Name;
+        }
+        return null;
+    }
+
+    /// <summary>The shortest step to the right (or left, negative) that clears the line, or null if nothing near does.</summary>
+    public float? ClearSide(Vector3 from, Vector3 to)
+    {
+        var right = Vector3.Normalize(new Vector3(to.Z - from.Z, 0, from.X - to.X));
+        for (float step = SideStep; step <= FarthestStep; step += SideStep)
+            foreach (float side in new[] { step, -step })
+                if (Blocker(from + right * side, to) == null) return side;
+        return null;
+    }
+}
+
 /// <summary>Has the game's target bar been up lately? It flickers as a shot throws the crosshair, so one gap proves nothing.</summary>
 internal sealed class SightWatch(double holdSeconds = 1)
 {
+    private const double FireSeconds = 0.4;
     public double SeenAt { get; private set; } = double.NegativeInfinity;
     public bool Showing { get; private set; }
 
@@ -175,13 +214,19 @@ internal sealed class SightWatch(double holdSeconds = 1)
     }
 
     public bool Seen(double now) => now - SeenAt <= holdSeconds;
+
+    /// <summary>Clear to fire: much stricter than <see cref="Seen"/>, as a shot with the bar down hits the scenery.</summary>
+    public bool ClearToFire(double now) => now - SeenAt <= FireSeconds;
 }
 
-/// <summary>Back away from a mob with the crosshair on it until the game stops targeting it, then forward until it targets it again.</summary>
-internal sealed class BackOff(bool wanted)
+/// <summary>
+/// Back away from a mob with the crosshair on it to a safe distance. Stops sooner where the game stops targeting it, then
+/// goes forward until it targets it again. Going all the way to the target limit was far too far: over 6,000, and slow (1 Nov).
+/// </summary>
+internal sealed class BackOff(float until)
 {
     public enum Phase { Waiting, Backing, Returning, Done }
-    /// <summary>S is slow, about 30 units/s, so 180 s is about 5,400 units: nothing is fired until this ends, for a safe distance first.</summary>
+    /// <summary>S is slow, about 30 units/s. Nothing is fired until this ends.</summary>
     public const double MostSeconds = 180, ReturnSeconds = 5, StuckSeconds = 3;
     /// <summary>A mob this much closer than when backing began has noticed you: shoot it.</summary>
     public const float MobCloser = 60, StuckBelow = 10;
@@ -189,7 +234,7 @@ internal sealed class BackOff(bool wanted)
     private float _startAway;
     private Vector3 _stuckFrom;
 
-    public Phase Now { get; private set; } = wanted ? Phase.Waiting : Phase.Done;
+    public Phase Now { get; private set; } = until > 0 ? Phase.Waiting : Phase.Done;
     public float? Limit { get; private set; }
 
     public void Update(double now, bool seen, bool showing, float away, Vector3 at)
@@ -197,10 +242,12 @@ internal sealed class BackOff(bool wanted)
         switch (Now)
         {
             case Phase.Waiting:
-                if (seen) { Now = Phase.Backing; _from = _stuckAt = now; _startAway = away; _stuckFrom = at; }
+                if (away >= until) Now = Phase.Done;
+                else if (seen) { Now = Phase.Backing; _from = _stuckAt = now; _startAway = away; _stuckFrom = at; }
                 break;
             case Phase.Backing:
-                if (!seen) { Limit = away; Now = Phase.Returning; _from = now; }
+                if (away >= until) Now = Phase.Done;
+                else if (!seen) { Limit = away; Now = Phase.Returning; _from = now; }
                 else if (now - _from > MostSeconds || away < _startAway - MobCloser) Now = Phase.Done;
                 else if (now - _stuckAt >= StuckSeconds)
                 {

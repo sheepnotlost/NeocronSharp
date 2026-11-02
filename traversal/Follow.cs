@@ -206,7 +206,16 @@ internal static class FollowCommand
         return 0;
     }
 
-    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--sight] [--back-off]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
+    /// <summary>What can stand in a shot's way in a wasteland cell, from its spawn file. Null elsewhere: the target bar alone decides.</summary>
+    private static ShotLine? Shots(PlayerReader reader)
+    {
+        string install = Path.GetDirectoryName(reader.Executable)!;
+        if (reader.ReadSectorId(reader.ReadSteady().World) is not { } sector || !TerrainCell.Exists(install, sector)) return null;
+        try { return new ShotLine(SectorObjects.ReadDat(install, Path.Combine(install, "terrain", $"pak_{TerrainCell.CodeOf(sector)}.dat")).Props); }
+        catch (Exception e) when (e is IOException or InvalidDataException) { return null; }
+    }
+
+    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--sight] [--back-off units]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {
         string? Option(string name)
@@ -214,8 +223,8 @@ internal static class FollowCommand
             int i = rest.IndexOf(name); if (i < 0 || i + 1 >= rest.Count) return null;
             string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
         }
-        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"),
-            sight = rest.Remove("--sight"), backOff = sight && rest.Remove("--back-off");
+        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), sight = rest.Remove("--sight");
+        float backTo = float.Parse(Option("--back-off") ?? "0", CultureInfo.InvariantCulture);
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
             ? (float.Parse(yaw, CultureInfo.InvariantCulture), float.Parse(pitch, CultureInfo.InvariantCulture)) : null;
@@ -226,7 +235,7 @@ internal static class FollowCommand
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackOff: backOff), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

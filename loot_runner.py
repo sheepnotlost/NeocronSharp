@@ -1,4 +1,4 @@
-"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, back away to the target limit,
+"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, back away if it is too close,
 kill it, run to its body, take the T, E, A and L parts, and only then pick the next.
 
 traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
@@ -15,7 +15,8 @@ from navray_runner import NavRayRunner
 from vision import NotFound
 from vision_runner import VisualRunner
 
-REACH = 5000                 # units: how close to go before attacking
+REACH = 4000                 # units: how close to go before attacking: kills started from 4,000 to 5,000 live (1 Nov)
+SAFE = 2500                  # units: a nearer mob is backed away from before the first shot, this far and no further
 REACH_MOST = 6000            # units: about where the game stops letting you target (seen live, 1 Nov)
 CLOSE = 200                  # units: the closest a target that takes no damage is walked to
 LOOT_WALK = 300              # units: a body further than this gets Follow's routes, not a straight run
@@ -111,8 +112,8 @@ class Engine:
         return text
 
     def fight(self, actor, tick, back=False):
-        """Only shoots while the game's target bar is up, and first backs away to where it drops, when asked."""
-        text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off"] if back else [])], tick)
+        """Only shoots with a clear line to it, and first backs away from it when asked."""
+        text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off", str(SAFE)] if back else [])], tick)
         found = re.search(r"^Target limit (\d+) units", text, re.M)
         if found:
             self.limit = int(found.group(1))
@@ -174,12 +175,12 @@ class LootRunner(VisualRunner):
         return last.startswith("Reached ")
 
     def fight(self, actor, back):
-        """How it ended. The first target limit measured is where later walks stop."""
+        """How it ended. A target limit met while backing away is as far as later walks need to stop."""
         self.emit("log", f"Attacking {actor['name']}.")
         last = self.ended(self.engine.fight(actor, self.watch_health, back))
         self.emit("log", last)
         if self.engine.limit:
-            self.reach = max(CLOSE, self.engine.limit-TARGET_MARGIN)
+            self.reach = min(self.reach, max(CLOSE, self.engine.limit-TARGET_MARGIN))
         return last
 
     def attack(self, actor):
