@@ -106,6 +106,18 @@ internal sealed class HoldDistance(float distance)
 }
 
 /// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
+/// <summary>When to act on someone: the proof, or the crosshair having been on them this long since the first look.</summary>
+internal sealed class SteadyAim(long ms)
+{
+    private long? since;
+
+    public bool Ready(long now, bool proof)
+    {
+        since ??= now;
+        return proof || now - since >= ms;
+    }
+}
+
 internal static class CameraAim
 {
     /// <summary>

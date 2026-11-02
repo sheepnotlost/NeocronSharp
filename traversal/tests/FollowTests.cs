@@ -168,6 +168,11 @@ internal static class FollowTests
             Check(TargetBar.Looks(Picture(x => x < 74 ? ((byte)10, (byte)10, (byte)10) : ((byte)72, (byte)210, (byte)134), 100, 10), 100, 10), "so is its green end once the red has drained");
             Check(!TargetBar.Looks(Picture(_ => (171, 171, 171), 100, 10), 100, 10), "plain sky is not");
 
+            var steady = new SteadyAim(1500);
+            Check(!steady.Ready(1000, false) && !steady.Ready(2000, false), "no bar yet: keep holding the crosshair there");
+            Check(steady.Ready(2500, false), "a crosshair held long enough will do without the bar");
+            Check(new SteadyAim(1500).Ready(1000, true), "the bar needs no waiting");
+
             Check(CameraAim.Pixels(0.0002f, -0.0014f) == -1 && CameraAim.Pixels(0.01f, 0.002f) == 5 && CameraAim.Pixels(0, 0.002f) == 0, "a turn is at least a pixel");
             Check(MathF.Abs(CameraAim.Facing(MathF.PI / 2).Z - 1) < 1e-5f && MathF.Abs(PointNavigation.SignedAngle(CameraAim.Facing(0), CameraAim.Facing(0.5f)) - 0.5f) < 1e-5f, "a heading as a flat direction");
         });

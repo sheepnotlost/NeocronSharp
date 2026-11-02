@@ -85,7 +85,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, LookEveryMs = 120;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, UseSteadyMs = 1500, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 4, StepAsideSeconds = 6;
     private const float StuckBelow = 15;
@@ -205,10 +205,13 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             return false;
         }
 
-        // Crosshair on a standing NPC, with the game's target bar up to prove it, then right-click to talk.
+        // Crosshair on a standing NPC, then right-click to talk: at once with the game's target bar up to prove it, or once it has
+        // held there. The bar's place follows the screen size and UI scale, and on another PC it was never seen (2 Nov).
         string UseNpc(float yawGain, float pitchGain)
         {
-            if (!AimAt(target.Position + new Vector3(0, CameraAim.BodyMiddle, 0), UseAimMs, yawGain, pitchGain, () => TargetBar.Showing(reader.Window)))
+            var steady = new SteadyAim(UseSteadyMs);
+            if (!AimAt(target.Position + new Vector3(0, CameraAim.BodyMiddle, 0), UseAimMs, yawGain, pitchGain,
+                    () => steady.Ready(clock.ElapsedMilliseconds, TargetBar.Showing(reader.Window))))
                 return $"Could not put the crosshair on {target.Name}.";
             Record("use", previous, new { target = target.Name });
             input.Use();
