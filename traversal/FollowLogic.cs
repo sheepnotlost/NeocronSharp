@@ -40,7 +40,7 @@ internal sealed class FollowBand
 /// </summary>
 internal sealed class SprintGuard
 {
-    public const float CrawlBelow = 100;
+    public const float CrawlBelow = 50;   // Out of stamina is about 35. A faction headquarters' full run is only 80 to 100 (2 Nov).
     public const double WindowSeconds = 1, RestSeconds = 15;
     private Vector3? _from;
     private double _at, _restUntil = double.MinValue;
@@ -105,7 +105,6 @@ internal sealed class HoldDistance(float distance)
         otherSector == sector && sector != null && PointNavigation.Distance(otherClient, target) <= SameSpot;
 }
 
-/// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
 /// <summary>When to act on someone: the proof, or the crosshair having been on them this long since the first look.</summary>
 internal sealed class SteadyAim(long ms)
 {
@@ -118,6 +117,42 @@ internal sealed class SteadyAim(long ms)
     }
 }
 
+/// <summary>The view onto a point in one go: the whole turn at once, then a look once it has landed (a turn shows late), rather than part of it every tick.</summary>
+internal sealed class SnapAim
+{
+    public const float Within = 0.012f, Still = 0.002f;
+    public const long LandMs = 250;
+    private const int SteadyReads = 2;
+    private float _yaw, _pitch, _sentYaw, _sentPitch;
+    private long _sentAt;
+    private bool _landing, _read;
+    private int _steady;
+    public bool Done { get; private set; }
+
+    /// <summary>The turn to send now, nothing while one lands.</summary>
+    public (float Yaw, float Pitch) Step(long now, float yawError, float pitchError)
+    {
+        bool still = _read && MathF.Abs(yawError - _yaw) < Still && MathF.Abs(pitchError - _pitch) < Still;
+        (_yaw, _pitch, _read) = (yawError, pitchError, true);
+        if (Done) return (0, 0);
+        if (_landing)
+        {
+            bool shown = MathF.Abs(yawError - _sentYaw) >= Still || MathF.Abs(pitchError - _sentPitch) >= Still;
+            if (!(shown && still) && now - _sentAt < LandMs) return (0, 0);
+            _landing = false;
+        }
+        if (MathF.Abs(yawError) < Within && MathF.Abs(pitchError) < Within)
+        {
+            Done = ++_steady >= SteadyReads;
+            return (0, 0);
+        }
+        _steady = 0;
+        (_landing, _sentAt, _sentYaw, _sentPitch) = (true, now, yawError, pitchError);
+        return (yawError, pitchError);
+    }
+}
+
+/// <summary>How the camera turns to keep facing a target, left and right and up and down.</summary>
 internal static class CameraAim
 {
     /// <summary>

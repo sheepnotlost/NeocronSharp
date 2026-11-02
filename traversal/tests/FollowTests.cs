@@ -168,6 +168,16 @@ internal static class FollowTests
             Check(TargetBar.Looks(Picture(x => x < 74 ? ((byte)10, (byte)10, (byte)10) : ((byte)72, (byte)210, (byte)134), 100, 10), 100, 10), "so is its green end once the red has drained");
             Check(!TargetBar.Looks(Picture(_ => (171, 171, 171), 100, 10), 100, 10), "plain sky is not");
 
+            var snap = new SnapAim();
+            Check(snap.Step(0, 2f, -.3f) == (2f, -.3f), "the whole turn at once");
+            Check(snap.Step(16, 2f, -.3f) == (0, 0) && snap.Step(32, 2f, -.3f) == (0, 0), "and nothing more while it has not shown: a turn shows late");
+            Check(snap.Step(48, .9f, -.1f) == (0, 0) && snap.Step(64, .05f, .02f) == (0, 0), "nor while it is still landing");
+            Check(snap.Step(80, .05f, .02f) == (.05f, .02f), "then what is left");
+            Check(snap.Step(350, .05f, .02f) == (.05f, .02f), "again if it never showed");
+            Check(snap.Step(366, .005f, .001f) == (0, 0) && snap.Step(382, .005f, .001f) == (0, 0) && !snap.Done, "landed there");
+            Check(snap.Step(398, .005f, .001f) == (0, 0) && snap.Done, "and it counts once two readings agree");
+
+
             var steady = new SteadyAim(1500);
             Check(!steady.Ready(1000, false) && !steady.Ready(2000, false), "no bar yet: keep holding the crosshair there");
             Check(steady.Ready(2500, false), "a crosshair held long enough will do without the bar");
@@ -235,6 +245,9 @@ internal static class FollowTests
             Check(guard.MayRun(1, At(300), true), "300 units/s is a run");
             Check(guard.MayRun(1.5, At(450), true), "still inside the window");
             Check(!guard.MayRun(2, At(335), true), "35 units/s means stamina is out");
+            var headquarters = new SprintGuard();
+            headquarters.MayRun(0, At(0), true);
+            Check(headquarters.MayRun(1, At(85), true), "a headquarters' full run is 85 units/s: no crawl");
             Check(!guard.MayRun(2.1, At(340), false), "rests");
             Check(!guard.MayRun(16.9, At(2000), false), "for the whole rest");
             Check(guard.MayRun(17.1, At(2100), false), "then may run again");

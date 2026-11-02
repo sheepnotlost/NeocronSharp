@@ -7,7 +7,11 @@ The R.N. window is 640x480 pixels, centred, whatever the client's size or UI sca
 A conversation sits where the UI scale puts it, so it is found by its colour. No Esc: Tab closes the menus.
 """
 import difflib
+import json
+import queue
 import re
+import subprocess
+import threading
 
 import numpy as np
 
@@ -16,6 +20,7 @@ from loot_runner import LootRunner
 from macro_core import Interrupted
 from vision import cv2
 
+tt = loot_runner.tt
 RN_WIDE, RN_HIGH = 640, 480
 MISSIONS_TAB = (400, 21)
 EASY = (481, 175)
@@ -31,6 +36,14 @@ TALK_WIDE = 1550             # pixels: a conversation on the 2560x1440 client at
 TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
 TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
 TALK_FULL = .6               # of the block's widest row: a row of the panel, not the gap under the name bar
+LETTER_RED = 100             # a letter's red channel: the panel's is under 60, a fading option's already over
+LINE_HIGH = .02              # of the panel: shorter than this is the pointer or its border, not a line of text
+OPTION_INDENT = .002         # of the panel's width: an option starts with a ">", 7 pixels right of the speech at 1550
+OPTION_FURTHEST = .02        # and further than this is the pointer on an empty line
+OPTION_CLICK = .025          # of the panel's width: how far along an option to click, short as "> (click)" is
+QUICK_AGAIN = .3             # seconds before an option that did nothing is clicked again
+QUICK_MOST = 10              # seconds a recruiter may take
+SERVE_DONE = "<<done>>"
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
 TALK_CLOSE = 90              # and from here if the first try opened nothing
@@ -39,6 +52,10 @@ SELECT_TRIES = 3
 SETTLE = .15                 # seconds between the pointer arriving and a click
 MOST_SCREENS = 8             # of one conversation
 OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
+OPEN_LOOKS = 40              # tenths of a second for the terminal's window to reach Missions
+MISSIONS_EVERY = 8           # looks between clicks on its tab
+OPEN_GIVE_UP = 15            # looks with no window before the right-click counts as missed
+LIST_WAIT = 1.5              # seconds for a new list page to show
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
@@ -57,6 +74,13 @@ def area(frame, x0, y0, x1, y1):
     return frame[top:bottom, left:right]
 
 
+def rn_open(frame):
+    """The R.N. window's sides, on any of its pages."""
+    left, top = place(frame, (0, 0))
+    sides = frame[top+120:top+420, [left, left+RN_WIDE-1]].astype(int)
+    return bool(((sides[..., 1] > 200) & (sides[..., 1]-sides[..., 0] > 60)).mean() > .5)
+
+
 def lit(frame, point):
     """A bright green button at this place?"""
     x, y = point
@@ -73,6 +97,12 @@ def rn_page(frame):
     return "factions" if lit(frame, DOWNLOAD_SHOWS) else None
 
 
+def panel_green(frame):
+    box = frame.astype(int)
+    red, green, blue = box[..., 0], box[..., 1], box[..., 2]
+    return (green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)
+
+
 def longest_run(flags):
     """Where the longest stretch of True starts and ends."""
     edges = np.diff(np.concatenate(([0], flags.astype(np.int8), [0]))).nonzero()[0].reshape(-1, 2)
@@ -83,10 +113,9 @@ def longest_run(flags):
 def dialog_box(frame):
     """The conversation's panel as (left, top, wide, high), or None. A big solid block of its green, which no other window is.
     Green scenery and the name bar above it can touch the block (live, 2 Nov), so the panel is its longest run of full rows."""
-    box = frame.astype(int)
-    red, green, blue = box[..., 0], box[..., 1], box[..., 2]
-    panel = ((green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)).astype(np.uint8)
-    size = frame.shape[1]//300 | 1      # closes over the words
+    small = cv2.resize(frame, None, fx=.5, fy=.5, interpolation=cv2.INTER_AREA)     # at full size this takes 150 ms. Averaged, for the panel's scan lines.
+    panel = panel_green(small).astype(np.uint8)
+    size = small.shape[1]//300 | 1      # closes over the words
     count, parts, stats, _ = cv2.connectedComponentsWithStats(cv2.morphologyEx(panel, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8)), connectivity=4)
     if count < 2:
         return None
@@ -98,11 +127,38 @@ def dialog_box(frame):
         return None
     left, right = int(columns[0]), int(columns[-1])+1
     size = block[top:bottom, left:right].sum()
-    return None if size < TALK_SMALLEST*frame.shape[0]*frame.shape[1] or size < TALK_SOLID*(bottom-top)*(right-left) else (left, top, right-left, bottom-top)
+    if size < TALK_SMALLEST*small.shape[0]*small.shape[1] or size < TALK_SOLID*(bottom-top)*(right-left):
+        return None
+    return left*2, top*2, (right-left)*2, (bottom-top)*2
 
 
 def dialog_open(frame):
     return dialog_box(frame) is not None
+
+
+def still_open(frame, box):
+    """Is the conversation that was at box still there? Its empty lower part, a look that costs next to nothing."""
+    left, top, wide, high = box
+    return bool(panel_green(frame[top+high*7//10:top+high*9//10, left+wide//4:left+wide*3//4].mean(axis=(0, 1))))
+
+
+def text_rows(frame, box):
+    """The panel's lines of text as (top, bottom, left), by their pixels: the OCR takes half a second a look."""
+    left, top, wide, high = box
+    edge = wide//200
+    x0, y0 = left+edge, top+edge
+    letters = frame[y0:top+round(high*.55), x0:left+wide-edge, 0] > LETTER_RED
+    rows = np.diff(np.concatenate(([0], (letters.sum(axis=1) >= 2).astype(np.int8), [0]))).nonzero()[0].reshape(-1, 2)
+    return [(y0+int(start), y0+int(end), x0+int(letters[start:end].any(axis=0).argmax())) for start, end in rows if end-start >= high*LINE_HIGH]
+
+
+def first_option(frame, box):
+    """Where to click the first option, or None while none shows. The first line that doesn't start level with the speech: options fade in together."""
+    rows = text_rows(frame, box)
+    for top, bottom, left in rows[1:]:
+        if box[2]*OPTION_INDENT < left-rows[0][2] < box[2]*OPTION_FURTHEST:
+            return left+round(box[2]*OPTION_CLICK), (top+bottom)//2
+    return None
 
 
 def row_y(row):
@@ -122,9 +178,17 @@ def title_width(frame, row):
     return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/RN_WIDE
 
 
+def wide_enough(width):
+    return RESEARCH_WIDE[0] <= width <= RESEARCH_WIDE[1]
+
+
 def is_job(words, width):
     """The two TL60 jobs part by width, and the Research jobs by their numbers. The OCR rarely gets a whole row right."""
-    return RESEARCH_WIDE[0] <= width <= RESEARCH_WIDE[1] and JOB_MARK.search(words) is not None
+    return wide_enough(width) and JOB_MARK.search(words) is not None
+
+
+def list_picture(frame):
+    return area(frame, TITLE[0], ROW_TOP-9, NUMBERS[1], row_y(ROWS)).copy()
 
 
 def row_words(reader, frame, row):
@@ -133,7 +197,8 @@ def row_words(reader, frame, row):
 
 
 def job_row(reader, frame):
-    return next((row for row in range(ROWS) if is_job(row_words(reader, frame, row), title_width(frame, row))), None)
+    """The first row of the right width that reads as a job. Width first: it costs nothing, and reading a row takes two OCRs."""
+    return next((row for row in range(ROWS) if wide_enough(title_width(frame, row)) and is_job(row_words(reader, frame, row), title_width(frame, row))), None)
 
 
 def letters(text):
@@ -173,8 +238,71 @@ def text_lines(words, left=0, top=0):
 
 
 class Engine(loot_runner.Engine):
+    """One traversal.exe for the whole loop: it keeps the sector's map, which each new one spent 2 s baking."""
+    def __init__(self, log, control):
+        super().__init__(log, control)
+        self.server = None
+        self.lines = queue.Queue()
+
+    def start(self):
+        self.lines = queue.Queue()
+        self.server = subprocess.Popen([str(tt.EXE), "serve"], cwd=tt.PROJECT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, encoding="utf-8", errors="replace", creationflags=tt.NO_WINDOW, bufsize=1)
+        threading.Thread(target=self.pump, args=(self.server, self.lines), daemon=True, name="jobs-engine").start()
+
+    @staticmethod
+    def pump(server, lines):
+        for line in server.stdout:
+            lines.put(line.strip())
+        lines.put(None)
+
+    def ask(self, args, tick=lambda: None):
+        """Run one command to its end and return the lines it printed. tick() runs while it does, and may raise."""
+        if self.server is None or self.server.poll() is not None:
+            self.start()
+        tt.clear_stop()
+        said = []
+        try:
+            self.server.stdin.write("\t".join(args)+"\n")
+            self.server.stdin.flush()
+            while True:
+                if self.control.stopped.is_set():
+                    raise Interrupted("Stopped.")
+                tick()
+                try:
+                    line = self.lines.get(timeout=.05)
+                except queue.Empty:
+                    continue
+                if line is None or line == SERVE_DONE:
+                    return said
+                if line:
+                    said.append(line)
+        except BaseException:
+            tt.stop_walk(self.server)
+            self.server = None
+            raise
+
+    def tool(self, args):
+        said = self.ask(args)
+        found = [line for line in said if line.startswith("{")]
+        if not found:
+            raise Interrupted(said[-1] if said else "The engine printed nothing.")
+        return json.loads(found[-1])
+
+    def live(self, args, tick):
+        return "\n".join(line for line in self.ask(args, tick) if not line.startswith("{"))
+
+    def close(self):
+        if self.server is not None:
+            try:
+                self.server.stdin.close()
+                self.server.wait(2)
+            except (OSError, subprocess.TimeoutExpired):
+                self.server.kill()
+            self.server = None
+
     def spot(self):
-        data = loot_runner.tt.run_tool(["spot"])
+        data = self.tool(["spot"])
         if not data.get("live"):
             raise Interrupted(f"Cannot read the game: {data.get('why')}")
         return data
@@ -182,8 +310,8 @@ class Engine(loot_runner.Engine):
     def use(self, actor, tick):
         return self.run([actor["id"], "--use"], tick)
 
-    def terminal(self, spot, tick):
-        args = ["usespot", f"{spot['x']},{spot['y']},{spot['z']}", f"{spot['yaw']},{spot['pitch']}", "--pulse", "24"]
+    def terminal(self, spot, tick, exact=False):
+        args = ["usespot", f"{spot['x']},{spot['y']},{spot['z']}", f"{spot['yaw']},{spot['pitch']}", "--pulse", "24", *(["--exact"] if exact else [])]
         if self.gains:
             args += ["--gains", self.gains]
         if self.calibration:
@@ -197,7 +325,6 @@ class MissionRunner(LootRunner):
         super().__init__(*args, **kwargs)
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
-        self.pictures = set()        # list pages saved so far, for tuning what reads them
         self.talk_wide = TALK_WIDE   # the open conversation's width
 
     def watch_health(self):
@@ -210,14 +337,17 @@ class MissionRunner(LootRunner):
         self.wait(SETTLE)
         self.click(at)
 
-    def save_page(self, number):
-        if number in self.pictures:
+    def hide_pointer(self):
+        """Tab, looking as often as the OCR allows instead of the fixed .6 s of set_ui."""
+        reader = self.reader()
+        if not self.ui_visible(reader):
             return
-        self.pictures.add(number)
-        written, data = cv2.imencode(".png", cv2.cvtColor(self.last_frame, cv2.COLOR_RGB2BGR))
-        if written:
-            self.diagnostic_dir.mkdir(parents=True, exist_ok=True)
-            data.tofile(self.diagnostic_dir/f"mission-list-{number}.png")
+        self.press("tab")
+        ends = self.clock()+2
+        while self.ui_visible(reader):
+            if self.clock() >= ends:
+                raise Interrupted("Could not hide the pointer for mouse-look.")
+            self.wait(.03)
 
     def people(self, word):
         found = [a for a in self.engine.nearby() if a["kind"] == "npc" and not a["dead"] and word.lower() in a["name"].lower()]
@@ -228,19 +358,25 @@ class MissionRunner(LootRunner):
         while self.clock() < ends:
             if rn_page(self.frame()) == wanted:
                 return True
-            self.wait(.2)
+            self.wait(.05)
         return False
 
     def open_missions(self):
-        """The terminal shows its splash first. Past that, the Missions tab holds wherever the last job left it."""
-        for attempt in range(12):
-            self.wait(.5)
-            kind = rn_page(self.frame())
+        """The page it reached, or None when the right-click missed the terminal. It shows its splash first. Past that, the
+        Missions tab holds wherever the last job left it."""
+        opened = False
+        for look in range(OPEN_LOOKS):
+            self.wait(.1)
+            frame = self.frame()
+            kind = rn_page(frame)
             if kind in ("factions", "list"):
                 return kind
-            if attempt == 2 and not self.ui_visible(self.reader()):
-                raise Interrupted("The terminal did not open: stand at it with the crosshair on it.")
-            if attempt % 3 == 2:
+            if not opened and rn_open(frame):
+                opened = True
+                self.tap(MISSIONS_TAB)
+            elif look >= OPEN_GIVE_UP and look % MISSIONS_EVERY == 0:
+                if not opened and not self.ui_visible(self.reader()):
+                    return None
                 self.tap(MISSIONS_TAB)
         raise Interrupted("Could not reach the Missions page of the terminal.")
 
@@ -248,30 +384,46 @@ class MissionRunner(LootRunner):
         """True when one was accepted."""
         for number in range(MOST_PAGES):
             frame = self.frame()
-            self.save_page(number)
             row = job_row(self.reader(), frame)
             if row is not None:
                 for attempt in range(SELECT_TRIES):
                     self.tap((ROW_CLICK_X, row_y(row)))
-                    self.wait(.5)
-                    if row_is_blue(self.frame(), row):
-                        self.tap(ACCEPT)
-                        return True
+                    for look in range(5):
+                        self.wait(.1)
+                        if row_is_blue(self.frame(), row):
+                            self.tap(ACCEPT)
+                            return True
                 raise Interrupted("The mission row did not select.")
             self.tap(NEXT)
-            self.wait(1.5)
+            self.next_page(list_picture(frame))
             if rn_page(self.frame()) != "list":
                 raise Interrupted("The mission list went away.")
         return False
 
+    def next_page(self, before):
+        """Wait until the list has changed and stopped changing, or LIST_WAIT."""
+        ends, last = self.clock()+LIST_WAIT, before
+        while self.clock() < ends:
+            self.wait(.05)
+            now = list_picture(self.frame())
+            if np.array_equal(now, last) and not np.array_equal(now, before):
+                return
+            last = now
+
     def take_job(self, spot):
         self.emit("status", "Going to the terminal.")
-        last = self.engine.terminal(spot, lambda: None)
-        if not last or not last.splitlines()[-1].startswith("Right-clicked"):
-            raise Interrupted(last.splitlines()[-1] if last else "The engine said nothing.")
-        if self.open_missions() == "factions":
+        for exact in (False, True):        # The quick way stops a few units off, which can leave the crosshair beside it.
+            last = self.engine.terminal(spot, lambda: None, exact)
+            if not last or not last.splitlines()[-1].startswith("Right-clicked"):
+                raise Interrupted(last.splitlines()[-1] if last else "The engine said nothing.")
+            page = self.open_missions()
+            if page is not None:
+                break
+        else:
+            raise Interrupted("The terminal did not open: stand at it with the crosshair on it.")
+        if page == "factions":
             self.tap(EASY)
-            self.wait(.5)
+            self.wait(.2)
             self.tap(DOWNLOAD)
             if not self.wait_for_page("list", 15):
                 raise Interrupted("The mission list did not download.")
@@ -300,8 +452,8 @@ class MissionRunner(LootRunner):
                 continue
             last = self.ended(self.engine.use(person, lambda: None))
             self.emit("log", last)
-            for attempt in range(8):
-                self.wait(.25)
+            for attempt in range(20):
+                self.wait(.1)
                 if dialog_open(self.frame()):
                     return
             person = dict(person, distance=reach+1)
@@ -316,7 +468,7 @@ class MissionRunner(LootRunner):
             if lines is None or (lines == before and answer(lines, self.talk_wide)) or self.clock() >= ends:
                 return lines
             before = lines
-            self.wait(.2)
+            self.wait(.05)
 
     def talk(self, person):
         """Everything they said. Clicks through to the end."""
@@ -333,12 +485,30 @@ class MissionRunner(LootRunner):
             if line is None:
                 raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
             self.click(line["point"])
-            for attempt in range(16):      # By its words: the pointer now sits on an option and lights it up.
-                self.wait(.25)
+            for attempt in range(40):      # By its words: the pointer now sits on an option and lights it up.
+                self.wait(.1)
                 now = self.dialog_lines()
                 if now is None or not now or now[0]["text"] != lines[0]["text"]:
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
+
+    def quick_talk(self, person):
+        """A recruiter sells nothing and what they say doesn't matter: click the first option as each screen shows it, unread."""
+        self.hide_pointer()
+        self.open_talk(person)
+        ends, clicked, at = self.clock()+QUICK_MOST, None, 0
+        box = dialog_box(self.frame())
+        while box is not None and self.clock() < ends:
+            frame = self.frame()
+            if not still_open(frame, box):
+                return
+            point = first_option(frame, box)
+            if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
+                self.click(point)
+                clicked, at = point, self.clock()
+            self.wait(.02)
+        if box is not None:
+            raise Interrupted(f"The conversation with {person['name']} did not end.")
 
     def run_job(self, spot):
         self.take_job(spot)
@@ -346,7 +516,7 @@ class MissionRunner(LootRunner):
         if not recruiters:
             raise Interrupted("No recruiter here.")
         self.emit("status", f"Talking to {recruiters[0]['name']}.")
-        self.talk(recruiters[0])
+        self.quick_talk(recruiters[0])
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
@@ -378,4 +548,5 @@ class MissionRunner(LootRunner):
                 self.emit("log", f"Last game frame saved locally: {diagnostic}")
             self.emit("done", f"{exc} {self.completed} jobs done.")
         finally:
+            self.engine.close()
             self.backend.release_all()

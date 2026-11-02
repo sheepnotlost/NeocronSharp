@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 
 import mission_runner
-from mission_runner import MissionRunner, answer, dialog_box, dialog_open, is_job, place, rn_page, text_lines
+from mission_runner import MissionRunner, answer, dialog_box, dialog_open, first_option, is_job, place, rn_open, rn_page, still_open, text_lines
 from macro_core import Control, Interrupted, default_profile
 
 BRIGHT, PANEL = (115, 255, 168), (41, 105, 62)
@@ -32,6 +32,17 @@ def line(text, left=SPEECH):
     return {"text": text, "left": left, "point": (10, 20)}
 
 
+def conversation(box):
+    frame = blank()
+    left, top, wide, high = box
+    frame[top:top+high, left:left+wide] = PANEL
+    return frame
+
+
+def words(frame, top, left, wide=400, high=23):
+    frame[top:top+high, left:left+wide:2] = (200, 230, 200)
+
+
 class ReadingTests(unittest.TestCase):
     def test_pages_by_their_buttons(self):
         self.assertIsNone(rn_page(blank()))
@@ -54,7 +65,7 @@ class ReadingTests(unittest.TestCase):
         frame = blank()
         self.assertIsNone(dialog_box(frame))
         frame[300:1100, 100:1300] = PANEL
-        frame[400:430, 200:900:4] = (230, 240, 230)     # words on it
+        frame[400:430, 200:900:8] = (230, 240, 230)     # words on it
         self.assertTrue(dialog_open(frame))
         self.assertEqual(dialog_box(frame), (100, 300, 1200, 800))
 
@@ -64,6 +75,44 @@ class ReadingTests(unittest.TestCase):
         frame[250:308, 200:1760] = PANEL                # the name bar over its gap
         frame[250:320, 0:300] = PANEL                   # a green sign behind, joining the two
         self.assertEqual(dialog_box(frame), (200, 320, 1560, 870))
+
+    def test_the_first_option_is_read_from_the_pixels(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        for row in (380, 406):
+            words(frame, row, 216)
+        self.assertIsNone(first_option(frame, box))     # Only the speech so far, wrapped onto two lines.
+        words(frame, 438, 223)
+        words(frame, 468, 223)
+        self.assertEqual(first_option(frame, box), (262, 449))
+
+    def test_a_speech_line_a_pixel_off_is_no_option(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 380, 216)
+        words(frame, 406, 217)
+        self.assertIsNone(first_option(frame, box))
+
+    def test_the_pointer_over_the_panel_is_no_option(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 380, 216)
+        frame[420:428, 500:504] = (255, 255, 255)
+        self.assertIsNone(first_option(frame, box))
+        frame[420:445, 262:270] = (255, 255, 255)       # as tall as a line, where the last click left it
+        self.assertIsNone(first_option(frame, box))
+
+    def test_a_closed_conversation_shows_at_once(self):
+        box = (200, 320, 1560, 870)
+        self.assertTrue(still_open(conversation(box), box))
+        self.assertFalse(still_open(blank(), box))
+
+    def test_the_terminal_window_shows_by_its_sides(self):
+        frame = blank()
+        self.assertFalse(rn_open(frame))
+        left, top = place(frame, (0, 0))
+        frame[top:top+480, [left, left+639]] = BRIGHT
+        self.assertTrue(rn_open(frame))
 
     def test_the_hud_is_no_conversation(self):
         frame = blank()
@@ -141,9 +190,12 @@ class FakeEngine:
         self.calls.append("spot")
         return {"x": 1, "y": 2, "z": 3, "yaw": .5, "pitch": .1}
 
-    def terminal(self, spot, tick):
-        self.calls.append("terminal")
+    def terminal(self, spot, tick, exact=False):
+        self.calls.append("exact" if exact else "terminal")
         return "Right-clicked the terminal."
+
+    def close(self):
+        self.calls.append("close")
 
     def walk(self, person, reach, tick):
         self.calls.append(("walk", person["name"]))
@@ -168,6 +220,9 @@ class Run(MissionRunner):
         if self.completed == self.jobs:
             raise Interrupted("Enough.")
         self.engine.terminal(spot, None)
+
+    def quick_talk(self, person):
+        return self.talk(person)
 
     def wait(self, seconds, safe_pause=False):
         pass
@@ -238,13 +293,13 @@ class LoopTests(unittest.TestCase):
         run = Run(engine, {})
         run.run()
         self.assertIn("start at the terminal", run.events[-1][1])
-        self.assertEqual(engine.calls, [])
+        self.assertEqual(engine.calls, ["close"])
 
     def test_walks_up_only_when_too_far_and_closer_if_nothing_opened(self):
         engine = FakeEngine([])
         run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=engine)
         run.wait = lambda seconds, safe_pause=False: None
-        opened = iter([False]*8+[True])
+        opened = iter([False]*20+[True])
         run.frame = lambda: None
         original, mission_runner.dialog_open = mission_runner.dialog_open, lambda frame: next(opened)
         try:
@@ -265,7 +320,6 @@ class SelectTests(unittest.TestCase):
         run = Run(FakeEngine([]), {})
         tapped = []
         run.tap = tapped.append
-        run.save_page = lambda number: None
         run.frame = blank
         run.detector = type("Detector", (), {"text_reader": lambda self: None})()
         with patch.object(mission_runner, "job_row", lambda reader, frame: 2), \
@@ -290,6 +344,173 @@ class SelectTests(unittest.TestCase):
         run.click = lambda point: steps.append("click")
         run.tap((100, 100))
         self.assertEqual(steps, ["move", "wait", "click"])
+
+
+class TerminalTests(unittest.TestCase):
+    def job(self, opens):
+        engine = FakeEngine([])
+        run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=engine)
+        run.open_missions = lambda: next(opens)
+        run.choose_job = lambda: True
+        run.wait_for_page = lambda page, seconds: True
+        run.hide_pointer = lambda: None
+        run.take_job({})
+        return engine.calls
+
+    def test_quick_arrival_is_enough_when_the_terminal_opens(self):
+        self.assertEqual(self.job(iter(["list"])), ["terminal"])
+
+    def test_a_missed_right_click_comes_back_exactly(self):
+        self.assertEqual(self.job(iter([None, "list"])), ["terminal", "exact"])
+
+    def test_missing_twice_stops(self):
+        with self.assertRaisesRegex(Interrupted, "did not open"):
+            self.job(iter([None, None]))
+
+    def test_the_tab_is_clicked_as_soon_as_the_window_shows(self):
+        run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=FakeEngine([]))
+        run.wait = lambda seconds, safe_pause=False: None
+        run.frame = blank
+        tapped = []
+        run.tap = tapped.append
+        looks = iter([None, None, None, "list"])
+        with patch.object(mission_runner, "rn_page", lambda frame: next(looks)), patch.object(mission_runner, "rn_open", lambda frame: True):
+            self.assertEqual(run.open_missions(), "list")
+        self.assertEqual(tapped, [mission_runner.MISSIONS_TAB])
+
+    def test_nothing_on_screen_means_the_right_click_missed(self):
+        run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=FakeEngine([]))
+        run.wait = lambda seconds, safe_pause=False: None
+        run.frame = blank
+        run.detector = type("Detector", (), {"text_reader": lambda self: None})()
+        run.ui_visible = lambda reader: False
+        self.assertIsNone(run.open_missions())
+
+
+class QuickTalkTests(unittest.TestCase):
+    BOX = (200, 320, 1560, 870)
+
+    def talk(self, screens):
+        """Each screen shows until its option is clicked. None is the conversation gone."""
+        run = Run(FakeEngine([]), {})
+        run.open_talk = lambda person: None
+        shown, clicks = list(screens), []
+        run.frame = lambda: shown[0]
+        now = iter(x*.01 for x in range(100000))
+        run.clock = lambda: next(now)
+
+        def click(point):
+            clicks.append(point)
+            shown.pop(0)
+        run.click = click
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+            run.quick_talk(actor("Recruiter - Near"))
+        return clicks
+
+    def screen(self, *lefts):
+        frame = conversation(self.BOX)
+        for i, left in enumerate(lefts):
+            words(frame, 380+26*i, left)
+        return frame
+
+    def test_each_screen_is_clicked_once_and_it_ends_with_the_conversation(self):
+        clicks = self.talk([self.screen(216, 223, 223), self.screen(216, 217, 223), blank()])
+        self.assertEqual(clicks, [(262, 417), (262, 443)])
+
+    def test_stops_when_it_never_ends(self):
+        run = Run(FakeEngine([]), {})
+        run.open_talk = lambda person: None
+        run.frame = lambda: self.screen(216)
+        now = iter(range(1000))
+        run.clock = lambda: next(now)
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX), self.assertRaisesRegex(Interrupted, "did not end"):
+            run.quick_talk(actor("Recruiter - Near"))
+
+
+class FakeServer:
+    def __init__(self, replies):
+        self.sent, self.replies = [], list(replies)
+        self.stdin = self
+        self.stdout = iter(())
+
+    def write(self, text):
+        self.sent.append(text)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+    def poll(self):
+        return None
+
+    def wait(self, seconds):
+        return 0
+
+
+class ServeTests(unittest.TestCase):
+    def engine(self, *replies):
+        engine = mission_runner.Engine(None, Control())
+        engine.server = FakeServer(replies)
+        for reply in replies:
+            engine.lines.put(reply)
+        return engine
+
+    def test_one_engine_answers_every_command(self):
+        engine = self.engine("Right-clicked Rat.", "", "{\"x\": 1}", mission_runner.SERVE_DONE)
+        with patch.object(mission_runner.tt, "clear_stop", lambda: None):
+            self.assertEqual(engine.live(["camera", "Rat", "--use"], lambda: None), "Right-clicked Rat.")
+        self.assertEqual(engine.server.sent, ["camera\tRat\t--use\n"])
+
+    def test_a_tool_reads_its_json(self):
+        engine = self.engine("{\"live\": true, \"x\": 1}", mission_runner.SERVE_DONE)
+        with patch.object(mission_runner.tt, "clear_stop", lambda: None):
+            self.assertEqual(engine.spot()["x"], 1)
+
+    def test_an_engine_that_died_ends_the_command(self):
+        engine = self.engine("Stopped: F8 pressed.", None)
+        with patch.object(mission_runner.tt, "clear_stop", lambda: None):
+            self.assertEqual(engine.live(["camera"], lambda: None), "Stopped: F8 pressed.")
+
+    def test_stop_ends_the_engine(self):
+        engine = self.engine()
+        server = engine.server
+        engine.control.stopped.set()
+        stopped = []
+        with patch.object(mission_runner.tt, "clear_stop", lambda: None), patch.object(mission_runner.tt, "stop_walk", stopped.append), \
+                self.assertRaisesRegex(Interrupted, "Stopped"):
+            engine.live(["camera"], lambda: None)
+        self.assertEqual(stopped, [server])
+        self.assertIsNone(engine.server)
+
+    def test_closing_ends_the_engine(self):
+        engine = self.engine()
+        server = engine.server
+        engine.close()
+        self.assertTrue(server.closed)
+        self.assertIsNone(engine.server)
+
+
+class HidePointerTests(unittest.TestCase):
+    def run_it(self, visible):
+        run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=FakeEngine([]))
+        run.detector = type("Detector", (), {"text_reader": lambda self: None})()
+        looks = iter(visible)
+        run.ui_visible = lambda reader: next(looks)
+        run.wait = lambda seconds, safe_pause=False: None
+        pressed = []
+        run.press = pressed.append
+        run.hide_pointer()
+        return pressed
+
+    def test_no_tab_with_the_menus_already_closed(self):
+        self.assertEqual(self.run_it([False]), [])
+
+    def test_one_tab_and_it_watches_them_close(self):
+        self.assertEqual(self.run_it([True, True, False]), ["tab"])
 
 
 class EngineTests(unittest.TestCase):

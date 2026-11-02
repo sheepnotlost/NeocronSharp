@@ -18,7 +18,9 @@ internal sealed class LiveSteer
     // its end, and only while stopped facing along the route: anywhere else it opened a loot
     // box and a CityCom terminal (which free the mouse pointer, after which W types into chat).
     private readonly bool _openDoor;
+    private readonly float _near;
     private const int MaxUses = 3;
+    private const float NearRunsTo = 40;
     private readonly PlayerReader _reader;
     private readonly NavWorld _nav;
     private readonly int _sector, _pulse;
@@ -58,9 +60,10 @@ internal sealed class LiveSteer
     /// <param name="zoneExit">The target is a zone exit: walk into it and treat the sector changing as success.</param>
     /// <param name="countdown">Give the player 5 s to focus the game first (only the first leg of a trip needs it).</param>
     /// <param name="openDoor">The exit is a door: right-click it open when it stops the walk (needs <paramref name="zoneExit"/>).</param>
+    /// <param name="near">Done on coming this close, moving, with no careful last steps. They take seconds. 0 means do them.</param>
     public LiveSteer(PlayerReader reader, NavWorld nav, int sector, Vector3 target, bool wide, string label, int pulse, string logPath, Hud hud,
-        bool run = false, bool zoneExit = false, bool countdown = true, Calibration? known = null, Vector3? pushTo = null, bool openDoor = false)
-    { _openDoor = openDoor && zoneExit; _pushTo = pushTo; _known = known; _zoneExit = zoneExit; _countdown = countdown; _run = run; _hud = hud; _reader = reader; _nav = nav; _sector = sector; _target = target; _wide = wide; _label = label; _pulse = pulse; _logPath = logPath; }
+        bool run = false, bool zoneExit = false, bool countdown = true, Calibration? known = null, Vector3? pushTo = null, bool openDoor = false, float near = 0)
+    { _near = near; _openDoor = openDoor && zoneExit; _pushTo = pushTo; _known = known; _zoneExit = zoneExit; _countdown = countdown; _run = run; _hud = hud; _reader = reader; _nav = nav; _sector = sector; _target = target; _wide = wide; _label = label; _pulse = pulse; _logPath = logPath; }
 
     /// <summary>Time to allow for the lift rides on a route (the route's length is measured on the flat).</summary>
     private float LiftSeconds(List<Vector3> route) =>
@@ -262,7 +265,13 @@ internal sealed class LiveSteer
                 // running speed never settles). Walk, don't run, over the last stretch.
                 // (On the floor of the end, not under it: lifts join floors stacked over each other.)
                 if (dist <= (_zoneExit ? 70 : Simulator.FinalRadius) && MathF.Abs(s.Position.Y - end.Y) < Simulator.SameFloor) { if (_zoneExit) PushThrough(); else FinalApproach(); return; }
-                input.Sprint(dist > 120);
+                if (_near > 0 && dist <= _near && MathF.Abs(s.Position.Y - end.Y) < Simulator.SameFloor)
+                {
+                    input.Walk(false);
+                    Record("complete", s, new { error = dist });
+                    return;
+                }
+                input.Sprint(dist > (_near > 0 ? NearRunsTo : 120));
                 float off = follower.Update(s.Position);
                 // A gravity lift on the route: at its start, ride it (a timed step), then plan on from the landing.
                 var lift = Lifts.Ahead(_nav, follower);

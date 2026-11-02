@@ -21,6 +21,7 @@ internal static class StopRequest
 internal sealed class SteerInput : IDisposable
 {
     private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, 1 = Slot 1
+    private const int BurstStep = 6;   // the size the gains are measured at
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
@@ -94,6 +95,23 @@ internal sealed class SteerInput : IDisposable
         var packet = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput {
             X = Math.Clamp(x, -Pulse, Pulse), Y = Math.Clamp(y, -Pulse, Pulse), Flags = 0x0001 } } };
         if (Native.SendInput(1, new[] { packet }, Marshal.SizeOf<Native.Input>()) != 1)
+            throw new InvalidOperationException("Windows rejected steering input.");
+    }
+
+    /// <summary>A whole turn in one call, as many small packets: Windows' acceleration sends a big one twice as far, and the game adds these up in a frame.</summary>
+    public void LookBurst(int x, int y)
+    {
+        if (x == 0 && y == 0) return;
+        _reader.RequireForeground();
+        int steps = Math.Max(1, (Math.Max(Math.Abs(x), Math.Abs(y)) + BurstStep - 1) / BurstStep), sentX = 0, sentY = 0;
+        var packets = new Native.Input[steps];
+        for (int i = 0; i < steps; i++)
+        {
+            int toX = x * (i + 1) / steps, toY = y * (i + 1) / steps;
+            packets[i] = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput { X = toX - sentX, Y = toY - sentY, Flags = 0x0001 } } };
+            sentX = toX; sentY = toY;
+        }
+        if (Native.SendInput((uint)steps, packets, Marshal.SizeOf<Native.Input>()) != steps)
             throw new InvalidOperationException("Windows rejected steering input.");
     }
 

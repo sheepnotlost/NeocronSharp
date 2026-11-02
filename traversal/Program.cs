@@ -43,6 +43,7 @@ try
         case "flee": return FollowCommand.Flee(rest, root, pulse);
         case "spot": return FollowCommand.Spot();
         case "usespot": return FollowCommand.UseSpot(rest, root, pulse);
+        case "serve": return FollowCommand.Serve(root);
         case "heal": return FollowCommand.Heal(rest, root);
         case "places":
         {

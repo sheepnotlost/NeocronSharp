@@ -60,8 +60,11 @@ class Engine:
         self.calibration = None
         self.limit = None
 
+    def tool(self, args):
+        return tt.run_tool(args)
+
     def nearby(self):
-        data = tt.run_tool(["nearby"])
+        data = self.tool(["nearby"])
         if not data.get("live"):
             raise Interrupted(f"Cannot read the game: {data.get('why')}")
         return [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),

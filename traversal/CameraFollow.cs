@@ -85,7 +85,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, UseSteadyMs = 1500, LookEveryMs = 120;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, UseSteadyMs = 500, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 4, StepAsideSeconds = 6;
     private const float StuckBelow = 15;
@@ -210,12 +210,21 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         string UseNpc(float yawGain, float pitchGain)
         {
             var steady = new SteadyAim(UseSteadyMs);
-            if (!AimAt(target.Position + new Vector3(0, CameraAim.BodyMiddle, 0), UseAimMs, yawGain, pitchGain,
-                    () => steady.Ready(clock.ElapsedMilliseconds, TargetBar.Showing(reader.Window))))
-                return $"Could not put the crosshair on {target.Name}.";
-            Record("use", previous, new { target = target.Name });
-            input.Use();
-            return $"Right-clicked {target.Name}.";
+            var snap = new SnapAim();
+            var body = target.Position + new Vector3(0, CameraAim.BodyMiddle, 0);
+            for (long until = clock.ElapsedMilliseconds + UseAimMs; clock.ElapsedMilliseconds < until; Wait(Tick))
+            {
+                var s = Guard();
+                var view = View(s);
+                float yawError = PointNavigation.Distance(s.Position, body) < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), body - s.Position);
+                var turn = snap.Step(clock.ElapsedMilliseconds, yawError, CameraAim.PitchTo(s.Position, body) - view.Pitch);
+                input.LookBurst((int)MathF.Round(turn.Yaw / yawGain), (int)MathF.Round(turn.Pitch / pitchGain));
+                if (!snap.Done || !steady.Ready(clock.ElapsedMilliseconds, TargetBar.Showing(reader.Window))) continue;
+                Record("use", previous, new { target = target.Name });
+                input.Use();
+                return $"Right-clicked {target.Name}.";
+            }
+            return $"Could not put the crosshair on {target.Name}.";
         }
 
         try

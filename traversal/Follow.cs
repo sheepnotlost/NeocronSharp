@@ -59,7 +59,7 @@ internal static class FollowCommand
             string install = Path.GetDirectoryName(reader.Executable)!;
             int? sector = snapshot.Sector?.WorldId;
             string? sectorName = null;
-            try { if (sector is { } id) sectorName = new EnvironmentCatalog(install).Areas.FirstOrDefault(a => a.WorldId == id)?.Name; }
+            try { if (sector is { } id) sectorName = Catalog(install).Areas.FirstOrDefault(a => a.WorldId == id)?.Name; }
             catch (Exception e) when (e is IOException or InvalidDataException) { }
             var rows = Followable(snapshot).Where(n => radius <= 0 || n.GroundDistance <= radius);
             result = new
@@ -120,7 +120,7 @@ internal static class FollowCommand
         string install = Path.GetDirectoryName(reader.Executable)!;
         var nav = Mapped(install, sector, root);
         Console.WriteLine($"{nav.World.Summary.Name} (world {sector}): navmesh baked in {nav.BakeTime.TotalSeconds:F1}s");
-        var catalog = new EnvironmentCatalog(install);
+        var catalog = Catalog(install);
         string Name(int s) => catalog.Areas.FirstOrDefault(a => a.WorldId == s)?.Name ?? $"sector {s}";
 
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
@@ -169,9 +169,58 @@ internal static class FollowCommand
     /// <summary>How many things one walk maps and goes round before giving up. The map holds buildings it doesn't know, like K 16's Warp Garage (2 Nov).</summary>
     private const int GoRoundTries = 5;
 
-    /// <summary>The sector's navmesh, with every spot found blocked cut out, so all walks go round them from now on.</summary>
-    private static NavWorld Mapped(string install, int sector, string root) =>
-        NavWorld.Bake(install, sector, obstacles: Travel.LoadObstacles(Path.Combine(root, "logs")).GetValueOrDefault(sector));
+    /// <summary>The sector's navmesh, with every spot found blocked cut out, so all walks go round them from now on. Kept between a serve's lines.</summary>
+    private static NavWorld Mapped(string install, int sector, string root)
+    {
+        var obstacles = Travel.LoadObstacles(Path.Combine(root, "logs")).GetValueOrDefault(sector);
+        var key = (sector, obstacles?.Count ?? 0);
+        return Baked.TryGetValue(key, out var nav) ? nav : Baked[key] = NavWorld.Bake(install, sector, obstacles: obstacles);
+    }
+
+    private static readonly Dictionary<(int Sector, int Obstacles), NavWorld> Baked = new();
+
+    private static EnvironmentCatalog Catalog(string install) => _catalog ??= new EnvironmentCatalog(install);
+    private static EnvironmentCatalog? _catalog;
+
+    /// <summary>Printed after each line of a serve.</summary>
+    public const string ServeDone = "<<done>>";
+
+    /// <summary>serve: reads tab-separated commands from stdin and runs them one after another, for a loop of many short runs: a new process for each took 2 s, nearly all of it baking the same map. Stop ends it.</summary>
+    public static int Serve(string root)
+    {
+        while (Console.ReadLine() is { } line)
+        {
+            var rest = line.Split('\t').ToList();
+            string command = rest[0];
+            rest.RemoveAt(0);
+            bool run = rest.Remove("--run");
+            int at = rest.IndexOf("--pulse"), pulse = 6;
+            if (at >= 0 && at + 1 < rest.Count) { pulse = int.Parse(rest[at + 1], CultureInfo.InvariantCulture); rest.RemoveRange(at, 2); }
+            try
+            {
+                switch (command)
+                {
+                    case "nearby": Nearby(rest); break;
+                    case "spot": Spot(); break;
+                    case "follow": Follow(rest, root, pulse, run); break;
+                    case "camera": Camera(rest, root, pulse); break;
+                    case "usespot": UseSpot(rest, root, pulse); break;
+                    default: throw new InvalidOperationException($"serve does not run {command}.");
+                }
+            }
+            catch (OperationCanceledException error)
+            {
+                Console.WriteLine($"Stopped: {error.Message}");
+                return 1;
+            }
+            catch (Exception error) when (error is InvalidOperationException or InvalidDataException or IOException)
+            {
+                Console.WriteLine($"Stopped: {error.Message}");
+            }
+            Console.WriteLine(ServeDone);
+        }
+        return 0;
+    }
 
     private static void MapBlock(string root, int sector, LiveSteer.BlockedAt blocked)
     {
@@ -303,7 +352,7 @@ internal static class FollowCommand
         return 0;
     }
 
-    /// <summary>usespot x,y,z yaw,pitch [--pulse N] [--calibration speed,gain] [--gains yaw,pitch]: live, walks back to a place from 'spot', looks the same way and right-clicks what is there: the mission terminal, which is no actor.</summary>
+    /// <summary>usespot x,y,z yaw,pitch [--exact] [--pulse N] [--calibration speed,gain] [--gains yaw,pitch]: live, walks back to a place from 'spot', looks the same way and right-clicks what is there: the mission terminal, which is no actor.</summary>
     public static int UseSpot(List<string> rest, string root, int pulse)
     {
         (float, float)? Pair(string name)
@@ -316,6 +365,7 @@ internal static class FollowCommand
         }
         var known = Pair("--calibration") is { } c ? new LiveSteer.Calibration(c.Item1, c.Item2) : FollowWalk.Typical;
         (float Yaw, float Pitch)? gains = Pair("--gains");
+        bool exact = rest.Remove("--exact");
         if (rest.Count < 2) throw new InvalidOperationException("Usage: usespot x,y,z yaw,pitch");
         float[] at = rest[0].Split(',').Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray(), look = rest[1].Split(',').Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray();
         var spot = new Vector3(at[0], at[1], at[2]);
@@ -326,12 +376,12 @@ internal static class FollowCommand
         string stamp = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}";
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        for (int tried = 0; PointNavigation.Distance(reader.ReadSteady().Position, spot) > SpotNear; tried++)
+        for (int tried = 0; PointNavigation.Distance(reader.ReadSteady().Position, spot) > (exact ? SpotExact : SpotQuick); tried++)
         {
             try
             {
                 new LiveSteer(reader, Mapped(install, sector, root), sector, spot, false, "terminal", pulse, Path.Combine(logs, $"spot-{stamp}-{tried}.jsonl"), hud,
-                    run: true, countdown: false, known: known).Run();
+                    run: true, countdown: false, known: known, near: exact ? 0 : SpotQuick).Run();
                 break;
             }
             catch (LiveSteer.BlockedAt blocked) when (tried < GoRoundTries) { MapBlock(root, sector, blocked); }
@@ -345,27 +395,27 @@ internal static class FollowCommand
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {gains!.Value.Yaw} {gains.Value.Pitch}"));
         }
         using var input = new SteerInput(reader, pulse);
-        int steady = 0;
+        var snap = new SnapAim();
         var clock = Stopwatch.StartNew();
-        while (steady < SpotSteady)
+        while (!snap.Done)
         {
             if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
             if (clock.ElapsedMilliseconds > SpotAimMs) throw new InvalidOperationException("Could not look back at the terminal.");   // A right-click lands on whatever is there.
             reader.RequireForeground();
             var view = reader.ReadCamera(reader.ReadSteady()) ?? throw new InvalidOperationException("The camera's angles could not be read on this game build.");
             float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), CameraAim.Facing(look[0])), pitchError = look[1] - view.Pitch;
-            steady = CameraAim.OnTarget(yawError, pitchError) ? steady + 1 : 0;
-            if (steady == 0) input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / gains!.Value.Yaw), (int)MathF.Round(CameraAim.Turn(pitchError) / gains.Value.Pitch));
-            Thread.Sleep(50);
+            var turn = snap.Step(clock.ElapsedMilliseconds, yawError, pitchError);
+            input.LookBurst((int)MathF.Round(turn.Yaw / gains!.Value.Yaw), (int)MathF.Round(turn.Pitch / gains.Value.Pitch));
+            Thread.Sleep(15);
         }
         input.Use();
         Console.WriteLine("Right-clicked the terminal.");
         return 0;
     }
 
-    /// <summary>How near the spot counts as back there, and how many readings in a row must agree the view is right: a turn shows late.</summary>
-    private const float SpotNear = 40;
-    private const int SpotSteady = 4, SpotAimMs = 6000;
+    /// <summary>How near the spot counts as back there: the quick way, and with --exact when the quick way missed the terminal.</summary>
+    private const float SpotQuick = 14, SpotExact = 8;
+    private const int SpotAimMs = 6000;
 
     /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--use] [--sight] [--back-off units]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead, and --use aims at a living NPC and right-clicks it to talk.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
@@ -400,7 +450,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
     private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
     private const int MaxStalls = 3, MaxOffRoutePer20s = 6;
-    private const float RouteRanOut = 20;
+    private const float RouteRanOut = 20, ArriveRunsTo = 30;
     /// <summary>Measured live on 29 Oct.</summary>
     public static readonly LiveSteer.Calibration Typical = new(190, 0.0024f);
 
@@ -624,7 +674,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 }
                 // Walking: the same pure pursuit and capped turning as LiveSteer.
                 bool rested = stamina.MayRun(now, s.Position, input.Sprinting);
-                input.Sprint(rested && gap - band.Distance > 120);
+                input.Sprint(rested && gap - band.Distance > (arrive ? ArriveRunsTo : 120));
                 turns.Observe(lastPixels, PointNavigation.SignedAngle(lastForward, s.Forward));
                 lastForward = s.Forward;
                 // Walk to a lift's start exactly: the look-ahead would cut past it into the beam.

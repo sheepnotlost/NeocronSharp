@@ -468,6 +468,8 @@ The step logs (`logs/steer-*.jsonl`, `follow-*.jsonl`) record `lift-*` and `use`
 
 `traversal follow <id> --heal` is the same job with real input, for a healer alone on its own machine or VM: Follow's route to the player, then in reach `CameraAim` by mouse and a 1.5 s left click every 30 s. It refuses anyone but the name in `fighter.txt`, written by the suite's tab. Nothing is written to the game.
 
-`traversal follow <npc id> --arrive --distance <units> [--calibration speed,gain]` is the hunt's walk: Follow's route to an NPC, ending once within that distance (`Reached ...`). The first run prints `calibration <speed> <gain>`, and passing it back skips the countdown and test step. NPCs only. With `--run`, any follow runs while far behind, and `SprintGuard` rests 15 s with W alone when a run falls under 100 units/s.
+`traversal follow <npc id> --arrive --distance <units> [--calibration speed,gain]` is the hunt's walk: Follow's route to an NPC, ending once within that distance (`Reached ...`). The first run prints `calibration <speed> <gain>`, and passing it back skips the countdown and test step. NPCs only. With `--run`, any follow runs while far behind, and `SprintGuard` rests 15 s with W alone when a run falls under 50 units/s. `--arrive` runs to within 30 units of the stop.
+
+`traversal serve` reads tab-separated commands from stdin (`nearby`, `spot`, `follow`, `camera`, `usespot`), printing `<<done>>` after each, and keeps the sector's map between them, as the job loop's short runs each lost 2 s baking it. Stop ends it. `usespot --exact` does the careful last steps; without it a run ends within 14 units.
 
 **Stopping:** the suite's Stop buttons leave `stop.request` in this folder, which every live command watches for along with the F8 key. They must not send F8: the game gets it too (Missions key) and leaves mouse-look.
