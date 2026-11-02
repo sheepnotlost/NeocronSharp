@@ -12,7 +12,7 @@ NeoSharp ([sheepnotlost/neosharp](https://github.com/sheepnotlost/neosharp), `Do
 
 ## Shared interface and controls
 
-- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal and Target Acquisition use their own buttons (traversal.exe; see Target Acquisition below; only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
+- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal, Target Acquisition and Research's TL 60 Job Loop sub-tab use their own buttons (traversal.exe; see Target Acquisition below; only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
 - Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
 
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
@@ -81,9 +81,9 @@ All aiming at a target is at `CameraAim.BodyMiddle`, 50 units above the position
 - Under 35% health (also read while looting and waiting) `retreat` closes any loot box and `flee` picks a spot. `Cover` tries 16 bearings at 600 to 2,400 units on the navmesh, ranks them by how many NPCs within 6,000 can see them, using the terrain heights and the cell's props, then by being 1,200 from them, then by the shortest run, and takes the first with a route of at most 3,500 units. `LiveSteer` runs there. It waits for 70% health, runs again if health falls 2% in cover, and ends the hunt after 3 tries, each with up to 180 s of waiting. Below the floor at the start a hunt does not begin.
 - Stops on Stop, F8, focus loss, a zone change, unreadable health at the start, no room in Inventory, a loot box that will not close, or 10 minutes with no ticked NPC to fight. Not yet run live.
 
-### TL60 jobs
+### TL 60 Job Loop
 
-- `mission_runner.py`, a `LootRunner` without the fighting. Button on the Target Acquisition tab; it shares the hunt's Stop and 5 s countdown. The start reads `spot` once; each job runs `usespot`, walks back there if needed, looks the same way and right-clicks (the terminal is no actor).
+- `mission_runner.py`, a `LootRunner` without the fighting. `jobs_tab.py` is the TL 60 Job Loop sub-tab of Research, with its own Start, Stop, 5 s countdown and log. It builds traversal.exe if missing, as a fresh download has none, and it, Traversal and Target Acquisition each refuse to start while another steers. The start reads `spot` once; each job runs `usespot`, walks back there if needed, looks the same way and right-clicks (the terminal is no actor).
 - The R.N. window opens centred, so its places are fixed shares of the client. Page by which bright buttons show: Download (factions), Next and Back (list), Back alone (accepted). Closed with Tab through `set_ui`, never Esc.
 - A list row is a TL60 Research Job by its title width (Research about 3.6% of the client, Construction 4.3%, so the two TL60 jobs part), then `36`, `6000` or `TL60` read in that row. The first run saves each list page as `diagnostics/mission-list-N.png`, for tuning: all reading so far is from a 1080p video of a 1440p client.
 - Conversations are read by Windows OCR. Each screen's options draw after its words, so it waits up to 5 s for them. Always the first option: a line that doesn't start level with the speech, whatever the OCR made of its words. The one exception is the shop greeting of a manager with nothing to pay, left with the wrong-person line. No options stops the run. Which manager pays changes from job to job, so it tries the nearer first and stops at the one who pays. Pay shows as `payment` or `credits` in a manager's words.

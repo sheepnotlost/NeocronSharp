@@ -121,7 +121,14 @@ class App:
         self.tabs.add(self.counter_tab, text="Tech Counter")
         for page, tab in self.sharp_tabs.items():
             self.tabs.add(tab, text=page)
-        scroll_host = ttk.Frame(self.research_tab)
+        self.research_pages = ttk.Notebook(self.research_tab)
+        self.research_pages.pack(fill="both", expand=True)
+        self.research_job = ttk.Frame(self.research_pages)
+        self.job_loop_tab = ttk.Frame(self.research_pages)
+        self.research_pages.add(self.research_job, text="Research")
+        self.research_pages.add(self.job_loop_tab, text="TL 60 Job Loop")
+        self.research_pages.bind("<<NotebookTabChanged>>", lambda event: self.sync_start_button())
+        scroll_host = ttk.Frame(self.research_job)
         scroll_host.pack(fill="both", expand=True)
         canvas = tk.Canvas(scroll_host, background="#f3f5f5", highlightthickness=0, height=420)
         scrollbar = ttk.Scrollbar(scroll_host, orient="vertical", command=canvas.yview)
@@ -330,8 +337,11 @@ class App:
         self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
         from target_tab import TargetTab
         self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
-                              other_live=lambda:self.traversal.process is not None,loot_runner=self.loot_runner,mission_runner=self.mission_runner)
-        self.traversal.other_live=self.target.steering
+                              other_live=lambda:self.traversal.process is not None or self.jobs.steering(),loot_runner=self.loot_runner)
+        self.traversal.other_live=lambda:self.target.steering() or self.jobs.steering()
+        from jobs_tab import JobsTab
+        self.jobs=JobsTab(self.job_loop_tab,self.root,other_live=lambda:self.traversal.process is not None or self.target.steering(),
+                          mission_runner=self.mission_runner)
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -795,8 +805,12 @@ class App:
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
         browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
+                 or self.job_loop_showing()
                  or self.selected_sharp_page() is not None or self.tabs.select() in (str(self.traversal_tab),str(self.target_tab)))
         self.start_button.configure(state="disabled" if browser else "normal")
+
+    def job_loop_showing(self):
+        return self.tabs.select()==str(self.research_tab) and self.research_pages.select()==str(self.job_loop_tab)
 
     def materials_for(self,key):
         """Saved or built-in labels, else the catalog's parts with guessed labels to correct."""
@@ -900,6 +914,8 @@ class App:
             raise ValueError("Traversal walks with its own buttons; Start is for the macro tabs.")
         if self.tabs.select()==str(self.target_tab):
             raise ValueError("Target Acquisition uses its own buttons; Start is for the macro tabs.")
+        if self.job_loop_showing():
+            raise ValueError("The TL 60 Job Loop uses its own buttons; Start is for the macro tabs.")
         if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
@@ -1165,6 +1181,7 @@ class App:
     def close(self):
         if hasattr(self,"traversal"):self.traversal.close()  # F8 any walk it started
         if hasattr(self,"target"):self.target.close()
+        if hasattr(self,"jobs"):self.jobs.close()
         self.cancel_work()
         if self.active():
             self.root.after(50, self.close)
