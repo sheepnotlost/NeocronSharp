@@ -10,6 +10,8 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [x] Hunt starts (2 Nov): "Focus Neocron before the countdown finishes" failed start after start, so the app now focuses it. "The character did not settle after releasing W" ended a hunt in its test step, so hunts have none.
+- [ ] Going round what the map doesn't know (2 Nov): Scooter stuck on K 16's Warp Garage at 4814, -7730, as its footprint isn't in the navmesh. Follows and runs to cover now map the spot and go round, one 80-unit square per hit. Not yet tried live: a big building may take several hits, each with a rebake.
 - [ ] Run to cover at 35% health (1 Nov), replacing standing still: a spot out of every NPC's sight from the terrain heights and props, then back to hunting at 70%. Not yet tried live. Only terrain and props hide a spot, not buildings, and friendly NPCs count as mobs. A long run empties stamina, as `LiveSteer` has no `SprintGuard`.
 - [ ] Engagement distance (1 Nov): backing to the target limit went past 6,000 units, which the user called too far. Attack from now starts at 4,000, where kills began live (3,956 to 4,982), and only a mob nearer than 2,500 is backed away from, to 2,500. Not yet tried live.
 - [ ] Cacti in the line of fire (1 Nov): the target bar stopped shots into hills live, but cacti still took shots. K 16's spawn file lists 381 of them with size and height, so `ShotLine` holds fire and strafes clear. Not yet tried live: strafe direction, and whether the props' sizes match what stops a shot.

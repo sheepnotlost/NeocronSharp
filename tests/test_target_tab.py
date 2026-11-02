@@ -222,8 +222,9 @@ class TargetTabTests(unittest.TestCase):
         self.tab.loot_runner = broken
         self.tab.tick_enemy("Copbot")
         self.tab.looting = target_tab.Control()
-        with patch.object(self.tab, "refresh"):
+        with patch.object(self.tab, "refresh"), patch.object(target_tab.clients, "focus") as focus:
             self.tab.begin_hunt(["Copbot"], 200)
+        focus.assert_called_once_with()
         self.assertIsNone(self.tab.looting)
         self.assertIn("Hunt could not start: no module", self.tab.log.get("1.0", "end"))
         self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")

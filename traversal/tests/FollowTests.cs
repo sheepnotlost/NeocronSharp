@@ -93,6 +93,13 @@ internal static class FollowTests
             Check(cover.Spots(new Vector3(16300, 0, 0), new[] { new Vector3(15000, 0, 0) }, p => p).All(p => MathF.Abs(p.X) < TerrainCell.Half), "never over the edge into another zone");
             Check(!cover.Spots(default, new[] { new Vector3(100, 0, 0) }, _ => null).Any(), "only on ground it can stand on");
 
+            string saved = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            Directory.CreateDirectory(saved);
+            Travel.SaveObstacle(saved, 2216, new Vector3(4852, 1470, -7700));
+            Travel.SaveObstacle(saved, 2216, new Vector3(4900, 1470, -7700));
+            Check(Travel.LoadObstacles(saved)[2216].Count == 2, "a blocked spot is remembered for every later walk");
+            Directory.Delete(saved, true);
+
             var sight = new SightWatch();
             Check(!sight.Seen(0), "nothing targeted yet");
             sight.Update(1, true); sight.Update(1.5, false);

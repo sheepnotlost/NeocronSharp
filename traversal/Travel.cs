@@ -93,16 +93,20 @@ internal sealed partial class Travel(string install, Func<int, NavWorld> bake, H
         return _liveArrows[(sector, rotation)] = list;
     }
 
-    private string ObstaclesFile => Path.Combine(logDirectory, "traversal-obstacles.txt");
-
     private void AddObstacle(int sector, System.Numerics.Vector3 spot)
     {
         if (!_obstacles.TryGetValue(sector, out var spots)) _obstacles[sector] = spots = new();
         spots.Add(spot);
-        try { File.AppendAllText(ObstaclesFile, FormattableString.Invariant($"{sector}\t{spot.X:F0}\t{spot.Y:F0}\t{spot.Z:F0}\n")); } catch (IOException) { }
+        SaveObstacle(logDirectory, sector, spot);
     }
 
-    private static Dictionary<int, List<System.Numerics.Vector3>> LoadObstacles(string directory)
+    /// <summary>Remember a spot the game blocks and the navmesh does not know about.</summary>
+    internal static void SaveObstacle(string directory, int sector, System.Numerics.Vector3 spot)
+    {
+        try { File.AppendAllText(Path.Combine(directory, "traversal-obstacles.txt"), FormattableString.Invariant($"{sector}\t{spot.X:F0}\t{spot.Y:F0}\t{spot.Z:F0}\n")); } catch (IOException) { }
+    }
+
+    internal static Dictionary<int, List<System.Numerics.Vector3>> LoadObstacles(string directory)
     {
         var map = new Dictionary<int, List<System.Numerics.Vector3>>();
         string file = Path.Combine(directory, "traversal-obstacles.txt");

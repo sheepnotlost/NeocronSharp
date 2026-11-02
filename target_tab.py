@@ -440,6 +440,7 @@ class TargetTab:
     def begin_hunt(self, names, reach):
         self.loot_start = None
         try:
+            clients.focus()         # no need to have clicked into the game in time
             runner = self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
             threading.Thread(target=runner.run, daemon=True, name="hunt").start()
         except Exception as exc:

@@ -118,7 +118,7 @@ internal static class FollowCommand
         Console.WriteLine($"Following {target.Name} ({Kind(target)}) at {band.Distance:F0} units{(band.Distance != distance ? $" (asked {distance:F0}; allowed {FollowBand.MinDistance:F0}-{FollowBand.MaxDistance:F0})" : "")}.");
 
         string install = Path.GetDirectoryName(reader.Executable)!;
-        var nav = NavWorld.Bake(install, sector);
+        var nav = Mapped(install, sector, root);
         Console.WriteLine($"{nav.World.Summary.Name} (world {sector}): navmesh baked in {nav.BakeTime.TotalSeconds:F1}s");
         var catalog = new EnvironmentCatalog(install);
         string Name(int s) => catalog.Areas.FirstOrDefault(a => a.WorldId == s)?.Name ?? $"sector {s}";
@@ -127,8 +127,9 @@ internal static class FollowCommand
         string stamp = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}";
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        // A healer does without the test step: in a VM slow frames failed it three runs in three (1 Nov). TurnController learns the gain as it walks.
-        var calibration = known ?? (heal ? FollowWalk.Typical : null);
+        // A healer does without the test step: in a VM slow frames failed it three runs in three (1 Nov). So does a hunt, where "did not
+        // settle after releasing W" ended it (2 Nov). TurnController learns the gain as it walks.
+        var calibration = known ?? (heal || arrive ? FollowWalk.Typical : null);
         if (calibration == null)
         {
             // LiveSteer's own countdown and calibration (test step + turn probe), then nothing else.
@@ -149,10 +150,34 @@ internal static class FollowCommand
                 && int.TryParse(f.Properties.GetValueOrDefault("NextLevelStartIndex"), out int start) && start > 0
                 && int.TryParse(f.Properties.GetValueOrDefault("NextLevel"), out int to) && to > 0 && to != sector)
             .Select(f => (f.Position, int.Parse(f.Properties["NextLevel"]))).ToList();
-        string why = new FollowWalk(reader, nav, sector, target, band, calibration, pulse, run, hud,
-            Path.Combine(logs, $"follow-{stamp}.jsonl"), exits, Name, aim, arrive).Run();
-        Console.WriteLine(why);
-        return 0;
+        for (int tried = 0; ; tried++)
+        {
+            try
+            {
+                Console.WriteLine(new FollowWalk(reader, nav, sector, target, band, calibration, pulse, run, hud,
+                    Path.Combine(logs, $"follow-{stamp}-{tried}.jsonl"), exits, Name, aim, arrive).Run());
+                return 0;
+            }
+            catch (LiveSteer.BlockedAt blocked) when (tried < GoRoundTries)
+            {
+                MapBlock(root, sector, blocked);
+                nav = Mapped(install, sector, root);
+            }
+        }
+    }
+
+    /// <summary>How many things one walk maps and goes round before giving up. The map holds buildings it doesn't know, like K 16's Warp Garage (2 Nov).</summary>
+    private const int GoRoundTries = 5;
+
+    /// <summary>The sector's navmesh, with every spot found blocked cut out, so all walks go round them from now on.</summary>
+    private static NavWorld Mapped(string install, int sector, string root) =>
+        NavWorld.Bake(install, sector, obstacles: Travel.LoadObstacles(Path.Combine(root, "logs")).GetValueOrDefault(sector));
+
+    private static void MapBlock(string root, int sector, LiveSteer.BlockedAt blocked)
+    {
+        var spot = blocked.Position + Vector3.Normalize(new Vector3(blocked.Forward.X, 0, blocked.Forward.Z)) * 48;
+        Travel.SaveObstacle(Path.Combine(root, "logs"), sector, spot);
+        Console.WriteLine($"Something is in the way at {spot.X:F0},{spot.Z:F0}; mapping it and going round.");
     }
 
     /// <summary>The user's fighter, named on the suite's tab, in this folder.</summary>
@@ -217,29 +242,37 @@ internal static class FollowCommand
             known = new(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
         }
         using var reader = new PlayerReader(ClientExecutable());
-        var me = reader.ReadSteady();
-        int sector = reader.ReadSectorId(me.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
+        int sector = reader.ReadSectorId(reader.ReadSteady().World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
         string install = Path.GetDirectoryName(reader.Executable)!;
-        var nav = NavWorld.Bake(install, sector);
         var mobs = Followable(ReadSnapshot(reader)).Where(n => n.Entity.Identity.Kind == EntityKind.Npc && !Dead(n.Entity)).Select(n => n.Entity.Position).ToList();
         var heights = TerrainCell.Exists(install, sector) ? TerrainCell.ReadHeights(install, sector) : null;
         var cover = new Cover(heights, Shots(reader) ?? new ShotLine(Array.Empty<SectorObjects.Prop>()));
-        Vector3? Ground(Vector3 p) => nav.Snap(heights == null ? p : p with { Y = TerrainCell.Sample(heights, p.X, p.Z) }, out _, out var on, true) ? on : null;
-        foreach (var spot in cover.Spots(me.Position, mobs, Ground))
+        string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+        using var hud = new Hud();
+        Travel.FocusGame(reader.Window);
+        for (int tried = 0; ; tried++)
         {
-            var route = nav.Route(me.Position, spot, out bool complete);
-            if (route.Count < 2 || !complete || new RouteFollower(route).Total > Cover.MostRun) continue;
-            int seen = mobs.Count(m => PointNavigation.Distance(m, spot) <= Cover.LooksThisFar && !cover.Hidden(m, spot));
+            var nav = Mapped(install, sector, root);
+            var here = reader.ReadSteady().Position;
+            Vector3? Ground(Vector3 p) => nav.Snap(heights == null ? p : p with { Y = TerrainCell.Sample(heights, p.X, p.Z) }, out _, out var on, true) ? on : null;
+            bool Runnable(Vector3 spot)
+            {
+                var route = nav.Route(here, spot, out bool complete);
+                return route.Count >= 2 && complete && new RouteFollower(route).Total <= Cover.MostRun;
+            }
+            var spots = cover.Spots(here, mobs, Ground).Where(Runnable).Take(1).ToList();
+            if (spots.Count == 0) throw new InvalidOperationException("No way to run to.");
+            int seen = mobs.Count(m => PointNavigation.Distance(m, spots[0]) <= Cover.LooksThisFar && !cover.Hidden(m, spots[0]));
             Console.WriteLine(seen == 0 ? "Running to cover." : $"Nowhere fully hidden: running to where {seen} can see.");
-            string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
-            using var hud = new Hud();
-            Travel.FocusGame(reader.Window);
-            new LiveSteer(reader, nav, sector, spot, false, "cover", pulse, Path.Combine(logs, $"flee-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl"), hud,
-                run: true, countdown: false, known: known).Run();
-            Console.WriteLine("Reached cover.");
-            return 0;
+            try
+            {
+                new LiveSteer(reader, nav, sector, spots[0], false, "cover", pulse, Path.Combine(logs, $"flee-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{tried}.jsonl"), hud,
+                    run: true, countdown: false, known: known).Run();
+                Console.WriteLine("Reached cover.");
+                return 0;
+            }
+            catch (LiveSteer.BlockedAt blocked) when (tried < GoRoundTries) { MapBlock(root, sector, blocked); }
         }
-        throw new InvalidOperationException("No way to run to.");
     }
 
     /// <summary>What can stand in a shot's way in a wasteland cell, from its spawn file. Null elsewhere: the target bar alone decides.</summary>
@@ -551,7 +584,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 else if (now - stallMark > StallSeconds)
                 {
                     if (++stalls >= MaxStalls)
-                        throw new InvalidOperationException($"Blocked {gap:F0} units from {target.Name}: the navmesh says walkable, the game disagrees (door, prop or step?). Follow stopped.");
+                        throw new LiveSteer.BlockedAt($"Blocked {gap:F0} units from {target.Name}: the navmesh says walkable, the game disagrees (door, prop or step?). Follow stopped.", s.Position, s.Forward);
                     Record("stalled", s, new { stalls });
                     input.Walk(false);
                     plan = MakePlan(s.Position);
