@@ -27,9 +27,10 @@ ROWS, ROW_TOP, ROW_STEP = 6, 173, 15
 TITLE, NUMBERS = (45, 340), (43, 507)
 ROW_CLICK_X, ROW_BLUE_X = 173, 253
 RESEARCH_WIDE = (.132, .156)     # of the window: TL60 Research Job .144, TL60 Construction Job .170
-TALK_WIDE = 1547             # pixels: a conversation on the 2560x1440 client at UI scale 1.7
+TALK_WIDE = 1550             # pixels: a conversation on the 2560x1440 client at UI scale 1.7
 TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
 TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
+TALK_FULL = .6               # of the block's widest row: a row of the panel, not the gap under the name bar
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
 TALK_CLOSE = 90              # and from here if the first try opened nothing
@@ -72,17 +73,32 @@ def rn_page(frame):
     return "factions" if lit(frame, DOWNLOAD_SHOWS) else None
 
 
+def longest_run(flags):
+    """Where the longest stretch of True starts and ends."""
+    edges = np.diff(np.concatenate(([0], flags.astype(np.int8), [0]))).nonzero()[0].reshape(-1, 2)
+    start, end = edges[(edges[:, 1]-edges[:, 0]).argmax()]
+    return int(start), int(end)
+
+
 def dialog_box(frame):
-    """The conversation's panel as (left, top, wide, high), or None. A big solid block of its green, which no other window is."""
+    """The conversation's panel as (left, top, wide, high), or None. A big solid block of its green, which no other window is.
+    Green scenery and the name bar above it can touch the block (live, 2 Nov), so the panel is its longest run of full rows."""
     box = frame.astype(int)
     red, green, blue = box[..., 0], box[..., 1], box[..., 2]
     panel = ((green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)).astype(np.uint8)
     size = frame.shape[1]//300 | 1      # closes over the words
-    count, _, stats, _ = cv2.connectedComponentsWithStats(cv2.morphologyEx(panel, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8)), connectivity=4)
+    count, parts, stats, _ = cv2.connectedComponentsWithStats(cv2.morphologyEx(panel, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8)), connectivity=4)
     if count < 2:
         return None
-    left, top, wide, high, filled = (int(v) for v in stats[1+stats[1:, cv2.CC_STAT_AREA].argmax()])
-    return None if filled < TALK_SMALLEST*frame.shape[0]*frame.shape[1] or filled < TALK_SOLID*wide*high else (left, top, wide, high)
+    block = parts == 1+stats[1:, cv2.CC_STAT_AREA].argmax()
+    filled = block.sum(axis=1)
+    top, bottom = longest_run(filled > filled.max()*TALK_FULL)
+    columns = (block[top:bottom].sum(axis=0) > (bottom-top)*TALK_FULL).nonzero()[0]
+    if columns.size == 0:
+        return None
+    left, right = int(columns[0]), int(columns[-1])+1
+    size = block[top:bottom, left:right].sum()
+    return None if size < TALK_SMALLEST*frame.shape[0]*frame.shape[1] or size < TALK_SOLID*(bottom-top)*(right-left) else (left, top, right-left, bottom-top)
 
 
 def dialog_open(frame):
@@ -274,9 +290,8 @@ class MissionRunner(LootRunner):
             return None
         left, top, wide, high = box
         self.talk_wide = wide
-        x0, y0 = left+round(wide*.017), max(0, top-round(high*.02))     # The lower part of the panel stays empty.
-        words = self.detector.gray(frame[y0:top+round(high*.55), x0:left+wide-round(wide*.01)])
-        return text_lines(self.reader().read_words(words, up=max(2, round(2*TALK_WIDE/wide))), x0, y0)
+        words = self.detector.gray(frame[top:top+round(high*.55), left:left+wide])    # The lower part of the panel stays empty.
+        return text_lines(self.reader().read_words(words, up=max(2, round(2*TALK_WIDE/wide))), left, top)
 
     def open_talk(self, person):
         """Walk up and right-click until the conversation shows."""

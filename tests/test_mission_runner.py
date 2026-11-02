@@ -54,9 +54,16 @@ class ReadingTests(unittest.TestCase):
         frame = blank()
         self.assertIsNone(dialog_box(frame))
         frame[300:1100, 100:1300] = PANEL
-        frame[400:430, 200:900] = (230, 240, 230)       # words on it
+        frame[400:430, 200:900:4] = (230, 240, 230)     # words on it
         self.assertTrue(dialog_open(frame))
         self.assertEqual(dialog_box(frame), (100, 300, 1200, 800))
+
+    def test_the_name_bar_and_scenery_touching_it_are_not_the_conversation(self):
+        frame = blank()
+        frame[320:1190, 200:1760] = PANEL
+        frame[250:308, 200:1760] = PANEL                # the name bar over its gap
+        frame[250:320, 0:300] = PANEL                   # a green sign behind, joining the two
+        self.assertEqual(dialog_box(frame), (200, 320, 1560, 870))
 
     def test_the_hud_is_no_conversation(self):
         frame = blank()
