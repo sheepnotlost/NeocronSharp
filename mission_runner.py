@@ -1,10 +1,9 @@
 """TL60 Research Jobs in a faction headquarters, one after another until Stop.
 
 Start at the R.N. terminal with the crosshair on it. Each job: right-click the terminal, Missions, Easy, Download Missions,
-Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then both faction supply managers, and back.
+Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then the faction supply managers until one pays, and back.
 traversal.exe does the walking, the aiming and the right-clicks; this file works the game's windows.
-Places are in the 1920x1080 units of the video they were measured from, and scale with the client. Tab closes the menus.
-Esc is sent only to leave the conversation with the second supply manager, as the user asked, and only while that window shows.
+Places are in the 1920x1080 units of the video they were measured from, and scale with the client. No Esc: Tab closes the menus.
 """
 import difflib
 import re
@@ -297,18 +296,6 @@ class MissionRunner(LootRunner):
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
 
-    def glance(self, person):
-        """Open the conversation and leave: the job only needs it opened."""
-        self.hide_pointer()
-        self.open_talk(person)
-        for attempt in range(3):
-            if self.dialog_lines() is None:
-                return
-            self.press("esc")
-            self.wait(.5)
-        if self.dialog_lines() is not None:
-            raise Interrupted(f"The conversation with {person['name']} did not close.")
-
     def run_job(self, spot):
         self.take_job(spot)
         recruiters = self.people("Recruiter")
@@ -319,11 +306,10 @@ class MissionRunner(LootRunner):
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
-            if paid:
-                self.glance(manager)
-                continue
             said = " ".join(self.talk(manager)).lower()
             paid = "payment" in said or "credits" in said
+            if paid:      # Either may be the one, and it changes from job to job.
+                break
         if not paid:
             raise Interrupted("Neither faction supply manager paid. Are the blueprints in your Inventory? The job is still open.")
 

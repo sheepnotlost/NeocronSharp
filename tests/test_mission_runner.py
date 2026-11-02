@@ -132,7 +132,7 @@ class Run(MissionRunner):
     def __init__(self, engine, said, jobs=1):
         events = self.events = []
         super().__init__(default_profile(), Backend(), Control(), lambda kind, payload: events.append((kind, payload)), detector=object(), engine=engine)
-        self.said, self.jobs, self.pressed = said, jobs, []
+        self.said, self.jobs = said, jobs
 
     def hide_pointer(self):
         pass
@@ -158,10 +158,6 @@ class Run(MissionRunner):
     def click(self, point):
         self.screens.pop(0)
 
-    def press(self, name):
-        self.pressed.append(name)
-        self.screens = []
-
 
 PEOPLE = [actor("Recruiter - Far", 900), actor("Recruiter - Near", 400), actor("Faction Supply Manager - Yul", 300),
           actor("Faction Supply Manager - Lao", 200), actor("Security - Bob", 10), actor("Recruiter - Player", 5, kind="player")]
@@ -182,29 +178,15 @@ class LoopTests(unittest.TestCase):
         run.talk = lambda person: spoken.append(person["name"]) or talk(person)
         run.run()
         self.assertEqual(spoken, ["Recruiter - Near", "Faction Supply Manager - Lao", "Faction Supply Manager - Yul"]*2)
-        self.assertEqual(run.pressed, [])
         self.assertEqual(engine.calls.count("spot"), 1)
         self.assertEqual(engine.calls.count("terminal"), 2)
         self.assertEqual(run.events[-1], ("done", "Enough. 2 jobs done."))
 
-    def test_after_the_pay_the_other_manager_is_only_opened_and_left_with_esc(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=PAID, yul=[["Hello and welcome.", "> Hello, what do you sell?"]]))
+    def test_once_a_manager_pays_the_other_is_left_alone(self):
+        run = Run(FakeEngine(PEOPLE), self.said(lao=PAID))
         run.run()
-        self.assertEqual(run.pressed, ["esc"])
-        self.assertEqual(run.who, "Faction Supply Manager - Yul")
+        self.assertEqual(run.who, "Faction Supply Manager - Lao")
         self.assertEqual(run.completed, 1)
-
-    def test_esc_is_never_sent_with_no_conversation_showing(self):
-        run = Run(FakeEngine(PEOPLE), {"Recruiter - Near": []})
-        run.glance(actor("Recruiter - Near"))
-        self.assertEqual(run.pressed, [])
-
-    def test_a_conversation_esc_cannot_close_stops_the_run(self):
-        run = Run(FakeEngine(PEOPLE), {"Recruiter - Near": RECRUITED})
-        run.press = lambda name: run.pressed.append(name)
-        with self.assertRaisesRegex(Interrupted, "did not close"):
-            run.glance(actor("Recruiter - Near"))
-        self.assertEqual(run.pressed, ["esc"]*3)
 
     def test_stops_with_the_job_open_when_nobody_pays(self):
         run = Run(FakeEngine(PEOPLE), self.said(yul=SHOP))
