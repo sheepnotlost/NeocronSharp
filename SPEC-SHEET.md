@@ -81,6 +81,14 @@ All aiming at a target is at `CameraAim.BodyMiddle`, 50 units above the position
 - Under 35% health (also read while looting and waiting) `retreat` closes any loot box and `flee` picks a spot. `Cover` tries 16 bearings at 600 to 2,400 units on the navmesh, ranks them by how many NPCs within 6,000 can see them, using the terrain heights and the cell's props, then by being 1,200 from them, then by the shortest run, and takes the first with a route of at most 3,500 units. `LiveSteer` runs there. It waits for 70% health, runs again if health falls 2% in cover, and ends the hunt after 3 tries, each with up to 180 s of waiting. Below the floor at the start a hunt does not begin.
 - Stops on Stop, F8, focus loss, a zone change, unreadable health at the start, no room in Inventory, a loot box that will not close, or 10 minutes with no ticked NPC to fight. Not yet run live.
 
+### TL60 jobs
+
+- `mission_runner.py`, a `LootRunner` without the fighting. Button on the Target Acquisition tab; it shares the hunt's Stop and 5 s countdown. The start reads `spot` once; each job runs `usespot`, walks back there if needed, looks the same way and right-clicks (the terminal is no actor).
+- The R.N. window opens centred, so its places are fixed shares of the client. Page by which bright buttons show: Download (factions), Next and Back (list), Back alone (accepted). Closed with Tab through `set_ui`, never Esc.
+- A list row is a TL60 Research Job by its title width (Research about 3.6% of the client, Construction 4.3%, so the two TL60 jobs part), then `36`, `6000` or `TL60` read in that row. The first run saves each list page as `diagnostics/mission-list-N.png`, for tuning: all reading so far is from a 1080p video of a 1440p client.
+- Conversations are read by Windows OCR. The answer is matched loosely, as the OCR garbles words: work, What kind, start straightaway, `(click)`, for a manager `(click)` or the wrong-person line. Anything else stops the run. Pay shows as `payment` or `credits` in a manager's words.
+- NPCs by name from `nearby`: contains `Recruiter` or `Faction Supply Manager`. `camera --use` aims at the body and right-clicks only once the target bar is up.
+
 ## Tech Counter
 
 The fourth tab embeds the counter imported from `sheepnotlost/neocron-tech-counter`

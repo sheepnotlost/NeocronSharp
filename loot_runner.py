@@ -100,7 +100,9 @@ class Engine:
         args = ["camera", *args, "--pulse", "24", "--now"]
         if self.gains:
             args += ["--gains", self.gains]
-        text = self.live(args, tick)
+        return self.keep_gains(self.live(args, tick))
+
+    def keep_gains(self, text):
         found = re.search(r"^gains (\S+) (\S+)$", text, re.M)
         if found:
             self.gains = f"{found.group(1)},{found.group(2)}"

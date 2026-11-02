@@ -42,11 +42,12 @@ def enemy_rows(actors, ticked=()):
 
 
 class TargetTab:
-    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None):
+    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None, mission_runner=None):
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk or follow is steering the same mouse
         self.loot_runner = loot_runner      # makes a LootRunner(names, reach, emit, control) bound to the game
+        self.mission_runner = mission_runner  # makes a MissionRunner(emit, control) bound to the game
         self.hunted = {}                    # ticked enemies: lower-case name -> name
         self.heal_name = None               # the fighter a healer alone keeps going back to
         self.heal_retry = None              # its next look
@@ -132,6 +133,8 @@ class TargetTab:
         self.fighter = tk.StringVar(value=saved)
         self.fighter.trace_add("write", lambda *_: self.update_buttons())
         ttk.Entry(buttons, textvariable=self.fighter, width=16).pack(side="left", padx=6)
+        self.jobs_button = ttk.Button(buttons, text="TL60 jobs", command=self.start_jobs)
+        self.jobs_button.pack(side="right", padx=(6, 0))
         self.hunt_button = ttk.Button(buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         ttk.Label(buttons, text="units").pack(side="right", padx=(0, 8))
@@ -186,6 +189,7 @@ class TargetTab:
         actor = self.selected()
         # Stays clickable so a hunt that cannot start says why: greyed out with nothing ticked looked like a dead button (1 Nov).
         self.hunt_button.configure(state="normal" if self.loot_runner and self.looting is None else "disabled")
+        self.jobs_button.configure(state="normal" if self.mission_runner and self.looting is None else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
@@ -445,6 +449,26 @@ class TargetTab:
             threading.Thread(target=runner.run, daemon=True, name="hunt").start()
         except Exception as exc:
             self.loot_event("done", f"Hunt could not start: {exc}")
+
+    def start_jobs(self):
+        problem = self.hunt_problem(["the jobs"], REACH)
+        if problem:
+            self.status.set(problem)
+            self.append(problem)
+            return
+        self.looting = Control()
+        self.append("TL60 Research Jobs: stand at the terminal with the crosshair on it. Starting in 5 s...")
+        self.update_buttons()
+        self.loot_start = self.root.after(5000, self.begin_jobs)
+
+    def begin_jobs(self):
+        self.loot_start = None
+        try:
+            clients.focus()
+            runner = self.mission_runner(lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
+            threading.Thread(target=runner.run, daemon=True, name="jobs").start()
+        except Exception as exc:
+            self.loot_event("done", f"Jobs could not start: {exc}")
 
     def loot_event(self, kind, payload):
         if kind in ("log", "status"):

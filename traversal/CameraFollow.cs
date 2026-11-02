@@ -65,7 +65,7 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 /// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
-    bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null);
+    bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null, bool Use = false);
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -85,7 +85,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000, LookEveryMs = 120;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 4, StepAsideSeconds = 6;
     private const float StuckBelow = 15;
@@ -184,20 +184,35 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 Wait(Tick);
             }
             input.Walk(false);
-            bool aimed = false;
-            for (long until = clock.ElapsedMilliseconds + BoxAimMs; !aimed && clock.ElapsedMilliseconds < until; Wait(Tick))
-            {
-                var s = Guard();
-                var view = View(s);
-                float yawError = PointNavigation.Distance(s.Position, box) < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), box - s.Position);
-                float pitchError = CameraAim.PitchTo(s.Position, box) - view.Pitch;
-                aimed = CameraAim.OnTarget(yawError, pitchError);
-                if (!aimed) input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / yawGain), (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain));
-            }
-            if (!aimed) throw new InvalidOperationException($"Could not aim at the body of {target.Name}.");   // A right-click lands on whatever is there.
+            if (!AimAt(box, BoxAimMs, yawGain, pitchGain, () => true)) throw new InvalidOperationException($"Could not aim at the body of {target.Name}.");   // A right-click lands on whatever is there.
             Record("box", previous, new { target = target.Name });
             input.Use();
             return $"Right-clicked the body of {target.Name}.";
+        }
+
+        // Put the crosshair on a point, for as long as it takes ready to agree.
+        bool AimAt(Vector3 point, int ms, float yawGain, float pitchGain, Func<bool> ready)
+        {
+            for (long until = clock.ElapsedMilliseconds + ms; clock.ElapsedMilliseconds < until; Wait(Tick))
+            {
+                var s = Guard();
+                var view = View(s);
+                float yawError = PointNavigation.Distance(s.Position, point) < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), point - s.Position);
+                float pitchError = CameraAim.PitchTo(s.Position, point) - view.Pitch;
+                if (CameraAim.OnTarget(yawError, pitchError) && ready()) return true;
+                input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / yawGain), (int)MathF.Round(CameraAim.Turn(pitchError) / pitchGain));
+            }
+            return false;
+        }
+
+        // Crosshair on a standing NPC, with the game's target bar up to prove it, then right-click to talk.
+        string UseNpc(float yawGain, float pitchGain)
+        {
+            if (!AimAt(target.Position + new Vector3(0, CameraAim.BodyMiddle, 0), UseAimMs, yawGain, pitchGain, () => TargetBar.Showing(reader.Window)))
+                return $"Could not put the crosshair on {target.Name}.";
+            Record("use", previous, new { target = target.Name });
+            input.Use();
+            return $"Right-clicked {target.Name}.";
         }
 
         try
@@ -221,6 +236,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             Measured = (yawGain, pitchGain);
             if (plan.MeasureOnly) return "";
             if (plan.Box) return RunToBox(yawGain, pitchGain);
+            if (plan.Use) return UseNpc(yawGain, pitchGain);
 
             var watch = new TargetWatch(target, () => reader.ReadEntities().Entities, () => clock.ElapsedMilliseconds, ReadEveryMs, "Camera follow stopped.");
             Record("start", previous, new { target = target.Name, id = FollowCommand.Id(target), yawGain, pitchGain });

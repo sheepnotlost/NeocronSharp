@@ -284,7 +284,90 @@ internal static class FollowCommand
         catch (Exception e) when (e is IOException or InvalidDataException) { return null; }
     }
 
-    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--sight] [--back-off units]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead.</summary>
+    /// <summary>spot: read-only, where you stand and where you look, as one JSON line, so usespot can come back to it.</summary>
+    public static int Spot()
+    {
+        object result;
+        try
+        {
+            using var reader = new PlayerReader(ClientExecutable());
+            var sample = reader.ReadSteady();
+            var view = reader.ReadCamera(sample) ?? throw new InvalidOperationException("The camera's angles could not be read on this game build.");
+            result = new { live = true, x = sample.Position.X, y = sample.Position.Y, z = sample.Position.Z, yaw = view.Yaw, pitch = view.Pitch };
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            result = new { live = false, why = e.Message };
+        }
+        Console.WriteLine(JsonSerializer.Serialize(result));
+        return 0;
+    }
+
+    /// <summary>usespot x,y,z yaw,pitch [--pulse N] [--calibration speed,gain] [--gains yaw,pitch]: live, walks back to a place from 'spot', looks the same way and right-clicks what is there: the mission terminal, which is no actor.</summary>
+    public static int UseSpot(List<string> rest, string root, int pulse)
+    {
+        (float, float)? Pair(string name)
+        {
+            int i = rest.IndexOf(name);
+            if (i < 0 || i + 1 >= rest.Count) return null;
+            var parts = rest[i + 1].Split(',');
+            rest.RemoveRange(i, 2);
+            return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
+        }
+        var known = Pair("--calibration") is { } c ? new LiveSteer.Calibration(c.Item1, c.Item2) : FollowWalk.Typical;
+        (float Yaw, float Pitch)? gains = Pair("--gains");
+        if (rest.Count < 2) throw new InvalidOperationException("Usage: usespot x,y,z yaw,pitch");
+        float[] at = rest[0].Split(',').Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray(), look = rest[1].Split(',').Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+        var spot = new Vector3(at[0], at[1], at[2]);
+        using var reader = new PlayerReader(ClientExecutable());
+        int sector = reader.ReadSectorId(reader.ReadSteady().World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
+        string install = Path.GetDirectoryName(reader.Executable)!;
+        string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+        string stamp = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}";
+        using var hud = new Hud();
+        Travel.FocusGame(reader.Window);
+        for (int tried = 0; PointNavigation.Distance(reader.ReadSteady().Position, spot) > SpotNear; tried++)
+        {
+            try
+            {
+                new LiveSteer(reader, Mapped(install, sector, root), sector, spot, false, "terminal", pulse, Path.Combine(logs, $"spot-{stamp}-{tried}.jsonl"), hud,
+                    run: true, countdown: false, known: known).Run();
+                break;
+            }
+            catch (LiveSteer.BlockedAt blocked) when (tried < GoRoundTries) { MapBlock(root, sector, blocked); }
+        }
+        if (gains == null)
+        {
+            var anyone = Followable(ReadSnapshot(reader)).FirstOrDefault(n => n.Entity.Identity.Kind == EntityKind.Npc)?.Entity ?? throw new InvalidOperationException("No NPC here to measure the mouse with.");
+            var measure = new CameraWatch(reader, anyone, pulse, new CameraPlan(Now: true, MeasureOnly: true), hud, Path.Combine(logs, $"camera-{stamp}-gain.jsonl"));
+            measure.Run();
+            gains = measure.Measured;
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gains {gains!.Value.Yaw} {gains.Value.Pitch}"));
+        }
+        using var input = new SteerInput(reader, pulse);
+        int steady = 0;
+        var clock = Stopwatch.StartNew();
+        while (steady < SpotSteady)
+        {
+            if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
+            if (clock.ElapsedMilliseconds > SpotAimMs) throw new InvalidOperationException("Could not look back at the terminal.");   // A right-click lands on whatever is there.
+            reader.RequireForeground();
+            var view = reader.ReadCamera(reader.ReadSteady()) ?? throw new InvalidOperationException("The camera's angles could not be read on this game build.");
+            float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), CameraAim.Facing(look[0])), pitchError = look[1] - view.Pitch;
+            steady = CameraAim.OnTarget(yawError, pitchError) ? steady + 1 : 0;
+            if (steady == 0) input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / gains!.Value.Yaw), (int)MathF.Round(CameraAim.Turn(pitchError) / gains.Value.Pitch));
+            Thread.Sleep(50);
+        }
+        input.Use();
+        Console.WriteLine("Right-clicked the terminal.");
+        return 0;
+    }
+
+    /// <summary>How near the spot counts as back there, and how many readings in a row must agree the view is right: a turn shows late.</summary>
+    private const float SpotNear = 40;
+    private const int SpotSteady = 4, SpotAimMs = 6000;
+
+    /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--use] [--sight] [--back-off units]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead, and --use aims at a living NPC and right-clicks it to talk.</summary>
     public static int Camera(List<string> rest, string root, int pulse)
     {
         string? Option(string name)
@@ -292,7 +375,7 @@ internal static class FollowCommand
             int i = rest.IndexOf(name); if (i < 0 || i + 1 >= rest.Count) return null;
             string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
         }
-        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), sight = rest.Remove("--sight");
+        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), use = rest.Remove("--use"), sight = rest.Remove("--sight");
         float backTo = float.Parse(Option("--back-off") ?? "0", CultureInfo.InvariantCulture);
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
@@ -300,11 +383,11 @@ internal static class FollowCommand
         if (rest.Count < 1) throw new InvalidOperationException("Usage: camera <entity id from 'nearby'> [--hold-left]");
         using var reader = new PlayerReader(ClientExecutable());
         var target = Pick(reader, rest[0], box);
-        if ((holdLeft || box) && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the mouse buttons are used on NPCs only.");
+        if ((holdLeft || box || use) && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the mouse buttons are used on NPCs only.");
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

@@ -10,6 +10,7 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [ ] TL60 Research Jobs (2 Nov): **TL60 jobs** on the Target Acquisition tab runs terminal, recruiter and both supply managers on a loop. Not yet run in the game. To confirm live: the list rows read at native size, talking range to a seated recruiter and across the managers' counter, and whether the 3 blueprints leave Inventory.
 - [x] Blueprint research kept going after a failure (2 Nov): "research process failed, datacube destroyed!" leaves no result, which stopped the batch. It's now a failed try, not a copy, and Start is clicked again.
 - [x] Hunt starts (2 Nov): "Focus Neocron before the countdown finishes" failed start after start, so the app now focuses it. "The character did not settle after releasing W" ended a hunt in its test step, so hunts have none.
 - [ ] Going round what the map doesn't know (2 Nov): Scooter stuck on K 16's Warp Garage at 4814, -7730, as its footprint isn't in the navmesh. Follows and runs to cover now map the spot and go round, one 80-unit square per hit. Not yet tried live: a big building may take several hits, each with a rebake.

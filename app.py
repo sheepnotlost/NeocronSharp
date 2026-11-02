@@ -330,7 +330,7 @@ class App:
         self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
         from target_tab import TargetTab
         self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
-                              other_live=lambda:self.traversal.process is not None,loot_runner=self.loot_runner)
+                              other_live=lambda:self.traversal.process is not None,loot_runner=self.loot_runner,mission_runner=self.mission_runner)
         self.traversal.other_live=self.target.steering
 
     def build_recycling_tab(self):
@@ -978,6 +978,13 @@ class App:
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
+
+    def mission_runner(self,emit,control):
+        from mission_runner import MissionRunner
+        import clients,os
+        self.ensure_bound()
+        if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)
+        return MissionRunner(self.profile,self.backend,control,emit)
 
     def ensure_bound(self):
         title, size = self.backend.bind_foreground()

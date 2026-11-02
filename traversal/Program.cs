@@ -41,6 +41,8 @@ try
         case "follow": return FollowCommand.Follow(rest, root, pulse, run);
         case "camera": return FollowCommand.Camera(rest, root, pulse);
         case "flee": return FollowCommand.Flee(rest, root, pulse);
+        case "spot": return FollowCommand.Spot();
+        case "usespot": return FollowCommand.UseSpot(rest, root, pulse);
         case "heal": return FollowCommand.Heal(rest, root);
         case "places":
         {
