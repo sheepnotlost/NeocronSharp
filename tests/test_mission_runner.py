@@ -1,5 +1,6 @@
 """TL60 jobs: what it reads, what it clicks, and when it stops (no engine, no game input)."""
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -231,6 +232,38 @@ class LoopTests(unittest.TestCase):
         run.wait = lambda seconds, safe_pause=False: None
         with self.assertRaisesRegex(Interrupted, "Could not talk to Recruiter - Near"):
             run.open_talk(actor("Recruiter - Near", 150))
+
+
+class SelectTests(unittest.TestCase):
+    def choose(self, selected_after):
+        run = Run(FakeEngine([]), {})
+        tapped = []
+        run.tap = tapped.append
+        run.save_page = lambda number: None
+        run.frame = blank
+        run.detector = type("Detector", (), {"text_reader": lambda self: None})()
+        with patch.object(mission_runner, "job_row", lambda reader, frame: 2), \
+                patch.object(mission_runner, "row_is_blue", lambda frame, row: len(tapped) >= selected_after):
+            run.choose_job()
+        return tapped
+
+    def test_a_click_that_only_lit_the_row_is_tried_again(self):
+        row = (mission_runner.ROW_CLICK_X, mission_runner.row_y(2))
+        self.assertEqual(self.choose(2), [row, row, mission_runner.ACCEPT])
+
+    def test_a_row_that_never_selects_stops_without_accepting(self):
+        with self.assertRaisesRegex(Interrupted, "did not select"):
+            self.choose(99)
+
+    def test_the_pointer_settles_before_the_click(self):
+        run = Run(FakeEngine([]), {})
+        steps = []
+        run.frame = blank
+        run.move = lambda point: steps.append("move")
+        run.wait = lambda seconds, safe_pause=False: steps.append("wait")
+        run.click = lambda point: steps.append("click")
+        run.tap((100, 100))
+        self.assertEqual(steps, ["move", "wait", "click"])
 
 
 class EngineTests(unittest.TestCase):

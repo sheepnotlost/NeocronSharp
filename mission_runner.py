@@ -29,6 +29,8 @@ DIALOG_TEXT = (150, 225, 1310, 600)
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
 TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
+SELECT_TRIES = 3
+SETTLE = .15                 # seconds between the pointer arriving and a click
 MOST_SCREENS = 8             # of one conversation
 OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
@@ -168,7 +170,11 @@ class MissionRunner(LootRunner):
         """Nothing fights back in a Secure Sector."""
 
     def tap(self, point):
-        self.click(place(self.frame(), point))
+        """The game must see the pointer arrive first: a click straight after a move only lit the row up (live, 2 Nov)."""
+        at = place(self.frame(), point)
+        self.move(at)
+        self.wait(SETTLE)
+        self.click(at)
 
     def save_page(self, number):
         if number in self.pictures:
@@ -211,12 +217,13 @@ class MissionRunner(LootRunner):
             self.save_page(number)
             row = job_row(self.reader(), frame)
             if row is not None:
-                self.tap((ROW_CLICK_X, row_y(row)))
-                self.wait(.5)
-                if not row_is_blue(self.frame(), row):
-                    raise Interrupted("The mission row did not select.")
-                self.tap(ACCEPT)
-                return True
+                for attempt in range(SELECT_TRIES):
+                    self.tap((ROW_CLICK_X, row_y(row)))
+                    self.wait(.5)
+                    if row_is_blue(self.frame(), row):
+                        self.tap(ACCEPT)
+                        return True
+                raise Interrupted("The mission row did not select.")
             self.tap(NEXT)
             self.wait(1.5)
             if rn_page(self.frame()) != "list":
