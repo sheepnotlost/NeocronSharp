@@ -30,9 +30,11 @@ TALK_REACH = 180             # units: how close to walk before right-clicking a 
 TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
 MOST_SCREENS = 8             # of one conversation
-SAME_WORDS = .7              # how alike the OCR's line and a known answer must be
-RECRUITER = ("Do you have work for me?", "What kind of Blueprints do you require?", "Good, I'll start straightaway.", "(click)")
-MANAGER = ("(click)", "Oh sorry I got the wrong person.")
+OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
+SAME_WORDS = .7              # how alike the OCR's line and a known line must be
+SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
+LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
+SPEECH_INDENT = .0012        # of the client's width: an option starts with a ">", so it never lines up with the words above
 JOB_MARK = re.compile(r"36|6[0O]{3}|T[^ ]{0,2}[6G][0O]")
 
 
@@ -103,13 +105,18 @@ def letters(text):
     return "".join(c for c in text.lower() if c.isalpha())
 
 
-def answer(lines, known):
-    """The line to click: the first known answer, in the order given, that is on screen."""
-    for phrase in known:
-        for line in lines:
-            if difflib.SequenceMatcher(None, letters(line["text"]), letters(phrase)).ratio() >= SAME_WORDS:
-                return line
-    return None
+def options(lines, width):
+    """The lines to answer with. The first line is always speech, and speech that wraps starts level with it."""
+    return [line for line in lines[1:] if abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT]
+
+
+def answer(lines, width):
+    """The line to click: the first option, except in the shop."""
+    found = [line for line in options(lines, width) if LEAVING not in letters(line["text"])]
+    for line in found:
+        if difflib.SequenceMatcher(None, letters(line["text"]), letters(SHOP_GOODBYE)).ratio() >= SAME_WORDS:
+            return line
+    return found[0] if found else None
 
 
 def text_lines(words, left=0, top=0):
@@ -125,7 +132,7 @@ def text_lines(words, left=0, top=0):
     for row in lines:
         row["words"].sort()
         first, last = row["words"][0], row["words"][-1]
-        found.append({"text": " ".join(word[1] for word in row["words"]),
+        found.append({"text": " ".join(word[1] for word in row["words"]), "left": left+first[0],
                       "point": (left+(first[0]+last[0]+last[2])//2, top+row["y"]+row["high"]//2)})
     return found
 
@@ -256,24 +263,36 @@ class MissionRunner(LootRunner):
             person = dict(person, distance=reach+1)
         raise Interrupted(f"Could not talk to {person['name']}.")
 
-    def talk(self, person, known):
-        """Everything they said. Clicks through to the end, on the answers it knows."""
+    def screen(self):
+        """The conversation's lines once its options have drawn and two readings agree, as they fade in, or as they are
+        when they never do. None when it has closed."""
+        ends, before = self.clock()+OPTIONS_WAIT, None
+        while True:
+            lines = self.dialog_lines()
+            if lines is None or (lines == before and answer(lines, self.last_frame.shape[1])) or self.clock() >= ends:
+                return lines
+            before = lines
+            self.wait(.2)
+
+    def talk(self, person):
+        """Everything they said. Clicks through to the end."""
         self.hide_pointer()
         self.open_talk(person)
         said = []
         for screen in range(MOST_SCREENS):
-            lines = self.dialog_lines()
+            lines = self.screen()
             if lines is None:
                 return said
             words = " ".join(line["text"] for line in lines)
             said.append(words)
-            line = answer(lines, known)
+            line = answer(lines, self.last_frame.shape[1])
             if line is None:
-                raise Interrupted(f"{person['name']} said something new: {words[:200]}")
+                raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
             self.click(line["point"])
-            for attempt in range(16):
+            for attempt in range(16):      # By its words: the pointer now sits on an option and lights it up.
                 self.wait(.25)
-                if self.dialog_lines() != lines:
+                now = self.dialog_lines()
+                if now is None or not now or now[0]["text"] != lines[0]["text"]:
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
 
@@ -283,11 +302,11 @@ class MissionRunner(LootRunner):
         if not recruiters:
             raise Interrupted("No recruiter here.")
         self.emit("status", f"Talking to {recruiters[0]['name']}.")
-        self.talk(recruiters[0], RECRUITER)
+        self.talk(recruiters[0])
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
-            said = " ".join(self.talk(manager, MANAGER)).lower()
+            said = " ".join(self.talk(manager)).lower()
             paid = paid or "payment" in said or "credits" in said
         if not paid:
             raise Interrupted("Neither faction supply manager paid. Are the blueprints in your Inventory? The job is still open.")

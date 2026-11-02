@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 import mission_runner
-from mission_runner import MANAGER, RECRUITER, MissionRunner, answer, dialog_open, is_job, place, rn_page, text_lines
+from mission_runner import MissionRunner, answer, dialog_open, is_job, place, rn_page, text_lines
 from macro_core import Control, Interrupted, default_profile
 
 BRIGHT, PANEL = (115, 255, 168), (41, 105, 62)
@@ -23,8 +23,12 @@ def button(frame, point):
     frame[y-14:y+14, x-30:x+30] = BRIGHT
 
 
-def line(text):
-    return {"text": text, "point": (10, 20)}
+WIDTH = 2560
+SPEECH, OPTION, UNREAD = 216, 222, 244      # where each kind of line starts, measured on the video: an unread ">" leaves the words
+
+
+def line(text, left=SPEECH):
+    return {"text": text, "left": left, "point": (10, 20)}
 
 
 class ReadingTests(unittest.TestCase):
@@ -51,24 +55,37 @@ class ReadingTests(unittest.TestCase):
         self.assertFalse(is_job("20", .0359))
         self.assertFalse(is_job("", .0359))
 
-    def test_answers_survive_what_the_ocr_did_to_them(self):
-        lines = [line("A productive day,Runner"), line("Do you have workfomrne?"), line("> I wanted to talk to sometpdy else.")]
-        self.assertEqual(answer(lines, RECRUITER), lines[1])
-        lines = [line("We need 3 Pepper Park Wiretap Relay TS vO.6r Blueprints"), line("- > Good/ I'll start straightaway")]
-        self.assertEqual(answer(lines, RECRUITER), lines[1])
-        self.assertEqual(answer([line("Good luck,"), line("> (click)")], RECRUITER)["text"], "> (click)")
+    def test_always_the_first_option_however_the_ocr_read_it(self):
+        for first in (OPTION, UNREAD, 210):
+            lines = [line("You are here about the job, right?"), line("Yes, I am here", first), line("> I wanted to talk to somebody else.", OPTION)]
+            self.assertEqual(answer(lines, WIDTH), lines[1])
 
-    def test_a_shop_greeting_is_left_with_the_wrong_person_line(self):
-        lines = [line("Hello and welcome."), line("what do you sell?"), line("| know, show me the list please!"), line("Oh sorry I got the wrong person.")]
-        self.assertEqual(answer(lines, MANAGER), lines[3])
+    def test_speech_that_wraps_is_not_an_option(self):
+        lines = [line("We need 3 Pepper Park Wiretap Relay"), line("the TSUNAMI SYNDICATE HEADQUARTERS section", SPEECH+1), line("- > Good/ I'll start straightaway", 210)]
+        self.assertEqual(answer(lines, WIDTH), lines[2])
 
-    def test_words_it_does_not_know_are_not_answered(self):
-        self.assertIsNone(answer([line("You do not have the blueprints.")], MANAGER))
+    def test_words_alone_wait_for_their_options(self):
+        self.assertIsNone(answer([line("You are here about the job, right?")], WIDTH))
+
+    def test_leaving_is_never_the_answer(self):
+        self.assertIsNone(answer([line("A productive day,Runner"), line("o somebody else.", 456)], WIDTH))
+
+    def test_a_screen_is_answered_only_once_it_stops_changing(self):
+        run = Run(FakeEngine(PEOPLE), {})
+        reads = iter([[line("A productive day,Runner"), line("> Do yo", OPTION)]]+[[line("A productive day,Runner"), line("> Do you have work for me?", OPTION)]]*2)
+        run.dialog_lines = lambda: next(reads)
+        run.last_frame = blank()
+        self.assertEqual(run.screen()[1]["text"], "> Do you have work for me?")
+
+    def test_a_shop_is_left_with_the_wrong_person_line(self):
+        lines = [line("Hello and welcome."), line("what do you sell?", 317), line("| know, show me the list please!", UNREAD), line("Oh sorry I got the wrong person.", 210)]
+        self.assertEqual(answer(lines, WIDTH), lines[3])
 
     def test_words_on_one_height_are_one_line(self):
         found = text_lines([("for", 80, 10, 20, 12), ("Do", 10, 11, 20, 12), ("Next", 10, 40, 30, 12)], 100, 200)
         self.assertEqual([f["text"] for f in found], ["Do for", "Next"])
         self.assertEqual(found[0]["point"], (155, 216))
+        self.assertEqual(found[0]["left"], 110)
 
 
 class Backend:
@@ -129,7 +146,10 @@ class Run(MissionRunner):
         self.screens = list(self.said[self.who])
 
     def dialog_lines(self):
-        return [line(text) for text in self.screens[0]] if self.screens else None
+        self.last_frame = blank()
+        if not self.screens:
+            return None
+        return [line(text, SPEECH if i == 0 else OPTION) for i, text in enumerate(self.screens[0])]
 
     def click(self, point):
         self.screens.pop(0)
@@ -151,7 +171,7 @@ class LoopTests(unittest.TestCase):
         run = Run(engine, self.said(), jobs=2)
         spoken = []
         talk = run.talk
-        run.talk = lambda person, known: spoken.append(person["name"]) or talk(person, known)
+        run.talk = lambda person: spoken.append(person["name"]) or talk(person)
         run.run()
         self.assertEqual(spoken, ["Recruiter - Near", "Faction Supply Manager - Lao", "Faction Supply Manager - Yul"]*2)
         self.assertEqual(engine.calls.count("spot"), 1)
@@ -164,10 +184,17 @@ class LoopTests(unittest.TestCase):
         self.assertIn("Neither faction supply manager paid", run.events[-1][1])
         self.assertEqual(run.completed, 0)
 
-    def test_stops_on_words_it_does_not_know(self):
-        run = Run(FakeEngine(PEOPLE), self.said(yul=[["Where are my blueprints?", "> I'm working on it."]]))
+    def test_any_first_option_will_do(self):
+        run = Run(FakeEngine(PEOPLE), {**self.said(), "Recruiter - Near": [["You are here about the job, right?", "> Yes, I am here because of the job you have..."], *RECRUITED]})
         run.run()
-        self.assertIn("said something new: Where are my blueprints?", run.events[-1][1])
+        self.assertEqual(run.completed, 1)
+
+    def test_stops_when_the_options_never_come(self):
+        run = Run(FakeEngine(PEOPLE), self.said(yul=[["Where are my blueprints?"]]))
+        now = iter(range(1000))
+        run.clock = lambda: next(now)
+        run.run()
+        self.assertIn("gave no options to answer: Where are my blueprints?", run.events[-1][1])
 
     def test_will_not_start_away_from_the_headquarters(self):
         engine = FakeEngine([actor("Security - Bob")])
