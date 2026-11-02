@@ -1,4 +1,4 @@
-"""Hunt: one enemy at a time. Go in range of the nearest ticked NPC anywhere in the zone, back away if it is too close,
+"""Hunt: one enemy at a time. Hurt badly, it runs to cover out of every mob's sight and carries on once healed. Go in range of the nearest ticked NPC anywhere in the zone, back away if it is too close,
 kill it, run to its body, take the T, E, A and L parts, and only then pick the next.
 
 traversal.exe does the walking, the fighting and the running (one short run at a time); this file decides what comes
@@ -22,7 +22,11 @@ CLOSE = 200                  # units: the closest a target that takes no damage 
 LOOT_WALK = 300              # units: a body further than this gets Follow's routes, not a straight run
 BODY_NEAR = 110              # units: where that walk ends, inside the run's own stopping distance
 TARGET_MARGIN = 100          # units: walks stop this far inside the measured target limit
-HEALTH_FLOOR = .35           # stop for good below this share of your health
+HEALTH_FLOOR = .35           # run to cover below this share of your health
+RECOVERED = .7               # and go back to hunting at this share
+RECOVER_SECONDS = 180        # the hunt ends if that takes longer: no healer is reaching you
+FLEE_TRIES = 3               # runs to cover before giving up
+FELL = .02                   # health falling by this share of the maximum in cover: they caught up, so run again
 HEALTH_EVERY = 1.0           # seconds between readings during a fight
 GIVE_UP = 20                 # seconds of no damage before going closer
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
@@ -33,6 +37,10 @@ ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkabl
               "Could not reach the body", "Could not aim at the body", "No line of sight")
 MOST = 99                    # typed into the amount box: the game keeps it to the size of the stack
 AWAY = (24, 80)              # where the pointer waits, off every window
+
+
+class LowHealth(Interrupted):
+    """Time to run. Still an Interrupted, so it ends a hunt that has not begun."""
 
 
 def pick_target(actors, names, within=float("inf"), skip=()):
@@ -122,6 +130,12 @@ class Engine:
     def box(self, actor, tick):
         return self.run([actor["id"], "--box"], tick)
 
+    def flee(self, tick):
+        args = ["flee", "--pulse", "24"]
+        if self.calibration:
+            args += ["--calibration", self.calibration]
+        return self.live(args, tick)
+
 
 class LootRunner(VisualRunner):
     needs_ready = False
@@ -136,6 +150,7 @@ class LootRunner(VisualRunner):
         self.next_health = 0.
         self.kills = 0
         self.back = True             # until the weapon proves shorter than the target limit
+        self.fleeing = False
 
     def guard(self):
         super().guard()
@@ -157,9 +172,11 @@ class LootRunner(VisualRunner):
         return last
 
     def my_health(self):
-        reading = self.health(self.reader(), self.frame())
-        if reading and reading[0] < reading[1]*HEALTH_FLOOR:
-            raise Interrupted(f"Your health is down to {reading[0]} of {reading[1]}. Stopped.")
+        return self.judge(self.health(self.reader(), self.frame()))
+
+    def judge(self, reading):
+        if reading and reading[0] < reading[1]*HEALTH_FLOOR and not self.fleeing:
+            raise LowHealth(f"Your health is down to {reading[0]} of {reading[1]}.")
         return reading
 
     def watch_health(self):
@@ -308,31 +325,70 @@ class LootRunner(VisualRunner):
             self.wait(.5)
         raise Interrupted("Could not read your health from the screen. Stopped.")
 
+    def recovered(self):
+        """True once healed. False if health keeps falling, as they have caught up, or it never comes back."""
+        ends, lowest = self.clock()+RECOVER_SECONDS, None
+        while self.clock() < ends:
+            reading = self.my_health()
+            if reading:
+                if reading[0] >= reading[1]*RECOVERED:
+                    return True
+                if lowest is not None and reading[0] < lowest-reading[1]*FELL:
+                    return False
+                lowest = reading[0] if lowest is None else min(lowest, reading[0])
+            self.wait(1)
+        return False
+
+    def retreat(self, why):
+        """Run to cover, out of every mob's sight, and wait there to be healed."""
+        self.fleeing = True
+        try:
+            self.emit("log", f"{why} Running to cover.")
+            for attempt in range(FLEE_TRIES):
+                window = self.detector.loot_window(self.frame())
+                if window:
+                    self.close_box(window)
+                self.hide_pointer()
+                text = self.engine.flee(lambda: None)
+                last = text.splitlines()[-1] if text else "The engine said nothing."
+                self.emit("log", last)
+                if "Stop pressed" in last or "lost focus" in last:
+                    raise Interrupted(last)
+                if self.recovered():
+                    self.emit("log", "Healed. Back to the hunt.")
+                    return
+            raise Interrupted(f"{why} Running to cover did not help. Stopped.")
+        finally:
+            self.fleeing = False
+
     def execute(self):
         skip, waiting = set(), None
         self.hide_pointer()
         self.check_health()
         while True:
-            self.checkpoint()
-            self.hide_pointer()
-            target = pick_target(self.engine.nearby(), self.names, skip=skip)
-            if target is None:
-                waiting = self.clock() if waiting is None else waiting
-                if self.clock()-waiting >= IDLE_LIMIT:
-                    self.emit("done", f"Nothing left to hunt: {len(skip)} left alone. {self.kills} killed.")
-                    return
-                self.emit("status", "No ticked NPC to fight here: waiting for one to appear.")
-                self.my_health()
-                self.wait(3)
-                continue
-            waiting = None
-            if not self.attack(target):
-                self.emit("log", f"Leaving {target['name']} alone: it can't be reached or hurt.")
-                skip.add(target["id"])
-                continue
-            self.kills += 1
-            self.loot(target)
-            self.hide_pointer()
+            try:
+                self.checkpoint()
+                self.hide_pointer()
+                target = pick_target(self.engine.nearby(), self.names, skip=skip)
+                if target is None:
+                    waiting = self.clock() if waiting is None else waiting
+                    if self.clock()-waiting >= IDLE_LIMIT:
+                        self.emit("done", f"Nothing left to hunt: {len(skip)} left alone. {self.kills} killed.")
+                        return
+                    self.emit("status", "No ticked NPC to fight here: waiting for one to appear.")
+                    self.my_health()
+                    self.wait(3)
+                    continue
+                waiting = None
+                if not self.attack(target):
+                    self.emit("log", f"Leaving {target['name']} alone: it can't be reached or hurt.")
+                    skip.add(target["id"])
+                    continue
+                self.kills += 1
+                self.loot(target)
+                self.hide_pointer()
+            except LowHealth as low:
+                self.retreat(str(low))
 
     def run(self):
         try:

@@ -81,6 +81,18 @@ internal static class FollowTests
             var hedge = new ShotLine(Enumerable.Range(-9, 19).Select(i => cactus with { Position = new Vector3(100, 0, i * 50) }));
             Check(hedge.ClearSide(eye, new Vector3(120, 100, 0)) == null, "a wall of them can't be stepped round");
 
+            var ridge = new float[TerrainCell.Samples * TerrainCell.Samples];
+            for (int z = 0; z < TerrainCell.Samples; z++)
+                for (int x = 256; x < 262; x++) ridge[z * TerrainCell.Samples + x] = 500;
+            var cover = new Cover(ridge, new ShotLine(new[] { cactus with { Position = new Vector3(-2000, 0, 3000) } }));
+            Check(cover.Hidden(new Vector3(-1000, 0, 0), new Vector3(1000, 0, 0)), "a hill hides a spot");
+            Check(!cover.Hidden(new Vector3(-1000, 0, 0), new Vector3(-500, 0, 0)), "open ground does not");
+            Check(cover.Hidden(new Vector3(-2500, 0, 3000), new Vector3(-1500, 100, 3000)), "a cactus hides one too");
+            var hideout = cover.Spots(new Vector3(-100, 0, 0), new[] { new Vector3(-1000, 0, 0) }, p => p).First();
+            Check(hideout.X > 300 && !float.IsNaN(hideout.Z), "it runs over the hill, away from the mob");
+            Check(cover.Spots(new Vector3(16300, 0, 0), new[] { new Vector3(15000, 0, 0) }, p => p).All(p => MathF.Abs(p.X) < TerrainCell.Half), "never over the edge into another zone");
+            Check(!cover.Spots(default, new[] { new Vector3(100, 0, 0) }, _ => null).Any(), "only on ground it can stand on");
+
             var sight = new SightWatch();
             Check(!sight.Seen(0), "nothing targeted yet");
             sight.Update(1, true); sight.Update(1.5, false);

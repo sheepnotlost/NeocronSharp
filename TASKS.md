@@ -10,6 +10,7 @@ Updated 2026-11-01. Source: this chat. User additions extend the same task.
 
 ### Target Acquisition tab — 31 October 2026
 
+- [ ] Run to cover at 35% health (1 Nov), replacing standing still: a spot out of every NPC's sight from the terrain heights and props, then back to hunting at 70%. Not yet tried live. Only terrain and props hide a spot, not buildings, and friendly NPCs count as mobs. A long run empties stamina, as `LiveSteer` has no `SprintGuard`.
 - [ ] Engagement distance (1 Nov): backing to the target limit went past 6,000 units, which the user called too far. Attack from now starts at 4,000, where kills began live (3,956 to 4,982), and only a mob nearer than 2,500 is backed away from, to 2,500. Not yet tried live.
 - [ ] Cacti in the line of fire (1 Nov): the target bar stopped shots into hills live, but cacti still took shots. K 16's spawn file lists 381 of them with size and height, so `ShotLine` holds fire and strafes clear. Not yet tried live: strafe direction, and whether the props' sizes match what stops a shot.
 - [ ] No shooting through terrain, the farthest shot, and the healer's cycle (1 Nov), after screenshots of shots into a hill: the game's target bar now decides when to shoot and where the target limit is, and Kaiori casts slot 1 every 30 s and slots 2 and 3 every 120 s on both characters, looking up at the sky for the casts on himself, as the user said works. Not yet tried live. Backing with S is slow, and a retry starts the cycle again, shields included. The two-client `heal` command still casts one spell every 30 s.

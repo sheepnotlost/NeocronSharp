@@ -206,6 +206,42 @@ internal static class FollowCommand
         return 0;
     }
 
+    /// <summary>flee [--pulse N] [--calibration speed,gain]: live, runs to the nearest spot no NPC can see, for the hunt when hurt.</summary>
+    public static int Flee(List<string> rest, string root, int pulse)
+    {
+        int c = rest.IndexOf("--calibration");
+        LiveSteer.Calibration known = FollowWalk.Typical;
+        if (c >= 0 && c + 1 < rest.Count)
+        {
+            var parts = rest[c + 1].Split(',');
+            known = new(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
+        }
+        using var reader = new PlayerReader(ClientExecutable());
+        var me = reader.ReadSteady();
+        int sector = reader.ReadSectorId(me.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");
+        string install = Path.GetDirectoryName(reader.Executable)!;
+        var nav = NavWorld.Bake(install, sector);
+        var mobs = Followable(ReadSnapshot(reader)).Where(n => n.Entity.Identity.Kind == EntityKind.Npc && !Dead(n.Entity)).Select(n => n.Entity.Position).ToList();
+        var heights = TerrainCell.Exists(install, sector) ? TerrainCell.ReadHeights(install, sector) : null;
+        var cover = new Cover(heights, Shots(reader) ?? new ShotLine(Array.Empty<SectorObjects.Prop>()));
+        Vector3? Ground(Vector3 p) => nav.Snap(heights == null ? p : p with { Y = TerrainCell.Sample(heights, p.X, p.Z) }, out _, out var on, true) ? on : null;
+        foreach (var spot in cover.Spots(me.Position, mobs, Ground))
+        {
+            var route = nav.Route(me.Position, spot, out bool complete);
+            if (route.Count < 2 || !complete || new RouteFollower(route).Total > Cover.MostRun) continue;
+            int seen = mobs.Count(m => PointNavigation.Distance(m, spot) <= Cover.LooksThisFar && !cover.Hidden(m, spot));
+            Console.WriteLine(seen == 0 ? "Running to cover." : $"Nowhere fully hidden: running to where {seen} can see.");
+            string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+            using var hud = new Hud();
+            Travel.FocusGame(reader.Window);
+            new LiveSteer(reader, nav, sector, spot, false, "cover", pulse, Path.Combine(logs, $"flee-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl"), hud,
+                run: true, countdown: false, known: known).Run();
+            Console.WriteLine("Reached cover.");
+            return 0;
+        }
+        throw new InvalidOperationException("No way to run to.");
+    }
+
     /// <summary>What can stand in a shot's way in a wasteland cell, from its spawn file. Null elsewhere: the target bar alone decides.</summary>
     private static ShotLine? Shots(PlayerReader reader)
     {

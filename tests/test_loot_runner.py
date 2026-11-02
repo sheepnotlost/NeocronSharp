@@ -126,6 +126,7 @@ class Engine:
         self.distance = 50.
         self.limit = None
         self.backs = []
+        self.flees = []
 
     def nearby(self):
         return [actor(n, distance=self.distance, dead=n in self.dead) for n in ("Rat", "Spider")]
@@ -144,6 +145,10 @@ class Engine:
             self.dead.add(target["name"])
         return f"{target['name']} died. Camera follow stopped." if died else "No damage to it. Camera follow stopped."
 
+    def flee(self, tick):
+        self.seen.append(("flee",))
+        return self.flees.pop(0) if self.flees else "Running to cover.\nReached cover."
+
     def box(self, target, tick):
         self.seen.append(("box", target["name"]))
         self.detect.shut = False
@@ -161,7 +166,7 @@ class Sequence(LootRunner):
         return None
 
     def my_health(self):
-        return self.health_readings.pop(0) if self.health_readings else (900, 900)
+        return self.judge(self.health_readings.pop(0) if self.health_readings else (900, 900))
 
 
 class Detect:
@@ -177,11 +182,12 @@ class Detect:
 
 
 class SequenceTests(unittest.TestCase):
-    def run_sequence(self, fights, health=(), names=("Rat", "Spider"), distance=50., walks=(), boxes=(), stuck=False):
+    def run_sequence(self, fights, health=(), names=("Rat", "Spider"), distance=50., walks=(), boxes=(), stuck=False, flees=()):
         seen, events, clock = [], [], {"now": 0.}
         engine = Engine(fights, seen)
         detect = Detect()
         engine.distance, engine.walks, engine.boxes, engine.detect = distance, list(walks), list(boxes), detect
+        engine.flees = list(flees)
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
         control = Control()
@@ -306,6 +312,28 @@ class SequenceTests(unittest.TestCase):
         seen, _ = self.run_sequence([False, True, True], distance=9000.)
         self.assertEqual([s for s in seen if s[0] == "walk"][:2], [("walk", "Rat", 4000), ("walk", "Rat", 2000)])
         self.assertIn(("walk", "Spider", 2000), seen)
+
+    def test_low_health_runs_to_cover_then_hunts_on(self):
+        seen, events = self.run_sequence([True, True], [(300, 900), (400, 900), (700, 900)], walks=[])
+        self.assertIn(("flee",), seen)
+        self.assertLess(seen.index(("flee",)), seen.index(("fight", "Spider")))
+        self.assertIn("Healed", " ".join(str(e[1]) for e in events))
+        self.assertIn("2 killed", events[-1][1])
+
+    def test_health_that_never_comes_back_ends_the_hunt(self):
+        seen, events = self.run_sequence([True], [(300, 900)]*700, names=("Rat",))
+        self.assertEqual(seen.count(("flee",)), loot_runner.FLEE_TRIES)
+        self.assertIn("did not help", events[-1][1])
+
+    def test_being_caught_in_cover_runs_again(self):
+        seen, _ = self.run_sequence([True], [(300, 900), (320, 900), (200, 900), (800, 900)], names=("Rat",))
+        self.assertEqual(seen.count(("flee",)), 2)
+
+    def test_a_stop_while_running_ends_the_hunt(self):
+        low = [(300, 900)]*3
+        seen, events = self.run_sequence([True], low, names=("Rat",), flees=["Stopped: Neocron lost focus."])
+        self.assertEqual(seen.count(("flee",)), 1)
+        self.assertIn("lost focus", events[-1][1])
 
     def test_stops_on_low_health(self):
         profile = default_profile()
