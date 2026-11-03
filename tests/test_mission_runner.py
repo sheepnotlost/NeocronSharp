@@ -1,10 +1,11 @@
-"""TL60 jobs: what it reads, what it clicks, and when it stops (no engine, no game input)."""
+"""TL60 and TL130 jobs: what it reads, what it clicks, and when it stops (no engine, no game input)."""
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+from PIL import Image
 
 import mission_runner
 from mission_runner import MissionRunner, answer, dialog_box, dialog_open, first_option, is_job, place, rn_open, rn_page, still_open, text_lines
@@ -24,6 +25,25 @@ def blank():
 def button(frame, point):
     x, y = place(frame, point)
     frame[y-14:y+14, x-30:x+30] = BRIGHT
+
+
+def rn_screenshot(name, left, top, size=(1440, 2560)):
+    """A screenshot of the R.N. window that starts left and top pixels inside it, where the window would be."""
+    frame = np.zeros((*size, 3), np.uint8)
+    picture = np.asarray(Image.open(Path(__file__).parent / "fixtures" / name).convert("RGB"))
+    x, y = place(frame, (left, top))
+    frame[y:y+picture.shape[0], x:x+picture.shape[1]] = picture
+    return frame
+
+
+def difficulty_frame(easy=False, size=(1440, 2560)):
+    """The supplied screenshot's selected-level label and first two difficulty rows."""
+    frame = np.zeros((*size, 3), np.uint8)
+    name = "mission_difficulty_easy.png" if easy else "mission_difficulty.png"
+    panel = np.asarray(Image.open(Path(__file__).parent / "fixtures" / name).convert("RGB"))
+    x, y = place(frame, (468, 105))
+    frame[y:y+panel.shape[0], x:x+panel.shape[1]] = panel
+    return frame
 
 
 WIDTH = mission_runner.TALK_WIDE
@@ -46,6 +66,30 @@ def words(frame, top, left, wide=400, high=23):
 
 
 class ReadingTests(unittest.TestCase):
+    def test_selected_difficulty_matches_the_whole_easy_label(self):
+        for size in ((1440, 2560), (1080, 1920), (768, 1366)):
+            self.assertFalse(mission_runner.level_selected(difficulty_frame(size=size), 1))
+            self.assertTrue(mission_runner.level_selected(difficulty_frame(easy=True, size=size), 1))
+        self.assertFalse(mission_runner.level_selected(blank(), 1))
+
+    def test_very_hard_is_selected_only_once_its_label_shows(self):
+        hovered, listed = rn_screenshot("very_hard_hovered.png", 20, 8), rn_screenshot("tl130_list.png", 7, 13)
+        self.assertFalse(mission_runner.level_selected(hovered, 4))
+        selected = hovered.copy()
+        selected[place(selected, (0, 105))[1]:place(selected, (0, 120))[1]] = listed[place(listed, (0, 105))[1]:place(listed, (0, 120))[1]]
+        self.assertTrue(mission_runner.level_selected(selected, 4))
+        self.assertFalse(mission_runner.level_selected(selected, 3))       # hard, not very hard
+
+    def test_the_tl130_research_job_is_found_by_width_and_number(self):
+        frame = rn_screenshot("tl130_list.png", 7, 13)
+        job = mission_runner.JOBS["TL130"]
+        widths = [mission_runner.title_width(frame, row) for row in range(mission_runner.ROWS)]
+        self.assertEqual([mission_runner.wide_enough(width, job) for width in widths], [False, True, True, False, False, False])
+        self.assertTrue(is_job("Tt 130", widths[2], job))
+        self.assertFalse(is_job("", widths[1], job))                       # TL150, which the OCR leaves blank
+        self.assertFalse(is_job("Tt 130 Carztructian", widths[5], job))
+        self.assertFalse(is_job("Tt 130", .144, mission_runner.JOBS["TL60"]))
+
     def test_pages_by_their_buttons(self):
         self.assertIsNone(rn_page(blank()))
         factions, jobs, accepted = blank(), blank(), blank()
@@ -487,10 +531,30 @@ class SelectTests(unittest.TestCase):
         run.accept = lambda: None
         run.detector = type("Detector", (), {"text_reader": lambda self: None})()
         rows = iter([None, 2])
-        with patch.object(mission_runner, "job_row", lambda reader, frame: next(rows)), \
+        with patch.object(mission_runner, "job_row", lambda reader, frame, job: next(rows)), \
                 patch.object(mission_runner, "row_is_blue", lambda frame, row: True), \
                 patch.object(mission_runner, "rn_page", lambda frame: pages.pop(0) if len(pages) > 1 else "list"):
             self.assertTrue(run.choose_job())
+
+    def test_easy_is_retried_until_the_selected_label_changes(self):
+        run = Run(FakeEngine([]), {})
+        tapped = []
+        run.tap = tapped.append
+        run.move = lambda point: None
+        before, after = difficulty_frame(), difficulty_frame(easy=True)
+        run.frame = lambda: after if len(tapped) >= 2 else before
+        run.select_level()
+        self.assertEqual(tapped, [mission_runner.level_point(1)]*2)
+
+    def test_easy_that_never_selects_stops(self):
+        run = Run(FakeEngine([]), {})
+        tapped = []
+        run.tap = tapped.append
+        run.move = lambda point: None
+        run.frame = lambda: difficulty_frame()
+        with self.assertRaisesRegex(Interrupted, "Easy difficulty did not select"):
+            run.select_level()
+        self.assertEqual(tapped, [mission_runner.level_point(1)]*mission_runner.SELECT_TRIES)
 
     def choose(self, selected_after):
         run = Run(FakeEngine([]), {})
@@ -499,7 +563,7 @@ class SelectTests(unittest.TestCase):
         run.frame = blank
         run.wait_for_page = lambda page, seconds: True
         run.detector = type("Detector", (), {"text_reader": lambda self: None})()
-        with patch.object(mission_runner, "job_row", lambda reader, frame: 2), \
+        with patch.object(mission_runner, "job_row", lambda reader, frame, job: 2), \
                 patch.object(mission_runner, "row_is_blue", lambda frame, row: len(tapped) >= selected_after):
             run.choose_job()
         return tapped
@@ -544,6 +608,9 @@ class TerminalTests(unittest.TestCase):
         run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=engine)
         run.open_missions = lambda: next(opens)
         run.choose_job = lambda: True
+        run.select_level = lambda: None
+        run.download_missions = lambda: None
+        run.tap = lambda point: None
         run.wait_for_page = lambda page, seconds: True
         run.hide_pointer = lambda: None
         run.take_job({})
@@ -558,6 +625,35 @@ class TerminalTests(unittest.TestCase):
     def test_missing_twice_stops(self):
         with self.assertRaisesRegex(Interrupted, "did not open"):
             self.job(iter([None, None]))
+
+    def test_every_download_verifies_easy_even_when_a_list_was_remembered(self):
+        for page in ("factions", "list"):
+            run = Run(FakeEngine([]), {})
+            run.take_job = MissionRunner.take_job.__get__(run)
+            run.open_missions = lambda: page
+            steps = []
+            run.tap = steps.append
+            run.wait_for_page = lambda wanted, seconds: steps.append(wanted) or True
+            run.select_level = lambda: steps.append("verify Easy")
+            run.download_missions = lambda: steps.append("download verified")
+            run.choose_job = lambda: steps.append("choose TL60 Research Job") or True
+            run.take_job({})
+            expected = ([mission_runner.BACK, "factions"] if page == "list" else [])
+            self.assertEqual(steps, expected + ["verify Easy", "download verified", "choose TL60 Research Job", "accepted"])
+
+    def test_failed_easy_selection_never_downloads_or_accepts(self):
+        run = Run(FakeEngine([]), {})
+        run.take_job = MissionRunner.take_job.__get__(run)
+        run.open_missions = lambda: "factions"
+        run.move = lambda point: None
+        run.frame = lambda: difficulty_frame()
+        tapped = []
+        run.tap = tapped.append
+        run.choose_job = lambda: self.fail("Must not choose a job before Easy is selected")
+        with self.assertRaisesRegex(Interrupted, "Easy difficulty did not select"):
+            run.take_job({})
+        self.assertNotIn(mission_runner.DOWNLOAD, tapped)
+        self.assertNotIn(mission_runner.ACCEPT, tapped)
 
     def test_the_tab_is_clicked_as_soon_as_the_window_shows(self):
         run = MissionRunner(default_profile(), Backend(), Control(), lambda *a: None, detector=object(), engine=FakeEngine([]))
@@ -577,6 +673,49 @@ class TerminalTests(unittest.TestCase):
         run.detector = type("Detector", (), {"text_reader": lambda self: None})()
         run.ui_visible = lambda reader: False
         self.assertIsNone(run.open_missions())
+
+
+class DownloadTests(unittest.TestCase):
+    def download(self, pages, loaded=True):
+        run = Run(FakeEngine([]), {})
+        run.frame = lambda: None
+        tapped, waits = [], []
+        run.tap = tapped.append
+        run.wait_for_page = lambda page, seconds: waits.append(page) or loaded
+        with patch.object(mission_runner, "rn_page", side_effect=pages):
+            run.download_missions()
+        return tapped, waits
+
+    def test_download_that_only_highlights_the_button_is_retried(self):
+        self.assertEqual(self.download(["factions"]*5+["list"]), ([mission_runner.DOWNLOAD]*2, []))
+
+    def test_download_that_opens_immediately_is_clicked_once(self):
+        self.assertEqual(self.download(["list"]), ([mission_runner.DOWNLOAD], []))
+
+    def test_loading_page_waits_without_clicking_again(self):
+        self.assertEqual(self.download(["accepted"]), ([mission_runner.DOWNLOAD], ["list"]))
+
+    def test_loading_timeout_stops(self):
+        with self.assertRaisesRegex(Interrupted, "download started but the list did not appear"):
+            self.download(["accepted"], loaded=False)
+
+    def test_unresponsive_download_stops_after_three_clicks(self):
+        run = Run(FakeEngine([]), {})
+        run.frame = blank
+        tapped = []
+        run.tap = tapped.append
+        with patch.object(mission_runner, "rn_page", return_value="factions"), self.assertRaisesRegex(Interrupted, "did not respond"):
+            run.download_missions()
+        self.assertEqual(tapped, [mission_runner.DOWNLOAD]*mission_runner.SELECT_TRIES)
+
+    def test_focus_loss_stops_before_another_download_click(self):
+        run = Run(FakeEngine([]), {})
+        tapped = []
+        run.tap = tapped.append
+        run.frame = lambda: (_ for _ in ()).throw(Interrupted("Game lost focus."))
+        with self.assertRaisesRegex(Interrupted, "Game lost focus"):
+            run.download_missions()
+        self.assertEqual(tapped, [mission_runner.DOWNLOAD])
 
 
 class QuickTalkTests(unittest.TestCase):

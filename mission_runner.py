@@ -1,7 +1,7 @@
-"""TL60 Research Jobs in a faction headquarters, one after another until Stop.
+"""TL60 or TL130 Research Jobs in a faction headquarters, one after another until Stop.
 
-Start at the R.N. terminal with the crosshair on it. Each job: right-click the terminal, Missions, Easy, Download Missions,
-Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then the faction supply managers until one pays, and back.
+Start at the R.N. terminal with the crosshair on it. Each job: right-click the terminal, Missions, Easy or Very Hard, Download
+Missions, Next until the job shows, Accept, then the nearest recruiter, then the faction supply managers until one pays, and back.
 traversal.exe does the walking, the aiming and the right-clicks; this file works the game's windows.
 The R.N. window is 640x480 pixels, centred, whatever the client's size or UI scale, so its places are pixels from its corner.
 A conversation sits where the UI scale puts it, so it is found by its colour. Tab closes the menus. Esc only ever closes a
@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import threading
 import time
+from collections import namedtuple
 from datetime import datetime
 
 import numpy as np
@@ -27,15 +28,15 @@ from vision import cv2
 tt = loot_runner.tt
 RN_WIDE, RN_HIGH = 640, 480
 MISSIONS_TAB = (400, 21)
-EASY = (481, 175)
+LEVEL_X, LEVEL_Y, LEVEL_STEP = 481, 159, 16     # the difficulty list: very easy, easy, normal, hard, very hard
 DOWNLOAD = (121, 441)
 ACCEPT = (96, 441)
 NEXT = (196, 441)
+BACK = (520, 441)
 DOWNLOAD_SHOWS, NEXT_SHOWS, BACK_SHOWS = (56, 441), (227, 441), (560, 441)     # beside each button's word
 ROWS, ROW_TOP, ROW_STEP = 6, 173, 15
 TITLE, NUMBERS = (45, 340), (43, 507)
 ROW_CLICK_X, ROW_BLUE_X = 173, 253
-RESEARCH_WIDE = (.132, .156)     # of the window: TL60 Research Job .144, TL60 Construction Job .170
 TALK_WIDE = 1550             # pixels: a conversation on the 2560x1440 client at UI scale 1.7
 TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
 TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
@@ -80,7 +81,11 @@ SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
 SPEECH_INDENT = .0013        # of the conversation's width: an option starts with a ">", so it never lines up with the words above
-JOB_MARK = re.compile(r"36|6[0O]{3}|T[^ ]{0,2}[6G][0O]")
+Job = namedtuple("Job", "name level row wide mark")
+JOBS = {      # wide: of the window, the title. The OCR reads 130 well and 150 not at all (screenshot, 3 Nov)
+    "TL60": Job("TL60 Research Job", "Easy", 1, (.132, .156), re.compile(r"36|6[0O]{3}|T[^ ]{0,2}[6G][0O]")),   # Construction .170
+    "TL130": Job("TL130 Research Job", "Very Hard", 4, (.146, .162), re.compile(r"1[3B][0O]")),             # .153, as is TL150; Construction .181
+}
 
 
 def place(frame, point):
@@ -106,6 +111,29 @@ def lit(frame, point):
     x, y = point
     box = area(frame, x-7, y-4, x+7, y+4).astype(int)
     return ((box[..., 1] > 200) & (box[..., 1]-box[..., 0] > 60)).mean() > .5
+
+
+def label_pixels(cell):
+    """The near-white letters, trimmed so labels at different places can be compared."""
+    mask = cell.min(axis=2) > 120
+    rows, columns = mask.nonzero()
+    if not rows.size:
+        return None
+    return mask[rows.min():rows.max()+1, columns.min():columns.max()+1]
+
+
+def level_point(row):
+    return LEVEL_X, LEVEL_Y+row*LEVEL_STEP
+
+
+def level_selected(frame, row):
+    """Match the whole selected-level label to the row's, not the 'easy' in 'very easy' or the 'hard' in 'very hard'.
+    Both labels use the same fixed-size font. Hovering a row does not change the selected label.
+    """
+    top = LEVEL_Y-6+row*LEVEL_STEP
+    selected = label_pixels(area(frame, 468, 105, 572, 119))
+    level = label_pixels(area(frame, 468, top, 572, top+13))
+    return selected is not None and level is not None and np.array_equal(selected, level)
 
 
 def rn_page(frame):
@@ -203,13 +231,14 @@ def title_width(frame, row):
     return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/RN_WIDE
 
 
-def wide_enough(width):
-    return RESEARCH_WIDE[0] <= width <= RESEARCH_WIDE[1]
+def wide_enough(width, job):
+    return job.wide[0] <= width <= job.wide[1]
 
 
-def is_job(words, width):
-    """The two TL60 jobs part by width, and the Research jobs by their numbers. The OCR rarely gets a whole row right."""
-    return wide_enough(width) and JOB_MARK.search(words) is not None
+def is_job(words, width, job=JOBS["TL60"]):
+    """A Research and a Construction job part by width, and the Research jobs of a level by their numbers. The OCR rarely
+    gets a whole row right."""
+    return wide_enough(width, job) and job.mark.search(words) is not None
 
 
 def list_picture(frame):
@@ -221,9 +250,9 @@ def row_words(reader, frame, row):
     return " ".join(word[0] for image in (cell.max(axis=2), cell.min(axis=2)) for word in reader.read_words(image))
 
 
-def job_row(reader, frame):
+def job_row(reader, frame, job):
     """The first row of the right width that reads as a job. Width first: it costs nothing, and reading a row takes two OCRs."""
-    return next((row for row in range(ROWS) if wide_enough(title_width(frame, row)) and is_job(row_words(reader, frame, row), title_width(frame, row))), None)
+    return next((row for row in range(ROWS) if wide_enough(title_width(frame, row), job) and is_job(row_words(reader, frame, row), title_width(frame, row), job)), None)
 
 
 def letters(text):
@@ -347,9 +376,10 @@ class Engine(loot_runner.Engine):
 
 
 class MissionRunner(LootRunner):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, job="TL60", **kwargs):
         kwargs.setdefault("engine", None)
         super().__init__(*args, **kwargs)
+        self.job = JOBS[job]
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -413,7 +443,7 @@ class MissionRunner(LootRunner):
         """True when one was accepted."""
         for number in range(MOST_PAGES):
             frame = self.frame()
-            row = job_row(self.reader(), frame)
+            row = job_row(self.reader(), frame, self.job)
             if row is not None:
                 for attempt in range(SELECT_TRIES):
                     self.tap((ROW_CLICK_X, row_y(row)))
@@ -428,6 +458,34 @@ class MissionRunner(LootRunner):
             if not self.wait_for_page("list", LIST_SLOW):
                 raise Interrupted("The mission list went away.")
         return False
+
+    def select_level(self):
+        """A click may only highlight the row: require the selected-level label to change."""
+        for attempt in range(SELECT_TRIES):
+            self.tap(level_point(self.job.row))
+            self.move(place(self.frame(), (600, 400)))   # Keep the pointer off the letters being compared.
+            for look in range(5):
+                self.wait(.1)
+                if level_selected(self.frame(), self.job.row):
+                    return
+        raise Interrupted(f"{self.job.level} difficulty did not select; missions were not downloaded.")
+
+    def download_missions(self):
+        """Retry a missed Download click only while its original page is still visible."""
+        for attempt in range(SELECT_TRIES):
+            self.tap(DOWNLOAD)
+            for look in range(5):
+                self.wait(.1)
+                page = rn_page(self.frame())
+                if page == "list":
+                    return
+                if page != "factions":
+                    # The button worked; let the download finish without clicking into the next page.
+                    if self.wait_for_page("list", 15):
+                        return
+                    raise Interrupted("The mission download started but the list did not appear.")
+            self.emit("log", f"Download did not open the list (click {attempt+1} of {SELECT_TRIES}).")
+        raise Interrupted("Download Missions did not respond after three clicks.")
 
     def accept(self):
         """Until it takes: a row turns blue before its details load, and a click before they have is ignored (live, 2 Nov)."""
@@ -460,14 +518,19 @@ class MissionRunner(LootRunner):
                 break
         else:
             raise Interrupted("The terminal did not open: stand at it with the crosshair on it.")
-        if page == "factions":
-            self.tap(EASY)
-            self.wait(.2)
-            self.tap(DOWNLOAD)
-            if not self.wait_for_page("list", 15):
-                raise Interrupted("The mission list did not download.")
+        if page == "list":
+            self.tap(BACK)
+            if not self.wait_for_page("factions", 5):
+                raise Interrupted("Could not return to the mission difficulty selection.")
+        self.emit("status", f"Selecting {self.job.level} difficulty.")
+        self.select_level()
+        self.emit("log", f"{self.job.level} difficulty confirmed.")
+        self.emit("status", f"Downloading {self.job.level} missions.")
+        self.download_missions()
+        self.emit("log", f"{self.job.level} mission list downloaded.")
+        self.emit("status", f"Searching for {self.job.name}.")
         if not self.choose_job():
-            raise Interrupted(f"No TL60 Research Job in {MOST_PAGES} pages.")
+            raise Interrupted(f"No {self.job.name} in {MOST_PAGES} pages.")
         if not self.wait_for_page("accepted", 10):
             raise Interrupted("The job was not accepted.")
         self.job_open = True
@@ -660,7 +723,7 @@ class MissionRunner(LootRunner):
                 continue
             tries = 0
             self.completed += 1
-            self.emit("log", f"TL60 Research Job {self.completed} done.")
+            self.emit("log", f"{self.job.name} {self.completed} done.")
 
     def run(self):
         try:

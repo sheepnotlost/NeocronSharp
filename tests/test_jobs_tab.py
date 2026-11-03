@@ -24,7 +24,7 @@ class JobsTabTests(unittest.TestCase):
         self.frame = tk.Frame(self.root)
         self.frame.pack()
         self.busy = False
-        self.started = []
+        self.started, self.jobs = [], []
         self.runner = Runner()
         self.tab = jobs_tab.JobsTab(self.frame, self.root, other_live=lambda: self.busy, mission_runner=self.make)
 
@@ -32,17 +32,18 @@ class JobsTabTests(unittest.TestCase):
         self.tab.close()
         self.root.destroy()
 
-    def make(self, emit, control):
+    def make(self, emit, control, job):
         self.started.append(control)
+        self.jobs.append(job)
         return self.runner
 
     def state(self, button):
         return str(button.cget("state"))
 
-    def counted(self):
+    def counted(self, button=None):
         waiting = []
         with patch.object(self.tab.root, "after", lambda ms, call, *args: waiting.append(call) or "later"):
-            self.tab.start()
+            (button or self.tab.start_button).invoke()
         return waiting[0]
 
     def test_the_countdown_comes_before_the_runner_and_the_stop_is_live(self):
@@ -54,7 +55,16 @@ class JobsTabTests(unittest.TestCase):
             begin()
             self.tab.event(*self.tab.queue.get(timeout=5))
         self.assertEqual(self.started, [self.tab.control])
+        self.assertEqual(self.jobs, ["TL60"])
         self.assertTrue(self.runner.ran.wait(5))
+
+    def test_the_tl130_button_runs_tl130_jobs_and_both_wait_while_one_runs(self):
+        begin = self.counted(self.tab.tl130_button)
+        self.assertEqual([self.state(b) for b in (self.tab.start_button, self.tab.tl130_button)], ["disabled"]*2)
+        with patch.object(jobs_tab.tt, "build_tool", lambda progress=None: None), patch.object(jobs_tab.clients, "focus", lambda: True):
+            begin()
+            self.tab.event(*self.tab.queue.get(timeout=5))
+        self.assertEqual(self.jobs, ["TL130"])
 
     def test_a_fresh_download_builds_the_engine_first(self):
         built = []
@@ -99,7 +109,7 @@ class JobsTabTests(unittest.TestCase):
         self.assertEqual(self.state(self.tab.start_button), "normal")
 
     def test_a_runner_that_cannot_start_says_so(self):
-        def broken(emit, control):
+        def broken(emit, control, job):
             raise ImportError("no module")
         self.tab.mission_runner = broken
         self.tab.control = jobs_tab.Control()

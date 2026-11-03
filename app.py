@@ -995,12 +995,12 @@ class App:
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
 
-    def mission_runner(self,emit,control):
+    def mission_runner(self,emit,control,job="TL60"):
         from mission_runner import MissionRunner
         import clients,os
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)
-        return MissionRunner(self.profile,self.backend,control,emit)
+        return MissionRunner(self.profile,self.backend,control,emit,job=job)
 
     def ensure_bound(self):
         title, size = self.backend.bind_foreground()

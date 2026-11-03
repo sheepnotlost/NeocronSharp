@@ -1,4 +1,4 @@
-"""TL 60 Job Loop, a sub-tab of Research: runs mission_runner.py with its own buttons, not Start."""
+"""TL 60 Job Loop, a sub-tab of Research: runs mission_runner.py for TL60 or TL130 jobs with its own buttons, not Start."""
 import queue
 import threading
 import tkinter as tk
@@ -20,6 +20,7 @@ class JobsTab:
         self.mission_runner = mission_runner  # makes a MissionRunner(emit, control) bound to the game
         self.control = None                 # the running loop's Control
         self.countdown = None               # its 5 s countdown
+        self.job = "TL60"                   # which jobs it runs
         self.queue = queue.Queue()
         self.closed = False
 
@@ -31,9 +32,10 @@ class JobsTab:
         ttk.Label(host, textvariable=self.how, wraplength=900).grid(row=0, column=0, sticky="ew")
         buttons = ttk.Frame(host)
         buttons.grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        self.start_button = ttk.Button(buttons, text="Start job loop", command=self.start)
+        self.start_button = ttk.Button(buttons, text="Start TL60 job loop", command=lambda: self.start("TL60"))
+        self.tl130_button = ttk.Button(buttons, text="Start TL130 job loop", command=lambda: self.start("TL130"))
         self.stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
-        for button in (self.start_button, self.stop_button):
+        for button in (self.start_button, self.tl130_button, self.stop_button):
             button.pack(side="left", padx=(0, 6))
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
@@ -54,7 +56,8 @@ class JobsTab:
         return self.control is not None
 
     def update_buttons(self):
-        self.start_button.configure(state="normal" if self.mission_runner and not self.steering() else "disabled")
+        for button in (self.start_button, self.tl130_button):
+            button.configure(state="normal" if self.mission_runner and not self.steering() else "disabled")
         self.stop_button.configure(state="normal" if self.steering() else "disabled")
 
     def append(self, text):
@@ -89,14 +92,15 @@ class JobsTab:
             self.control = None
             self.update_buttons()
 
-    def start(self):
+    def start(self, job="TL60"):
         if self.steering():
             return
+        self.job = job
         if self.other_live():
             self.say("A walk, follow, camera or hunt is running. Stop it first.")
             return
         self.control = Control()
-        self.say("Starting in 5 s: stand at the terminal with the crosshair on it.")
+        self.say(f"{job} jobs start in 5 s: stand at the terminal with the crosshair on it.")
         self.update_buttons()
         self.countdown = self.root.after(5000, self.begin)
 
@@ -112,7 +116,7 @@ class JobsTab:
             return
         try:
             clients.focus()         # no need to have clicked into the game in time
-            runner = self.mission_runner(lambda kind, payload: self.queue.put((kind, payload)), self.control)
+            runner = self.mission_runner(lambda kind, payload: self.queue.put((kind, payload)), self.control, self.job)
             threading.Thread(target=runner.run, daemon=True, name="jobs").start()
         except Exception as exc:
             self.event("done", f"The job loop could not start: {exc}")
