@@ -650,6 +650,7 @@ class QuickTalkTests(unittest.TestCase):
         run.open_talk = lambda person: None
         looks = []
         run.read_option = lambda: looks.append(run.clock()) or None
+        run.close_talk = lambda: None
         run.frame = lambda: self.screen(216)
         now = iter(x*.1 for x in range(1000))
         run.clock = lambda: next(now)
@@ -658,11 +659,43 @@ class QuickTalkTests(unittest.TestCase):
             run.quick_talk(actor("Recruiter - Near"))
         self.assertGreater(looks[0], mission_runner.QUICK_READ)
 
+    def test_a_screen_with_nothing_to_answer_is_closed_and_opened_again(self):
+        run = Run(FakeEngine([]), {})
+        opened, closed, clicks = [], [], []
+        run.open_talk = lambda person: opened.append(person["name"])
+        run.move = lambda point: None
+        run.read_option = lambda: None
+        shown = [self.screen(216), self.screen(216, 223, 223), blank()]
+        run.frame = lambda: shown[0]
+        run.close_talk = lambda: closed.append(shown.pop(0))
+        now = iter(x*.1 for x in range(100000))
+        run.clock = lambda: next(now)
+
+        def click(point):
+            clicks.append(point)
+            shown.pop(0)
+        run.click = click
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+            run.quick_talk(actor("Recruiter - Near"))
+        self.assertEqual((len(opened), len(closed), clicks), (2, 1, [(262, 422)]))
+
+    def test_esc_is_pressed_only_on_an_open_conversation(self):
+        for shown, presses in (([True, True, False], ["esc"]), ([False], [])):
+            run = Run(FakeEngine([]), {})
+            pressed = []
+            run.press = pressed.append
+            run.frame = blank
+            with patch.object(mission_runner, "dialog_open", lambda frame: shown.pop(0)):
+                run.close_talk()
+            self.assertEqual(pressed, presses)
+
     def test_stops_when_it_never_ends(self):
         run = Run(FakeEngine([]), {})
         run.open_talk = lambda person: None
         run.frame = lambda: self.screen(216)
         run.dialog_lines = lambda: None
+        run.close_talk = lambda: None
         now = iter(range(1000))
         run.clock = lambda: next(now)
         run.quick_talk = MissionRunner.quick_talk.__get__(run)

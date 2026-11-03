@@ -4,7 +4,8 @@ Start at the R.N. terminal with the crosshair on it. Each job: right-click the t
 Next until a TL60 Research Job shows, Accept, then the nearest recruiter, then the faction supply managers until one pays, and back.
 traversal.exe does the walking, the aiming and the right-clicks; this file works the game's windows.
 The R.N. window is 640x480 pixels, centred, whatever the client's size or UI scale, so its places are pixels from its corner.
-A conversation sits where the UI scale puts it, so it is found by its colour. No Esc: Tab closes the menus.
+A conversation sits where the UI scale puts it, so it is found by its colour. Tab closes the menus. Esc only ever closes a
+conversation with nothing to answer, which the user said to do (2 Nov).
 """
 import difflib
 import json
@@ -52,6 +53,8 @@ QUICK_MOST = 10              # seconds a recruiter may take
 QUICK_READ = 1               # seconds of seeing no option before the OCR looks: all options are up by then
 QUICK_PARK = .75             # of the panel, both ways: below the words, where the pointer can't touch them
 QUICK_LEAVE = .06            # seconds the pointer stays after a click, for the game to see the button come up on the option
+QUICK_STUCK = 3              # seconds with nothing to answer before the conversation is closed and opened again
+QUICK_REOPEN = 2             # times, in one talk
 SERVE_DONE = "<<done>>"
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
@@ -536,6 +539,17 @@ class MissionRunner(LootRunner):
         self.click(point)
         self.wait(QUICK_LEAVE)
 
+    def close_talk(self):
+        """Esc, and only on an open conversation: some screens show words and no option, and no click moves them on (live, 2 Nov)."""
+        if not dialog_open(self.frame()):
+            return
+        self.press("esc")
+        for look in range(20):
+            self.wait(.1)
+            if not dialog_open(self.frame()):
+                return
+        raise Interrupted("Esc did not close the conversation.")
+
     def read_option(self):
         """Where the OCR finds the option to click, for a screen the pixels make nothing of."""
         lines = self.dialog_lines()
@@ -547,7 +561,7 @@ class MissionRunner(LootRunner):
         The pointer leaves after each click: left on the words it joins their lines into one (live, 2 Nov)."""
         self.hide_pointer()
         self.open_talk(person)
-        ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
+        ends, clicked, at, reopened = self.clock()+QUICK_MOST, None, self.clock(), 0
         box = dialog_box(self.frame())
         while box is not None and self.clock() < ends:
             frame = self.frame()
@@ -556,6 +570,15 @@ class MissionRunner(LootRunner):
             point = first_option(frame, box)
             if point is None and self.clock() >= at+QUICK_READ:
                 point = self.read_option()
+            if point is None and self.clock() >= at+QUICK_STUCK and reopened < QUICK_REOPEN:
+                self.emit("log", f"{person['name']} gave nothing to answer: closing the conversation and opening it again.")
+                self.close_talk()
+                self.hide_pointer()
+                self.open_talk(person)
+                reopened += 1
+                ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
+                box = dialog_box(self.frame())
+                continue
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
                 self.click_option(point)
                 self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
@@ -598,6 +621,7 @@ class MissionRunner(LootRunner):
                 break
             self.click_option(point)
             self.wait(RECOVER_WAIT)
+        self.close_talk()
         self.hide_pointer()
 
     def note_slip(self, error):

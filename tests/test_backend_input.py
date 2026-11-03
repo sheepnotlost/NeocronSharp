@@ -19,6 +19,10 @@ class BackendInputTests(unittest.TestCase):
         self.assertEqual((event.mi.dx, event.mi.dy), (-37, 5))
         self.assertEqual(event.mi.dwFlags, 0x0001)        # MOUSEEVENTF_MOVE, not absolute
 
+    def test_esc_is_a_scan_code_key(self):
+        self.backend.key("esc", True)
+        self.assertEqual(self.sent[-1].ki.wScan, 0x01)
+
     def test_w_and_tab_are_scan_code_keys_and_tracked_for_release(self):
         self.backend.key("w", True)
         self.backend.key("tab", True)
