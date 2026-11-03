@@ -321,6 +321,7 @@ class SelectTests(unittest.TestCase):
         tapped = []
         run.tap = tapped.append
         run.frame = blank
+        run.wait_for_page = lambda page, seconds: True
         run.detector = type("Detector", (), {"text_reader": lambda self: None})()
         with patch.object(mission_runner, "job_row", lambda reader, frame: 2), \
                 patch.object(mission_runner, "row_is_blue", lambda frame, row: len(tapped) >= selected_after):
@@ -334,6 +335,21 @@ class SelectTests(unittest.TestCase):
     def test_a_row_that_never_selects_stops_without_accepting(self):
         with self.assertRaisesRegex(Interrupted, "did not select"):
             self.choose(99)
+
+    def accept(self, takes):
+        run = Run(FakeEngine([]), {})
+        tapped = []
+        run.tap = tapped.append
+        run.wait_for_page = lambda page, seconds: len(tapped) >= takes
+        run.accept()
+        return tapped
+
+    def test_accept_is_clicked_until_it_takes(self):
+        self.assertEqual(self.accept(3), [mission_runner.ACCEPT]*3)
+
+    def test_accept_that_never_takes_stops(self):
+        with self.assertRaisesRegex(Interrupted, "not accepted"):
+            self.accept(99)
 
     def test_the_pointer_settles_before_the_click(self):
         run = Run(FakeEngine([]), {})

@@ -56,6 +56,7 @@ OPEN_LOOKS = 40              # tenths of a second for the terminal's window to r
 MISSIONS_EVERY = 8           # looks between clicks on its tab
 OPEN_GIVE_UP = 15            # looks with no window before the right-click counts as missed
 LIST_WAIT = 1.5              # seconds for a new list page to show
+ACCEPT_TRIES, ACCEPT_WAIT = 12, .4
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
@@ -391,7 +392,7 @@ class MissionRunner(LootRunner):
                     for look in range(5):
                         self.wait(.1)
                         if row_is_blue(self.frame(), row):
-                            self.tap(ACCEPT)
+                            self.accept()
                             return True
                 raise Interrupted("The mission row did not select.")
             self.tap(NEXT)
@@ -399,6 +400,14 @@ class MissionRunner(LootRunner):
             if rn_page(self.frame()) != "list":
                 raise Interrupted("The mission list went away.")
         return False
+
+    def accept(self):
+        """Until it takes: a row turns blue before its details load, and a click before they have is ignored (live, 2 Nov)."""
+        for attempt in range(ACCEPT_TRIES):
+            self.tap(ACCEPT)
+            if self.wait_for_page("accepted", ACCEPT_WAIT):
+                return
+        raise Interrupted("The job was not accepted.")
 
     def next_page(self, before):
         """Wait until the list has changed and stopped changing, or LIST_WAIT."""
