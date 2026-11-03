@@ -10,8 +10,11 @@ import difflib
 import json
 import queue
 import re
+import shutil
 import subprocess
 import threading
+import time
+from datetime import datetime
 
 import numpy as np
 
@@ -62,7 +65,14 @@ OPEN_LOOKS = 40              # tenths of a second for the terminal's window to r
 MISSIONS_EVERY = 8           # looks between clicks on its tab
 OPEN_GIVE_UP = 15            # looks with no window before the right-click counts as missed
 LIST_WAIT = 1.5              # seconds for a new list page to show
+LIST_SLOW = 15               # seconds a page of the list may take to download
 ACCEPT_TRIES, ACCEPT_WAIT = 12, .4
+JOB_TRIES = 6                # tries in a row without a job done before the loop gives up
+UNPAID_TRIES = 2             # tries with nobody paying before the job counts as lost: it may have paid unread, and the fee for a new one is small
+ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
+KEPT_PICTURES = 20           # of what went wrong, the oldest written over
+RECOVER_WAIT = .5            # seconds for the next screen, when putting things right
+PAID_WORDS = ("payment", "credits", "quality")
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
@@ -273,13 +283,15 @@ class Engine(loot_runner.Engine):
         if self.server is None or self.server.poll() is not None:
             self.start()
         tt.clear_stop()
-        said = []
+        said, ends = [], time.monotonic()+ASK_MOST
         try:
             self.server.stdin.write("\t".join(args)+"\n")
             self.server.stdin.flush()
             while True:
                 if self.control.stopped.is_set():
                     raise Interrupted("Stopped.")
+                if time.monotonic() >= ends:
+                    raise Interrupted(f"The engine took too long over {args[0]}.")
                 tick()
                 try:
                     line = self.lines.get(timeout=.05)
@@ -338,6 +350,8 @@ class MissionRunner(LootRunner):
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
+        self.job_open = self.recruited = False    # how far this job got, for a try after something went wrong
+        self.unpaid = self.slips = 0
 
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
@@ -408,7 +422,7 @@ class MissionRunner(LootRunner):
                 raise Interrupted("The mission row did not select.")
             self.tap(NEXT)
             self.next_page(list_picture(frame))
-            if rn_page(self.frame()) != "list":
+            if not self.wait_for_page("list", LIST_SLOW):
                 raise Interrupted("The mission list went away.")
         return False
 
@@ -421,12 +435,14 @@ class MissionRunner(LootRunner):
         raise Interrupted("The job was not accepted.")
 
     def next_page(self, before):
-        """Wait until the list has changed and stopped changing, or LIST_WAIT."""
+        """Wait until the list has changed and stopped changing, or LIST_WAIT. Each page downloads first: for a quarter of a
+        second the list is empty and Next is gone, which reads as still and changed (live, 2 Nov)."""
         ends, last = self.clock()+LIST_WAIT, before
         while self.clock() < ends:
             self.wait(.05)
-            now = list_picture(self.frame())
-            if np.array_equal(now, last) and not np.array_equal(now, before):
+            frame = self.frame()
+            now = list_picture(frame)
+            if rn_page(frame) == "list" and np.array_equal(now, last) and not np.array_equal(now, before):
                 return
             last = now
 
@@ -451,6 +467,7 @@ class MissionRunner(LootRunner):
             raise Interrupted(f"No TL60 Research Job in {MOST_PAGES} pages.")
         if not self.wait_for_page("accepted", 10):
             raise Interrupted("The job was not accepted.")
+        self.job_open = True
         self.emit("log", "Job accepted.")
         self.hide_pointer()
 
@@ -504,13 +521,20 @@ class MissionRunner(LootRunner):
             line = answer(lines, self.talk_wide)
             if line is None:
                 raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
-            self.click(line["point"])
+            self.click_option(line["point"])
             for attempt in range(40):      # By its words: the pointer now sits on an option and lights it up.
                 self.wait(.1)
                 now = self.dialog_lines()
                 if now is None or not now or now[0]["text"] != lines[0]["text"]:
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
+
+    def click_option(self, point):
+        """The pointer rests on an option first, or the game only lights it up, and a moment after, for the button to come up on it."""
+        self.move(point)
+        self.wait(SETTLE)
+        self.click(point)
+        self.wait(QUICK_LEAVE)
 
     def read_option(self):
         """Where the OCR finds the option to click, for a screen the pixels make nothing of."""
@@ -520,8 +544,7 @@ class MissionRunner(LootRunner):
 
     def quick_talk(self, person):
         """A recruiter sells nothing and what they say doesn't matter: click the first option as each screen shows it, unread.
-        The pointer rests on the option first, or the game only lights it up, and leaves after each click: left on the words it
-        joins their lines into one (live, 2 Nov)."""
+        The pointer leaves after each click: left on the words it joins their lines into one (live, 2 Nov)."""
         self.hide_pointer()
         self.open_talk(person)
         ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
@@ -534,10 +557,7 @@ class MissionRunner(LootRunner):
             if point is None and self.clock() >= at+QUICK_READ:
                 point = self.read_option()
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
-                self.move(point)
-                self.wait(SETTLE)
-                self.click(point)
-                self.wait(QUICK_LEAVE)
+                self.click_option(point)
                 self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
                 clicked, at = point, self.clock()
             self.wait(.02)
@@ -545,30 +565,76 @@ class MissionRunner(LootRunner):
             raise Interrupted(f"The conversation with {person['name']} did not end.")
 
     def run_job(self, spot):
-        self.take_job(spot)
-        recruiters = self.people("Recruiter")
-        if not recruiters:
-            raise Interrupted("No recruiter here.")
-        self.emit("status", f"Talking to {recruiters[0]['name']}.")
-        self.quick_talk(recruiters[0])
+        """From wherever the last try broke off: taking a new job over an open one fails it, for a fee."""
+        if not self.job_open:
+            self.take_job(spot)
+            self.recruited = False
+        if not self.recruited:
+            recruiters = self.people("Recruiter")
+            if not recruiters:
+                raise Interrupted("No recruiter here.")
+            self.emit("status", f"Talking to {recruiters[0]['name']}.")
+            self.quick_talk(recruiters[0])
+            self.recruited = True
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
             said = " ".join(self.talk(manager)).lower()
-            paid = "payment" in said or "credits" in said
+            paid = any(word in said for word in PAID_WORDS)
             if paid:      # Either may be the one, and it changes from job to job.
                 break
         if not paid:
+            self.recruited = False
+            self.unpaid += 1
+            self.job_open = self.job_open and self.unpaid % UNPAID_TRIES != 0
             raise Interrupted("Neither faction supply manager paid. Are the blueprints in your Inventory? The job is still open.")
+        self.job_open, self.unpaid = False, 0
+
+    def recover(self):
+        """Back in the world from wherever a try stopped: answer any conversation to its end, then Tab the menus away. Never Esc."""
+        for screen in range(MOST_SCREENS):
+            point = self.read_option()
+            if point is None:
+                break
+            self.click_option(point)
+            self.wait(RECOVER_WAIT)
+        self.hide_pointer()
+
+    def note_slip(self, error):
+        """A picture and a line in diagnostics for each: nobody is watching an hour's run."""
+        self.slips += 1
+        name = f"job-slip-{self.slips%KEPT_PICTURES}.png"
+        path = self.save_failure(error)
+        if path is None:
+            return
+        try:
+            shutil.copy(path, path.with_name(name))
+            with open(path.with_name("job-slips.txt"), "a", encoding="utf-8") as notes:
+                notes.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} after {self.completed} jobs: {error} ({name})\n")
+        except OSError:
+            pass
 
     def execute(self):
         self.hide_pointer()
         if not self.people("Recruiter") or not self.people("Faction Supply Manager"):
             raise Interrupted("No recruiters or faction supply managers here: start at the terminal in the headquarters.")
         spot = self.engine.spot()
+        tries = 0
         while True:
             self.checkpoint()
-            self.run_job(spot)
+            try:
+                if tries:
+                    self.recover()
+                self.run_job(spot)
+            except Exception as error:
+                self.checkpoint(True)      # Stop, lost focus and a closed game end the run here. A pause waits.
+                tries += 1
+                if tries >= JOB_TRIES or "pressed" in str(error):
+                    raise
+                self.note_slip(error)
+                self.emit("log", f"{error} Trying again ({tries} of {JOB_TRIES-1}).")
+                continue
+            tries = 0
             self.completed += 1
             self.emit("log", f"TL60 Research Job {self.completed} done.")
 

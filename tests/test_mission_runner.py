@@ -1,5 +1,7 @@
 """TL60 jobs: what it reads, what it clicks, and when it stops (no engine, no game input)."""
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -241,8 +243,15 @@ class Run(MissionRunner):
         events = self.events = []
         super().__init__(default_profile(), Backend(), Control(), lambda kind, payload: events.append((kind, payload)), detector=object(), engine=engine)
         self.said, self.jobs = said, jobs
+        self.screens = []
 
     def hide_pointer(self):
+        pass
+
+    def note_slip(self, error):
+        pass
+
+    def move(self, point):
         pass
 
     def take_job(self, spot):
@@ -305,6 +314,120 @@ class LoopTests(unittest.TestCase):
         self.assertIn("Neither faction supply manager paid", run.events[-1][1])
         self.assertEqual(run.completed, 0)
 
+    def test_a_slip_at_the_recruiter_keeps_the_job_and_tries_again(self):
+        engine = FakeEngine(PEOPLE)
+        run = Run(engine, self.said())
+        talk, tries = run.quick_talk, []
+
+        def slips(person):
+            tries.append(person["name"])
+            if len(tries) == 1:
+                run.job_open = True
+                raise Interrupted("Could not talk to them.")
+            talk(person)
+        run.quick_talk = slips
+        run.run()
+        self.assertEqual(run.completed, 1)
+        self.assertEqual(len(tries), 2)
+        self.assertEqual(engine.calls.count("terminal"), 1)
+
+    def test_a_slip_at_a_manager_does_not_go_back_to_the_recruiter(self):
+        run = Run(FakeEngine(PEOPLE), self.said())
+        talk, tries = run.talk, []
+        recruiter = []
+        run.quick_talk = lambda person: recruiter.append(person["name"])
+
+        def slips(person):
+            tries.append(person["name"])
+            run.job_open = True
+            if len(tries) == 1:
+                raise Interrupted("Could not talk to them.")
+            return talk(person)
+        run.talk = slips
+        run.run()
+        self.assertEqual(run.completed, 1)
+        self.assertEqual(len(recruiter), 1)
+
+    def test_nobody_paying_goes_back_to_the_recruiter_then_takes_a_new_job(self):
+        run = Run(FakeEngine(PEOPLE), self.said(yul=SHOP))
+        taken = []
+        take = run.take_job
+
+        def takes(spot):
+            take(spot)
+            taken.append(spot)
+            run.job_open = True
+        run.take_job = takes
+        recruiter = []
+        run.quick_talk = lambda person: recruiter.append(person["name"])
+        run.run()
+        self.assertEqual(len(taken), 3)            # At the first try and after each second one.
+        self.assertEqual(len(recruiter), mission_runner.JOB_TRIES)
+        self.assertEqual(run.completed, 0)
+
+    def test_tries_again_each_job_but_gives_up_after_tries_in_a_row(self):
+        run = Run(FakeEngine(PEOPLE), self.said(), jobs=3)
+        talk, tries = run.quick_talk, []
+
+        def slips(person):
+            tries.append(person["name"])
+            if len(tries) % 3:
+                raise Interrupted("Could not talk to them.")
+            talk(person)
+        run.quick_talk = slips
+        run.run()
+        self.assertEqual(run.completed, 3)
+
+        run = Run(FakeEngine(PEOPLE), self.said())
+        tries = []
+
+        def never(person):
+            tries.append(person["name"])
+            raise Interrupted("Could not talk to them.")
+        run.quick_talk = never
+        run.run()
+        self.assertEqual(len(tries), mission_runner.JOB_TRIES)
+        self.assertEqual(run.events[-1], ("done", "Could not talk to them. 0 jobs done."))
+
+    def test_stop_is_never_tried_again(self):
+        run = Run(FakeEngine(PEOPLE), self.said())
+        tries = []
+
+        def stops(person):
+            tries.append(person["name"])
+            run.control.stopped.set()
+            raise Interrupted("Could not talk to them.")
+        run.quick_talk = stops
+        run.run()
+        self.assertEqual(len(tries), 1)
+        self.assertIn("Stopped", run.events[-1][1])
+
+    def test_a_stop_key_in_the_engine_is_never_tried_again(self):
+        run = Run(FakeEngine(PEOPLE), self.said())
+        tries = []
+
+        def stops(person):
+            tries.append(person["name"])
+            raise Interrupted("Stopped: F8 pressed.")
+        run.quick_talk = stops
+        run.run()
+        self.assertEqual(len(tries), 1)
+
+    def test_a_conversation_left_open_is_answered_to_its_end(self):
+        run = Run(FakeEngine(PEOPLE), self.said())
+        run.screens = list(RECRUITED)
+        run.recover()
+        self.assertEqual(run.screens, [])
+
+    def test_a_slip_leaves_a_picture_and_a_line(self):
+        run = Run(FakeEngine([]), {})
+        with tempfile.TemporaryDirectory() as folder:
+            run.diagnostic_dir = Path(folder)
+            run.last_frame = blank()
+            MissionRunner.note_slip(run, Interrupted("Could not talk to them."))
+            self.assertTrue((Path(folder)/"job-slip-1.png").exists())
+            self.assertIn("Could not talk to them. (job-slip-1.png)", (Path(folder)/"job-slips.txt").read_text(encoding="utf-8"))
+
     def test_any_first_option_will_do(self):
         run = Run(FakeEngine(PEOPLE), {**self.said(), "Recruiter - Near": [["You are here about the job, right?", "> Yes, I am here because of the job you have..."], *RECRUITED]})
         run.run()
@@ -345,6 +468,30 @@ class LoopTests(unittest.TestCase):
 
 
 class SelectTests(unittest.TestCase):
+    def test_a_new_page_is_not_taken_from_the_moment_it_downloads(self):
+        run = Run(FakeEngine([]), {})
+        old, empty, new = (np.full((2, 2), value) for value in (1, 0, 2))
+        shown = [empty, empty, empty, new, new, new]
+        run.frame = lambda: shown.pop(0)
+        with patch.object(mission_runner, "list_picture", lambda frame: frame), \
+                patch.object(mission_runner, "rn_page", lambda frame: "accepted" if frame is empty else "list"):
+            run.next_page(old)
+        self.assertEqual(len(shown), 1)
+
+    def test_the_list_may_take_its_time_to_come_back(self):
+        run = Run(FakeEngine([]), {})
+        pages = ["accepted"]*5+["list"]
+        run.tap = lambda point: None
+        run.frame = blank
+        run.next_page = lambda before: None
+        run.accept = lambda: None
+        run.detector = type("Detector", (), {"text_reader": lambda self: None})()
+        rows = iter([None, 2])
+        with patch.object(mission_runner, "job_row", lambda reader, frame: next(rows)), \
+                patch.object(mission_runner, "row_is_blue", lambda frame, row: True), \
+                patch.object(mission_runner, "rn_page", lambda frame: pages.pop(0) if len(pages) > 1 else "list"):
+            self.assertTrue(run.choose_job())
+
     def choose(self, selected_after):
         run = Run(FakeEngine([]), {})
         tapped = []
@@ -568,6 +715,15 @@ class ServeTests(unittest.TestCase):
         engine = self.engine("Stopped: F8 pressed.", None)
         with patch.object(mission_runner.tt, "clear_stop", lambda: None):
             self.assertEqual(engine.live(["camera"], lambda: None), "Stopped: F8 pressed.")
+
+    def test_an_engine_that_hangs_is_ended(self):
+        engine = self.engine()
+        stopped = []
+        with patch.object(mission_runner.tt, "clear_stop", lambda: None), patch.object(mission_runner.tt, "stop_walk", stopped.append), \
+                patch.object(mission_runner, "ASK_MOST", 0), self.assertRaisesRegex(Interrupted, "took too long over camera"):
+            engine.live(["camera"], lambda: None)
+        self.assertEqual(len(stopped), 1)
+        self.assertIsNone(engine.server)
 
     def test_stop_ends_the_engine(self):
         engine = self.engine()
