@@ -48,6 +48,7 @@ QUICK_AGAIN = .25            # seconds before an option that did nothing is clic
 QUICK_MOST = 10              # seconds a recruiter may take
 QUICK_READ = 1               # seconds of seeing no option before the OCR looks: all options are up by then
 QUICK_PARK = .75             # of the panel, both ways: below the words, where the pointer can't touch them
+QUICK_LEAVE = .06            # seconds the pointer stays after a click, for the game to see the button come up on the option
 SERVE_DONE = "<<done>>"
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
@@ -519,7 +520,8 @@ class MissionRunner(LootRunner):
 
     def quick_talk(self, person):
         """A recruiter sells nothing and what they say doesn't matter: click the first option as each screen shows it, unread.
-        The pointer leaves after each click: left on the words it joins their lines into one (live, 2 Nov)."""
+        The pointer rests on the option first, or the game only lights it up, and leaves after each click: left on the words it
+        joins their lines into one (live, 2 Nov)."""
         self.hide_pointer()
         self.open_talk(person)
         ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
@@ -532,7 +534,10 @@ class MissionRunner(LootRunner):
             if point is None and self.clock() >= at+QUICK_READ:
                 point = self.read_option()
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
+                self.move(point)
+                self.wait(SETTLE)
                 self.click(point)
+                self.wait(QUICK_LEAVE)
                 self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
                 clicked, at = point, self.clock()
             self.wait(.02)

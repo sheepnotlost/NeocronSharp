@@ -441,6 +441,8 @@ class QuickTalkTests(unittest.TestCase):
         run.open_talk = lambda person: None
         self.moved = []
         run.move = self.moved.append
+        self.waited = []
+        run.wait = self.waited.append
         shown, clicks = list(screens), []
         run.frame = lambda: shown[0]
         now = iter(x*.01 for x in range(100000))
@@ -467,9 +469,14 @@ class QuickTalkTests(unittest.TestCase):
 
     def test_the_pointer_leaves_the_words_after_each_click(self):
         self.talk([self.screen(216, 223, 223), self.screen(216, 217, 223), blank()])
-        self.assertEqual(len(self.moved), 2)
-        for x, y in self.moved:
+        self.assertEqual(len(self.moved), 4)
+        for x, y in self.moved[1::2]:
             self.assertGreater(y, self.BOX[1]+self.BOX[3]*.55)
+
+    def test_the_pointer_rests_on_the_option_before_the_click_and_after_it(self):
+        clicks = self.talk([self.screen(216, 223, 223), blank()])
+        self.assertEqual(self.moved[0], clicks[0])
+        self.assertEqual(self.waited[:2], [mission_runner.SETTLE, mission_runner.QUICK_LEAVE])
 
     def test_the_ocr_finds_the_option_the_pixels_miss(self):
         run = Run(FakeEngine([]), {})
