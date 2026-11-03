@@ -93,6 +93,14 @@ class ReadingTests(unittest.TestCase):
         frame[412:435, 223:280:2] = (70, 204, 129)
         self.assertEqual(first_option(frame, box), (262, 422))
 
+    def test_speech_without_descenders_still_counts_as_speech(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 383, 216, high=17)
+        words(frame, 414, 223)
+        words(frame, 445, 223)
+        self.assertEqual(first_option(frame, box), (262, 425))
+
     def test_the_first_option_is_clicked_though_only_a_later_one_shows_yet(self):
         box = (200, 320, 1560, 870)
         frame = conversation(box)
