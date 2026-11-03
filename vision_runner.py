@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import random
 
 from macro_core import Interrupted, ResearchRunner, STACKS
 from vision import Ambiguous, Detector, NotFound, cv2
@@ -168,6 +169,9 @@ class VisualRunner(ResearchRunner):
             self.backend.release_all()
 
 
+RESTART_WAIT = (1, 5)        # seconds, a fresh random wait after each finished run before Start again (the user's word, 3 Nov)
+
+
 class BlueprintRunner(VisualRunner):
     """Only click Start; observe a full processing-to-result transition per copy."""
 
@@ -196,8 +200,12 @@ class BlueprintRunner(VisualRunner):
 
     def execute(self):
         target = self.profile["blueprints"]["count"]
-        failed = 0
+        failed, finished = 0, False
         while target == 0 or self.completed < target:
+            if finished:
+                delay = random.uniform(*RESTART_WAIT)
+                self.emit("status", f"Blueprint: waiting {delay:.1f} s before starting again.")
+                self.wait(delay, safe_pause=True)
             self.emit("status", "Blueprint: finding the Processor and checking its progress.")
             processor, state = self.blueprint_state()
             if state["busy"]:
@@ -211,6 +219,7 @@ class BlueprintRunner(VisualRunner):
                 self.move((24, 80))
                 self.emit("status", "Blueprint: Start clicked; waiting for progress and a new blueprint result.")
                 made = self.await_blueprint()
+            finished = True
             if not made:
                 failed += 1
                 self.emit("status", f"Blueprint: research failed ({failed} so far); trying again.")

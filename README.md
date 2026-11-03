@@ -193,7 +193,7 @@ The macro only clicks the current Processor Start button. It finds the Processor
 
 Processor detection first scans a smaller whole-client image, then verifies the title and Start button at native resolution. It does not depend on the previous window position. The next copy uses a fresh location check without an extra idle-wait loop. The three-second focus countdown remains.
 
-The previous result returns automatically on the next Start; the final result stays in the Processor. Research that fails and destroys a datacube leaves no result: the macro counts it as a failure, not a copy, and clicks Start again. Hidden/ambiguous controls or focus loss stop the batch. If Start is ignored, the macro keeps monitoring without clicking again. The copy count is a saved per-batch target; status shows completed/remaining copies. Preparing inputs and supplies remains manual.
+The previous result returns automatically on the next Start; the final result stays in the Processor. Research that fails and destroys a datacube leaves no result: the macro counts it as a failure, not a copy, and clicks Start again. After each finished run, copy or failure, it waits a random 1 to 5 seconds before clicking Start again, so the runs don't follow one another like clockwork. Hidden/ambiguous controls or focus loss stop the batch. If Start is ignored, the macro keeps monitoring without clicking again. The copy count is a saved per-batch target; status shows completed/remaining copies. Preparing inputs and supplies remains manual.
 
 Choose **Tech parts (T / E / A / L)** to return to the existing stack workflow.
 

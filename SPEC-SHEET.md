@@ -299,6 +299,7 @@ Extract and validate from another path with conflicting Python/Tcl environment v
 Required automated checks:
 
 - Preserve all tech-part/item-blueprint research regressions and variable-duration/focus behavior.
+- Item → blueprint waits a fresh random 1 to 5 s (`RESTART_WAIT`) after each finished run, copy or failure, before Start; not before the first Start, and not after the last copy. Pause, Stop and focus loss work during the wait.
 - Detect real translated/scaled/overlapping Processor and movable dialog images.
 - Distinguish exactly one from multi-digit quantities, reject pending inputs and avoid uncertain retries.
 - Distinguish WP7/WP9; visit every cell without icon filtering and require the blueprint tooltip rather than finished-item appearance; read custom OCR names/aliases with exact-number protection.

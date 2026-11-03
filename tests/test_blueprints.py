@@ -2,6 +2,7 @@ from copy import deepcopy
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import json
 
 from macro_core import Control, Interrupted, default_profile, load_profile, save_profile, validate_profile
@@ -165,6 +166,27 @@ class BlueprintRunnerTests(unittest.TestCase):
         self.assertTrue(self.backend.result)
         self.assertEqual(self.profile, original)
         self.assertEqual([e for e in self.backend.events if e[0] == "left"].count(("left", True)), 3)
+
+    def test_each_start_after_a_finished_run_waits_a_random_one_to_five_seconds(self):
+        self.setup_run(count=3)
+        asked, starts = [], []
+        click = self.runner.click
+        self.runner.click = lambda point: starts.append(self.clock.now) or click(point)
+        with patch("vision_runner.random.uniform", lambda low, high: asked.append((low, high)) or 4.5):
+            self.runner.run()
+        self.assertFalse(self.errors(), self.messages)
+        self.assertEqual(asked, [(1, 5)]*2)                  # none before the first Start, none after the last copy
+        self.assertEqual(sum("waiting 4.5 s before starting again" in str(m) for m in self.messages), 2)
+        for before, after in zip(starts, starts[1:]):
+            self.assertGreaterEqual(after-before, 4.5)
+
+    def test_the_wait_is_new_each_time(self):
+        self.setup_run(count=4)
+        self.runner.run()
+        waits = [m[1] for m in self.messages if "before starting again" in str(m[1])]
+        self.assertEqual(len(waits), 3)
+        for text in waits:
+            self.assertTrue(1 <= float(text.split("waiting ")[1].split(" s")[0]) <= 5, text)
 
     def test_existing_processing_run_is_monitored_without_duplicate_start(self):
         self.setup_run(count=1)
