@@ -39,6 +39,7 @@ TALK_FULL = .6               # of the block's widest row: a row of the panel, no
 LETTER_GREEN = 150           # a letter's green channel: the panel's stays under 135. Red won't do: an option under the pointer lights up green (live, 2 Nov)
 PANEL_EDGE = .04             # of the panel's height: its top border, as bright as the letters, ends here
 LINE_HIGH = .02              # of the panel: shorter than this is the pointer or its border, not a line of text
+LINE_STEP = .0355            # of the panel: from the last line of speech to the first option
 LINE_MIDDLE = .013           # of the panel: below a line's top. The pointer on a line makes it look taller
 OPTION_INDENT = .002         # of the panel's width: an option starts with a ">", 7 pixels right of the speech at 1550
 OPTION_FURTHEST = .02        # and further than this is the pointer on an empty line
@@ -156,11 +157,16 @@ def text_rows(frame, box):
 
 
 def first_option(frame, box):
-    """Where to click the first option, or None while none shows. The first line that doesn't start level with the speech: options fade in together."""
+    """Where to click the first option, or None while none shows: the line after the speech, once any line that doesn't start
+    level with the speech is up. Never the line it saw: options fade in from the last one up, and the first can read dimmest."""
     rows = text_rows(frame, box)
+    speech = rows[0][0] if rows else 0
     for top, bottom, left in rows[1:]:
-        if box[2]*OPTION_INDENT < left-rows[0][2] < box[2]*OPTION_FURTHEST:
-            return left+round(box[2]*OPTION_CLICK), top+round(box[3]*LINE_MIDDLE)
+        indent = left-rows[0][2]
+        if abs(indent) <= box[2]*OPTION_INDENT:
+            speech = top
+        elif 0 < indent < box[2]*OPTION_FURTHEST:
+            return left+round(box[2]*OPTION_CLICK), speech+round(box[3]*(LINE_STEP+LINE_MIDDLE))
     return None
 
 

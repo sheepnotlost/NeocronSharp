@@ -84,14 +84,21 @@ class ReadingTests(unittest.TestCase):
         self.assertIsNone(first_option(frame, box))     # Only the speech so far, wrapped onto two lines.
         words(frame, 438, 223)
         words(frame, 468, 223)
-        self.assertEqual(first_option(frame, box), (262, 449))
+        self.assertEqual(first_option(frame, box), (262, 448))
 
     def test_an_option_under_the_pointer_lights_up_green_and_still_counts(self):
         box = (200, 320, 1560, 870)
         frame = conversation(box)
         words(frame, 380, 216)
-        frame[438:461, 223:280:2] = (70, 204, 129)
-        self.assertEqual(first_option(frame, box), (262, 449))
+        frame[412:435, 223:280:2] = (70, 204, 129)
+        self.assertEqual(first_option(frame, box), (262, 422))
+
+    def test_the_first_option_is_clicked_though_only_a_later_one_shows_yet(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 380, 216)
+        words(frame, 442, 223)                          # They fade in from the last one up.
+        self.assertEqual(first_option(frame, box), (262, 422))
 
     def test_the_panels_top_border_is_no_line_of_speech(self):
         box = (200, 320, 1560, 870)
@@ -446,7 +453,7 @@ class QuickTalkTests(unittest.TestCase):
 
     def test_each_screen_is_clicked_once_and_it_ends_with_the_conversation(self):
         clicks = self.talk([self.screen(216, 223, 223), self.screen(216, 217, 223), blank()])
-        self.assertEqual(clicks, [(262, 417), (262, 443)])
+        self.assertEqual(clicks, [(262, 422), (262, 448)])
 
     def test_stops_when_it_never_ends(self):
         run = Run(FakeEngine([]), {})
