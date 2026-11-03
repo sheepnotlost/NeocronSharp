@@ -46,6 +46,8 @@ OPTION_FURTHEST = .02        # and further than this is the pointer on an empty 
 OPTION_CLICK = .025          # of the panel's width: how far along an option to click, short as "> (click)" is
 QUICK_AGAIN = .25            # seconds before an option that did nothing is clicked again
 QUICK_MOST = 10              # seconds a recruiter may take
+QUICK_READ = 1               # seconds of seeing no option before the OCR looks: all options are up by then
+QUICK_PARK = .75             # of the panel, both ways: below the words, where the pointer can't touch them
 SERVE_DONE = "<<done>>"
 
 TALK_REACH = 180             # units: how close to walk before right-clicking a person
@@ -509,19 +511,29 @@ class MissionRunner(LootRunner):
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
 
+    def read_option(self):
+        """Where the OCR finds the option to click, for a screen the pixels make nothing of."""
+        lines = self.dialog_lines()
+        line = answer(lines, self.talk_wide) if lines else None
+        return line["point"] if line else None
+
     def quick_talk(self, person):
-        """A recruiter sells nothing and what they say doesn't matter: click the first option as each screen shows it, unread."""
+        """A recruiter sells nothing and what they say doesn't matter: click the first option as each screen shows it, unread.
+        The pointer leaves after each click: left on the words it joins their lines into one (live, 2 Nov)."""
         self.hide_pointer()
         self.open_talk(person)
-        ends, clicked, at = self.clock()+QUICK_MOST, None, 0
+        ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
         box = dialog_box(self.frame())
         while box is not None and self.clock() < ends:
             frame = self.frame()
             if not still_open(frame, box):
                 return
             point = first_option(frame, box)
+            if point is None and self.clock() >= at+QUICK_READ:
+                point = self.read_option()
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
                 self.click(point)
+                self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
                 clicked, at = point, self.clock()
             self.wait(.02)
         if box is not None:

@@ -439,6 +439,8 @@ class QuickTalkTests(unittest.TestCase):
         """Each screen shows until its option is clicked. None is the conversation gone."""
         run = Run(FakeEngine([]), {})
         run.open_talk = lambda person: None
+        self.moved = []
+        run.move = self.moved.append
         shown, clicks = list(screens), []
         run.frame = lambda: shown[0]
         now = iter(x*.01 for x in range(100000))
@@ -463,10 +465,50 @@ class QuickTalkTests(unittest.TestCase):
         clicks = self.talk([self.screen(216, 223, 223), self.screen(216, 217, 223), blank()])
         self.assertEqual(clicks, [(262, 422), (262, 448)])
 
+    def test_the_pointer_leaves_the_words_after_each_click(self):
+        self.talk([self.screen(216, 223, 223), self.screen(216, 217, 223), blank()])
+        self.assertEqual(len(self.moved), 2)
+        for x, y in self.moved:
+            self.assertGreater(y, self.BOX[1]+self.BOX[3]*.55)
+
+    def test_the_ocr_finds_the_option_the_pixels_miss(self):
+        run = Run(FakeEngine([]), {})
+        run.open_talk = lambda person: None
+        run.move = lambda point: None
+        shown, clicks = [self.screen(216), blank()], []
+        run.frame = lambda: shown[0]
+        now = iter(x*.1 for x in range(100000))
+        run.clock = lambda: next(now)
+        run.talk_wide = self.BOX[2]
+        run.dialog_lines = lambda: [{"text": "Well then", "left": 216, "point": (300, 390)}, {"text": "> Yes", "left": 223, "point": (300, 420)}]
+
+        def click(point):
+            clicks.append(point)
+            shown.pop(0)
+        run.click = click
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+            run.quick_talk(actor("Recruiter - Near"))
+        self.assertEqual(clicks, [(300, 420)])
+
+    def test_the_ocr_waits_for_every_option_to_fade_in(self):
+        run = Run(FakeEngine([]), {})
+        run.open_talk = lambda person: None
+        looks = []
+        run.read_option = lambda: looks.append(run.clock()) or None
+        run.frame = lambda: self.screen(216)
+        now = iter(x*.1 for x in range(1000))
+        run.clock = lambda: next(now)
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX), self.assertRaisesRegex(Interrupted, "did not end"):
+            run.quick_talk(actor("Recruiter - Near"))
+        self.assertGreater(looks[0], mission_runner.QUICK_READ)
+
     def test_stops_when_it_never_ends(self):
         run = Run(FakeEngine([]), {})
         run.open_talk = lambda person: None
         run.frame = lambda: self.screen(216)
+        run.dialog_lines = lambda: None
         now = iter(range(1000))
         run.clock = lambda: next(now)
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
