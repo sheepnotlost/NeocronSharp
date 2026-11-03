@@ -36,12 +36,14 @@ TALK_WIDE = 1550             # pixels: a conversation on the 2560x1440 client at
 TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
 TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
 TALK_FULL = .6               # of the block's widest row: a row of the panel, not the gap under the name bar
-LETTER_RED = 100             # a letter's red channel: the panel's is under 60, a fading option's already over
+LETTER_GREEN = 150           # a letter's green channel: the panel's stays under 135. Red won't do: an option under the pointer lights up green (live, 2 Nov)
+PANEL_EDGE = .04             # of the panel's height: its top border, as bright as the letters, ends here
 LINE_HIGH = .02              # of the panel: shorter than this is the pointer or its border, not a line of text
+LINE_MIDDLE = .013           # of the panel: below a line's top. The pointer on a line makes it look taller
 OPTION_INDENT = .002         # of the panel's width: an option starts with a ">", 7 pixels right of the speech at 1550
 OPTION_FURTHEST = .02        # and further than this is the pointer on an empty line
 OPTION_CLICK = .025          # of the panel's width: how far along an option to click, short as "> (click)" is
-QUICK_AGAIN = .3             # seconds before an option that did nothing is clicked again
+QUICK_AGAIN = .25            # seconds before an option that did nothing is clicked again
 QUICK_MOST = 10              # seconds a recruiter may take
 SERVE_DONE = "<<done>>"
 
@@ -147,8 +149,8 @@ def text_rows(frame, box):
     """The panel's lines of text as (top, bottom, left), by their pixels: the OCR takes half a second a look."""
     left, top, wide, high = box
     edge = wide//200
-    x0, y0 = left+edge, top+edge
-    letters = frame[y0:top+round(high*.55), x0:left+wide-edge, 0] > LETTER_RED
+    x0, y0 = left+edge, top+round(high*PANEL_EDGE)
+    letters = frame[y0:top+round(high*.55), x0:left+wide-edge, 1] > LETTER_GREEN
     rows = np.diff(np.concatenate(([0], (letters.sum(axis=1) >= 2).astype(np.int8), [0]))).nonzero()[0].reshape(-1, 2)
     return [(y0+int(start), y0+int(end), x0+int(letters[start:end].any(axis=0).argmax())) for start, end in rows if end-start >= high*LINE_HIGH]
 
@@ -158,7 +160,7 @@ def first_option(frame, box):
     rows = text_rows(frame, box)
     for top, bottom, left in rows[1:]:
         if box[2]*OPTION_INDENT < left-rows[0][2] < box[2]*OPTION_FURTHEST:
-            return left+round(box[2]*OPTION_CLICK), (top+bottom)//2
+            return left+round(box[2]*OPTION_CLICK), top+round(box[3]*LINE_MIDDLE)
     return None
 
 

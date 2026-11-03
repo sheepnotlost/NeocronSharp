@@ -86,6 +86,20 @@ class ReadingTests(unittest.TestCase):
         words(frame, 468, 223)
         self.assertEqual(first_option(frame, box), (262, 449))
 
+    def test_an_option_under_the_pointer_lights_up_green_and_still_counts(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 380, 216)
+        frame[438:461, 223:280:2] = (70, 204, 129)
+        self.assertEqual(first_option(frame, box), (262, 449))
+
+    def test_the_panels_top_border_is_no_line_of_speech(self):
+        box = (200, 320, 1560, 870)
+        frame = conversation(box)
+        words(frame, 330, 208)
+        words(frame, 380, 216)
+        self.assertIsNone(first_option(frame, box))
+
     def test_a_speech_line_a_pixel_off_is_no_option(self):
         box = (200, 320, 1560, 870)
         frame = conversation(box)
