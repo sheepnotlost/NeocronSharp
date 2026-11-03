@@ -414,7 +414,7 @@ internal static class FollowCommand
     }
 
     /// <summary>How near the spot counts as back there: the quick way, and with --exact when the quick way missed the terminal.</summary>
-    private const float SpotQuick = 14, SpotExact = 8;
+    private const float SpotQuick = 11, SpotExact = 8;
     private const int SpotAimMs = 6000;
 
     /// <summary>camera &lt;entity id&gt; [--pulse N] [--hold-left] [--give-up S] [--now] [--gains yaw,pitch] [--box] [--use] [--sight] [--back-off units]: live, turns the camera to keep facing the target; never walks, and clicks only to hold the left button on an NPC. --box runs to a dead NPC and right-clicks its loot box instead, and --use aims at a living NPC and right-clicks it to talk.</summary>

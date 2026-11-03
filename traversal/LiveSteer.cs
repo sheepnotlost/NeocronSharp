@@ -20,7 +20,7 @@ internal sealed class LiveSteer
     private readonly bool _openDoor;
     private readonly float _near;
     private const int MaxUses = 3;
-    private const float NearRunsTo = 40;
+    private const float NearRunsTo = 50;
     private readonly PlayerReader _reader;
     private readonly NavWorld _nav;
     private readonly int _sector, _pulse;

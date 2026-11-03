@@ -173,9 +173,9 @@ internal static class FollowTests
             Check(snap.Step(16, 2f, -.3f) == (0, 0) && snap.Step(32, 2f, -.3f) == (0, 0), "and nothing more while it has not shown: a turn shows late");
             Check(snap.Step(48, .9f, -.1f) == (0, 0) && snap.Step(64, .05f, .02f) == (0, 0), "nor while it is still landing");
             Check(snap.Step(80, .05f, .02f) == (.05f, .02f), "then what is left");
-            Check(snap.Step(350, .05f, .02f) == (.05f, .02f), "again if it never showed");
-            Check(snap.Step(366, .005f, .001f) == (0, 0) && snap.Step(382, .005f, .001f) == (0, 0) && !snap.Done, "landed there");
-            Check(snap.Step(398, .005f, .001f) == (0, 0) && snap.Done, "and it counts once two readings agree");
+            Check(snap.Step(500, .05f, .02f) == (.05f, .02f), "again if it never showed");
+            Check(snap.Step(516, .005f, .001f) == (0, 0) && snap.Step(532, .005f, .001f) == (0, 0) && !snap.Done, "landed there");
+            Check(snap.Step(548, .005f, .001f) == (0, 0) && snap.Done, "and it counts once two readings agree");
 
 
             var steady = new SteadyAim(1500);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using NeocronSharp;
 
@@ -22,6 +23,7 @@ internal sealed class SteerInput : IDisposable
 {
     private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, 1 = Slot 1
     private const int BurstStep = 6;   // the size the gains are measured at
+    private const int GlideMsPerStep = 2, GlideMostMs = 150;   // a turn sweeps round, not a snap: the user's word, for accuracy (3 Nov)
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
@@ -98,11 +100,11 @@ internal sealed class SteerInput : IDisposable
             throw new InvalidOperationException("Windows rejected steering input.");
     }
 
-    /// <summary>A whole turn in one call, as many small packets: Windows' acceleration sends a big one twice as far, and the game adds these up in a frame.</summary>
+    /// <summary>A whole turn in one call, as many small packets: Windows' acceleration sends a big one twice as far, and the game
+    /// adds these up. Sent over up to <see cref="GlideMostMs"/>, so the view sweeps round rather than jumps.</summary>
     public void LookBurst(int x, int y)
     {
         if (x == 0 && y == 0) return;
-        _reader.RequireForeground();
         int steps = Math.Max(1, (Math.Max(Math.Abs(x), Math.Abs(y)) + BurstStep - 1) / BurstStep), sentX = 0, sentY = 0;
         var packets = new Native.Input[steps];
         for (int i = 0; i < steps; i++)
@@ -111,8 +113,17 @@ internal sealed class SteerInput : IDisposable
             packets[i] = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput { X = toX - sentX, Y = toY - sentY, Flags = 0x0001 } } };
             sentX = toX; sentY = toY;
         }
-        if (Native.SendInput((uint)steps, packets, Marshal.SizeOf<Native.Input>()) != steps)
-            throw new InvalidOperationException("Windows rejected steering input.");
+        long sweep = Math.Min(GlideMostMs, (long)steps * GlideMsPerStep);
+        var clock = Stopwatch.StartNew();
+        for (int sent = 0; sent < steps; )
+        {
+            _reader.RequireForeground();
+            int due = sweep == 0 ? steps : (int)Math.Clamp(clock.ElapsedMilliseconds * steps / sweep + 1, sent + 1, steps);
+            if (Native.SendInput((uint)(due - sent), packets[sent..due], Marshal.SizeOf<Native.Input>()) != due - sent)
+                throw new InvalidOperationException("Windows rejected steering input.");
+            sent = due;
+            if (sent < steps) Thread.Sleep(1);
+        }
     }
 
     /// <summary>Press or release the left mouse button. Let go in <see cref="Dispose"/> however a run ends.</summary>

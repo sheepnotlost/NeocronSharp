@@ -121,7 +121,7 @@ internal sealed class SteadyAim(long ms)
 internal sealed class SnapAim
 {
     public const float Within = 0.012f, Still = 0.002f;
-    public const long LandMs = 250;
+    public const long LandMs = 400;   // the turn sweeps for up to 150 ms of it
     private const int SteadyReads = 2;
     private float _yaw, _pitch, _sentYaw, _sentPitch;
     private long _sentAt;

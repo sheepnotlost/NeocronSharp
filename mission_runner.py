@@ -49,11 +49,11 @@ LINE_MIDDLE = .013           # of the panel: below a line's top. The pointer on 
 OPTION_INDENT = .002         # of the panel's width: an option starts with a ">", 7 pixels right of the speech at 1550
 OPTION_FURTHEST = .02        # and further than this is the pointer on an empty line
 OPTION_CLICK = .025          # of the panel's width: how far along an option to click, short as "> (click)" is
-QUICK_AGAIN = .25            # seconds before an option that did nothing is clicked again
+QUICK_AGAIN = 1              # seconds before an option that did nothing is clicked again: one click, then a wait, not a burst
 QUICK_MOST = 10              # seconds a recruiter may take
 QUICK_READ = 1               # seconds of seeing no option before the OCR looks: all options are up by then
 QUICK_PARK = .75             # of the panel, both ways: below the words, where the pointer can't touch them
-QUICK_LEAVE = .06            # seconds the pointer stays after a click, for the game to see the button come up on the option
+QUICK_LEAVE = .08            # seconds the pointer stays after a click, for the game to see the button come up on the option
 QUICK_STUCK = 3              # seconds with nothing to answer before the conversation is closed and opened again
 QUICK_REOPEN = 2             # times, in one talk
 SERVE_DONE = "<<done>>"
@@ -62,7 +62,8 @@ TALK_REACH = 180             # units: how close to walk before right-clicking a 
 TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
 SELECT_TRIES = 3
-SETTLE = .15                 # seconds between the pointer arriving and a click
+SETTLE = .2                  # seconds between the pointer arriving and a click
+STAGE_REST = .5              # seconds between the terminal, the recruiter and each manager, for the game to catch up
 MOST_SCREENS = 8             # of one conversation
 OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
 OPEN_LOOKS = 40              # tenths of a second for the terminal's window to reach Missions
@@ -70,12 +71,12 @@ MISSIONS_EVERY = 8           # looks between clicks on its tab
 OPEN_GIVE_UP = 15            # looks with no window before the right-click counts as missed
 LIST_WAIT = 1.5              # seconds for a new list page to show
 LIST_SLOW = 15               # seconds a page of the list may take to download
-ACCEPT_TRIES, ACCEPT_WAIT = 12, .4
+ACCEPT_TRIES, ACCEPT_WAIT = 6, 1     # one click a second, not a burst
 JOB_TRIES = 6                # tries in a row without a job done before the loop gives up
 UNPAID_TRIES = 2             # tries with nobody paying before the job counts as lost: it may have paid unread, and the fee for a new one is small
 ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
 KEPT_PICTURES = 20           # of what went wrong, the oldest written over
-RECOVER_WAIT = .5            # seconds for the next screen, when putting things right
+RECOVER_WAIT = .6            # seconds for the next screen, when putting things right
 PAID_WORDS = ("payment", "credits", "quality")
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
@@ -655,6 +656,7 @@ class MissionRunner(LootRunner):
         if not self.job_open:
             self.take_job(spot)
             self.recruited = False
+            self.wait(STAGE_REST)
         if not self.recruited:
             recruiters = self.people("Recruiter")
             if not recruiters:
@@ -662,9 +664,11 @@ class MissionRunner(LootRunner):
             self.emit("status", f"Talking to {recruiters[0]['name']}.")
             self.quick_talk(recruiters[0])
             self.recruited = True
+            self.wait(STAGE_REST)
         paid = False
         for manager in self.people("Faction Supply Manager"):
             self.emit("status", f"Talking to {manager['name']}.")
+            self.wait(STAGE_REST)
             said = " ".join(self.talk(manager)).lower()
             paid = any(word in said for word in PAID_WORDS)
             if paid:      # Either may be the one, and it changes from job to job.
