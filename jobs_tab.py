@@ -11,7 +11,7 @@ from macro_core import Control
 
 HOW = ("Stand at the R.N. terminal in a faction headquarters with the crosshair on it, and keep the 3 blueprints the job "
        "asks for in Inventory. Finish any job already open first: taking a new one fails the old one and costs a fee. "
-       "It waits between steps while another player is within 500 units.")
+       "It waits between steps while the game shows any other player in the zone.")
 
 
 class JobsTab:

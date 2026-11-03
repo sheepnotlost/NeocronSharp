@@ -527,16 +527,20 @@ class AloneTests(unittest.TestCase):
         MissionRunner.wait_alone(run)
         return now[0], run.events
 
-    def test_nobody_near_costs_nothing(self):
-        waited, said = self.wait([[actor("Recruiter - Near"), actor("Someone", 900, kind="player")]])
+    def test_nobody_about_costs_nothing(self):
+        waited, said = self.wait([[actor("Recruiter - Near"), actor("Security - Bob", 10)]])
         self.assertEqual((waited, said), (0, []))
+
+    def test_a_player_however_far_holds_it(self):
+        waited, said = self.wait([[actor("Someone", 4000, kind="player")], []])
+        self.assertEqual(waited, 1+mission_runner.PLAYER_GONE)
 
     def test_a_player_near_holds_it_until_they_have_gone_for_a_while(self):
         them = actor("Someone", 120, kind="player")
         waited, said = self.wait([[them], [them], [], [them], [], [], [], [], []])
         self.assertEqual(waited, 4+mission_runner.PLAYER_GONE)      # last seen at 3, gone from 4
-        self.assertIn("Paused: Someone is 120 units away", said[0][1])
-        self.assertEqual(said[-1], ("log", "Nobody near any more: carrying on."))
+        self.assertIn("Paused: Someone is in the zone, 120 units away", said[0][1])
+        self.assertEqual(said[-1], ("log", "No other player in the zone: carrying on."))
         self.assertEqual(len(said), 2)
 
     def test_your_own_character_is_not_another_player(self):

@@ -67,8 +67,7 @@ SETTLE = .2                  # seconds between the pointer arriving and a click
 GLIDE_SPEED = 2500           # pixels a second: the pointer glides to a place, never jumps there (the user's word, 3 Nov)
 GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .08, .35, .012     # seconds
 STAGE_REST = .5              # seconds between the terminal, the recruiter and each manager, for the game to catch up
-PLAYER_NEAR = 500            # units: another player this close holds the loop between steps (the user's word, 3 Nov)
-PLAYER_GONE = 3              # seconds with nobody that close before it carries on
+PLAYER_GONE = 3              # seconds with no other player in sight before it carries on
 PLAYER_LOOK = 1              # seconds between looks while it waits
 MOST_SCREENS = 8             # of one conversation
 OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
@@ -434,22 +433,22 @@ class MissionRunner(LootRunner):
             self.wait(.03)
 
     def wait_alone(self):
-        """Hold still between steps while another player is within PLAYER_NEAR, until nobody has been for PLAYER_GONE.
-        Your own character is never among them: it stands at no distance from you."""
+        """Hold still between steps while the game shows any other player, near or far, in this zone, until none has for
+        PLAYER_GONE (the user's word, 3 Nov). Your own character is never among them: it stands at no distance from you."""
         told, clear = False, None
         while True:
-            near = [a for a in self.engine.nearby() if a["kind"] == "player" and 1 <= a["distance"] <= PLAYER_NEAR]
+            near = [a for a in self.engine.nearby() if a["kind"] == "player" and a["distance"] >= 1]
             if near:
                 clear = None
                 if not told:
-                    self.emit("status", f"Paused: {near[0]['name']} is {near[0]['distance']:.0f} units away. Waiting until nobody is near.")
+                    self.emit("status", f"Paused: {near[0]['name']} is in the zone, {near[0]['distance']:.0f} units away. Waiting until no other player is.")
                     told = True
             elif not told:
                 return
             else:
                 clear = self.clock() if clear is None else clear
                 if self.clock()-clear >= PLAYER_GONE:
-                    self.emit("log", "Nobody near any more: carrying on.")
+                    self.emit("log", "No other player in the zone: carrying on.")
                     return
             self.wait(PLAYER_LOOK)
 
