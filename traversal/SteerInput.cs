@@ -23,7 +23,7 @@ internal sealed class SteerInput : IDisposable
 {
     private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, 1 = Slot 1
     private const int BurstStep = 6;   // the size the gains are measured at
-    private const int GlideMsPerStep = 2, GlideMostMs = 150;   // a turn sweeps round, not a snap: the user's word, for accuracy (3 Nov)
+    private const int GlideMsPerStep = 4, GlideMostMs = 350;   // a turn sweeps round, easing in and out, not a snap: the user's word (3 Nov)
     private readonly PlayerReader _reader;
     public int Pulse { get; }
     public bool Run { get; }
@@ -101,7 +101,7 @@ internal sealed class SteerInput : IDisposable
     }
 
     /// <summary>A whole turn in one call, as many small packets: Windows' acceleration sends a big one twice as far, and the game
-    /// adds these up. Sent over up to <see cref="GlideMostMs"/>, so the view sweeps round rather than jumps.</summary>
+    /// adds these up. Sent over up to <see cref="GlideMostMs"/>, slow at the start and the end, so the view sweeps round.</summary>
     public void LookBurst(int x, int y)
     {
         if (x == 0 && y == 0) return;
@@ -118,7 +118,8 @@ internal sealed class SteerInput : IDisposable
         for (int sent = 0; sent < steps; )
         {
             _reader.RequireForeground();
-            int due = sweep == 0 ? steps : (int)Math.Clamp(clock.ElapsedMilliseconds * steps / sweep + 1, sent + 1, steps);
+            double share = sweep == 0 ? 1 : Math.Min(1, (double)clock.ElapsedMilliseconds / sweep);
+            int due = (int)Math.Clamp(Math.Ceiling(share * share * (3 - 2 * share) * steps), sent + 1, steps);
             if (Native.SendInput((uint)(due - sent), packets[sent..due], Marshal.SizeOf<Native.Input>()) != due - sent)
                 throw new InvalidOperationException("Windows rejected steering input.");
             sent = due;

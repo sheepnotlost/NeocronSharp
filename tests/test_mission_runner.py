@@ -511,6 +511,31 @@ class LoopTests(unittest.TestCase):
             run.open_talk(actor("Recruiter - Near", 150))
 
 
+class GlideTests(unittest.TestCase):
+    def glide(self, start, end):
+        run = Run(FakeEngine([]), {})
+        moved = []
+        run.backend = type("Pointer", (), {"cursor_client": lambda self: list(start), "move": lambda self, point: moved.append(point), "check_focus": lambda self, size: None})()
+        MissionRunner.move(run, end)
+        return moved
+
+    def test_the_pointer_glides_and_eases_in_and_out(self):
+        moved = self.glide((0, 0), (1000, 0))
+        self.assertGreater(len(moved), 10)
+        self.assertEqual(moved[-1], (1000, 0))
+        steps = [b[0]-a[0] for a, b in zip(moved, moved[1:])]
+        self.assertTrue(all(step >= 0 for step in steps))
+        self.assertLess(steps[0], max(steps))
+        self.assertLess(steps[-1], max(steps))
+
+    def test_a_pointer_already_there_does_not_move_about(self):
+        self.assertEqual(self.glide((500, 500), (501, 500)), [(501, 500)])
+
+    def test_the_job_loop_steers_gently(self):
+        self.assertEqual(mission_runner.Engine.pulse, "16")
+        self.assertEqual(mission_runner.loot_runner.Engine.pulse, "24")
+
+
 class SelectTests(unittest.TestCase):
     def test_a_new_page_is_not_taken_from_the_moment_it_downloads(self):
         run = Run(FakeEngine([]), {})

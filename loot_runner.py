@@ -98,9 +98,11 @@ class Engine:
         reader.join(2)
         return "\n".join(lines)
 
+    pulse = "24"                 # pixels: the most the mouse moves the view in one step of a walk or an aim
+
     def run(self, args, tick=lambda: None):
         """A camera run, with the mouse gains the first one measured."""
-        args = ["camera", *args, "--pulse", "24", "--now"]
+        args = ["camera", *args, "--pulse", self.pulse, "--now"]
         if self.gains:
             args += ["--gains", self.gains]
         return self.keep_gains(self.live(args, tick))
@@ -113,7 +115,7 @@ class Engine:
 
     def walk(self, actor, reach, tick):
         """Follow's routes to an NPC or its body, running while it is far, ending within reach."""
-        args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", "24", "--run"]
+        args = ["follow", actor["id"], "--arrive", "--distance", str(reach), "--pulse", self.pulse, "--run"]
         if actor["dead"]:
             args.append("--body")
         if self.calibration:
@@ -136,7 +138,7 @@ class Engine:
         return self.run([actor["id"], "--box"], tick)
 
     def flee(self, tick):
-        args = ["flee", "--pulse", "24"]
+        args = ["flee", "--pulse", self.pulse]
         if self.calibration:
             args += ["--calibration", self.calibration]
         return self.live(args, tick)

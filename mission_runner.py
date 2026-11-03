@@ -9,6 +9,7 @@ conversation with nothing to answer, which the user said to do (2 Nov).
 """
 import difflib
 import json
+import math
 import queue
 import re
 import shutil
@@ -63,6 +64,8 @@ TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
 SELECT_TRIES = 3
 SETTLE = .2                  # seconds between the pointer arriving and a click
+GLIDE_SPEED = 2500           # pixels a second: the pointer glides to a place, never jumps there (the user's word, 3 Nov)
+GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .08, .35, .012     # seconds
 STAGE_REST = .5              # seconds between the terminal, the recruiter and each manager, for the game to catch up
 MOST_SCREENS = 8             # of one conversation
 OPTIONS_WAIT = 5             # seconds: a screen's options draw after its words (live, 2 Nov)
@@ -294,6 +297,7 @@ def text_lines(words, left=0, top=0):
 
 class Engine(loot_runner.Engine):
     """One traversal.exe for the whole loop: it keeps the sector's map, which each new one spent 2 s baking."""
+    pulse = "16"                 # gentler than a hunt's 24: no jerky turns while walking (the user's word, 3 Nov)
     def __init__(self, log, control):
         super().__init__(log, control)
         self.server = None
@@ -368,7 +372,7 @@ class Engine(loot_runner.Engine):
         return self.run([actor["id"], "--use"], tick)
 
     def terminal(self, spot, tick, exact=False):
-        args = ["usespot", f"{spot['x']},{spot['y']},{spot['z']}", f"{spot['yaw']},{spot['pitch']}", "--pulse", "24", *(["--exact"] if exact else [])]
+        args = ["usespot", f"{spot['x']},{spot['y']},{spot['z']}", f"{spot['yaw']},{spot['pitch']}", "--pulse", self.pulse, *(["--exact"] if exact else [])]
         if self.gains:
             args += ["--gains", self.gains]
         if self.calibration:
@@ -389,6 +393,23 @@ class MissionRunner(LootRunner):
 
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
+
+    def move(self, point):
+        """Glide there, starting and stopping gently as a hand would, then land exactly on it."""
+        try:
+            start = self.backend.cursor_client()
+        except (AttributeError, RuntimeError):
+            start = None
+        if start is not None:
+            dx, dy = point[0]-start[0], point[1]-start[1]
+            seconds = min(GLIDE_MOST, max(GLIDE_LEAST, math.hypot(dx, dy)/GLIDE_SPEED)) if math.hypot(dx, dy) > 2 else 0
+            steps = round(seconds/GLIDE_STEP)
+            for step in range(1, steps):
+                share = step/steps
+                eased = share*share*(3-2*share)
+                super().move((round(start[0]+dx*eased), round(start[1]+dy*eased)))
+                self.wait(GLIDE_STEP)
+        super().move(point)
 
     def tap(self, point):
         """The game must see the pointer arrive first: a click straight after a move only lit the row up (live, 2 Nov)."""

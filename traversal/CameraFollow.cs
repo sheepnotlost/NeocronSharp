@@ -85,7 +85,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 4000, UseSteadyMs = 625, LookEveryMs = 120;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 4, StepAsideSeconds = 6;
     private const float StuckBelow = 15;
