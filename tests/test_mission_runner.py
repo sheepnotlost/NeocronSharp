@@ -295,6 +295,9 @@ class Run(MissionRunner):
     def note_slip(self, error):
         pass
 
+    def wait_alone(self):
+        pass
+
     def move(self, point):
         pass
 
@@ -509,6 +512,44 @@ class LoopTests(unittest.TestCase):
         run.wait = lambda seconds, safe_pause=False: None
         with self.assertRaisesRegex(Interrupted, "Could not talk to Recruiter - Near"):
             run.open_talk(actor("Recruiter - Near", 150))
+
+
+class AloneTests(unittest.TestCase):
+    def wait(self, looks):
+        """Each look is who is around then. How long it waited, and what it said."""
+        engine = FakeEngine([])
+        shown = list(looks)
+        engine.nearby = lambda: shown.pop(0) if len(shown) > 1 else shown[0]
+        run = Run(engine, {})
+        now = [0.]
+        run.clock = lambda: now[0]
+        run.wait = lambda seconds, safe_pause=False: now.__setitem__(0, now[0]+seconds)
+        MissionRunner.wait_alone(run)
+        return now[0], run.events
+
+    def test_nobody_near_costs_nothing(self):
+        waited, said = self.wait([[actor("Recruiter - Near"), actor("Someone", 900, kind="player")]])
+        self.assertEqual((waited, said), (0, []))
+
+    def test_a_player_near_holds_it_until_they_have_gone_for_a_while(self):
+        them = actor("Someone", 120, kind="player")
+        waited, said = self.wait([[them], [them], [], [them], [], [], [], [], []])
+        self.assertEqual(waited, 4+mission_runner.PLAYER_GONE)      # last seen at 3, gone from 4
+        self.assertIn("Paused: Someone is 120 units away", said[0][1])
+        self.assertEqual(said[-1], ("log", "Nobody near any more: carrying on."))
+        self.assertEqual(len(said), 2)
+
+    def test_your_own_character_is_not_another_player(self):
+        self.assertEqual(self.wait([[actor("Me", 0, kind="player")]])[0], 0)
+
+    def test_it_waits_before_each_step(self):
+        run = Run(FakeEngine(PEOPLE), LoopTests().said())
+        steps = []
+        run.wait_alone = lambda: steps.append("wait")
+        talk = run.talk
+        run.talk = lambda person: steps.append(person["name"]) or talk(person)
+        run.run()
+        self.assertEqual(steps[:5], ["wait", "wait", "Recruiter - Near", "wait", "Faction Supply Manager - Lao"])
 
 
 class GlideTests(unittest.TestCase):
