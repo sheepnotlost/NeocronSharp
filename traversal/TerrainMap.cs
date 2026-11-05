@@ -9,7 +9,8 @@ namespace NavmeshPrototype;
 /// at least 12 of its 16 heightfield samples slope less than 55 degrees, and two neighbouring squares
 /// connect when the rise between them is under 55 degrees as well. Squares on either side of a cell
 /// edge connect when both are walkable (the two heightfields do not meet exactly at the seam).
-/// Also kept: every door placed in a cell (its "portals": WorldChanges of the entrance models)
+/// Also kept: every door placed in a cell (its "portals": WorldChanges of the entrance models, and
+/// door objects such as the Outdoor Cave entrances, which the game routes through pak_appplaces)
 /// and the outposts (pak_outposts: factories, mines, labs, fortresses, uplinks) as landmarks.
 /// Built once from the game files (about half a minute) and cached in logs/terrain/.
 /// </summary>
@@ -19,7 +20,7 @@ internal sealed class TerrainMap
     public const float Step = TerrainCell.Half * 2 / N;   // 256 units
     private const int PerCell = N * N;
     private const float MaxRise = 1.43f;                    // tan 55 degrees, as the cell navmesh (TerrainNav)
-    private const int Version = 5;
+    private const int Version = 7;   // 7: door objects in cells (Outdoor Cave 1-3...), Hacknet logouts left out, 5 Nov
 
     /// <summary>A door in a cell: where it is (cell space), where it leads, and its Index/arrival numbers.</summary>
     public sealed record Portal(int Cell, string Name, Vector3 Position, int To, string Index, int Arrival);
@@ -108,6 +109,13 @@ internal sealed class TerrainMap
             cellData[k] = cell;
             Coarsen(cell.Heights, walk.AsSpan(k * PerCell, PerCell), height.AsSpan(k * PerCell, PerCell));
         });
+        Dictionary<int, Dictionary<string, string>> worldmodels = new(), places = new();
+        try
+        {
+            worldmodels = NpcDefinitions.Parse(File.ReadAllBytes(Path.Combine(install, "definitions", "pak_worldmodels.csv")));
+            places = NpcDefinitions.Parse(File.ReadAllBytes(Path.Combine(install, "definitions", "pak_appplaces.csv")));
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException) { }
         string[] kinds = { "Mine", "Factory", "Lab", "Fortress", "Uplink", "Outpost" };
         for (int k = 0; k < cells.Count; k++)
         {
@@ -117,6 +125,7 @@ internal sealed class TerrainMap
                 if (int.TryParse(exit.Properties.GetValueOrDefault("NextLevel"), out int to) && to > 0)
                     portals.Add(new(cell.Id, exit.Name, exit.Position, to, exit.Properties.GetValueOrDefault("Index") ?? "",
                         int.TryParse(exit.Properties.GetValueOrDefault("NextLevelStartIndex"), out int arrival) ? arrival : 0));
+            portals.AddRange(ObjectPortals(install, cell, worldmodels, places, portals));
             if (outposts.TryGetValue(cell.Id, out var row) && row.GetValueOrDefault("Enabled") == "1")
             {
                 // The outpost's gate is the way in; else its main building; else any outpost model.
@@ -130,6 +139,35 @@ internal sealed class TerrainMap
             }
         }
         return new(cells, walk, height, portals, landmarks);
+    }
+
+    /// <summary>
+    /// Door objects placed in a cell (Outdoor Cave 3 Entrance in F 12, the Abandoned Tunnel in E 13, underground
+    /// entrances): a pak_worldmodels row of Type 20 "Entrance" or 18 "Sewer entrance" whose Value is a pak_appplaces
+    /// row; its ExitWorldId is the world it leads into and ExitWorldEntity where you arrive there. The next row
+    /// (EntryId + 1) is the way back out; its ExitWorldEntity, the spot in this cell you come out at, is the Index.
+    /// Only doors into places that are not wasteland, and not where a WorldChange in the cell already leads.
+    /// </summary>
+    internal static IEnumerable<Portal> ObjectPortals(string install, TerrainCell cell, Dictionary<int, Dictionary<string, string>> models,
+        Dictionary<int, Dictionary<string, string>> places, IReadOnlyCollection<Portal> known)
+    {
+        static int Int(Dictionary<string, string> row, string field) => int.TryParse(row.GetValueOrDefault(field), out int n) ? n : 0;
+        var found = new List<Portal>();
+        foreach (var (model, at) in cell.Objects)
+        {
+            if (!models.TryGetValue(model, out var row) || Int(row, "Type") is not (18 or 20)) continue;
+            int place = Int(row, "Value");
+            if (!places.TryGetValue(place, out var p) || p.GetValueOrDefault("Enabled") == "0") continue;
+            int to = Int(p, "ExitWorldId");
+            if (to <= 0 || to == cell.Id || TerrainCell.Exists(install, to)) continue;
+            if (known.Any(k => k.Cell == cell.Id && k.To == to) || found.Any(k => k.To == to)) continue;
+            string index = places.TryGetValue(place + 1, out var back) && Int(back, "ExitWorldId") == cell.Id ? Int(back, "ExitWorldEntity").ToString() : "";
+            string name = string.Join(' ', (row.GetValueOrDefault("Name") ?? $"door {model}").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            // A Hacknet logout (Winter Wonderland's to Plaza 1) is a terminal that sends you away, not a door.
+            if (name.Contains("LOGOUT", StringComparison.OrdinalIgnoreCase) || name.Contains("LOGIN", StringComparison.OrdinalIgnoreCase)) continue;
+            found.Add(new(cell.Id, $"{name}@object{model}", at, to, index, Int(p, "ExitWorldEntity")));
+        }
+        return found;
     }
 
     /// <summary>512 x 512 heightfield -> 128 x 128 squares: mean height, walkable when 12 of 16 samples are not too steep.</summary>

@@ -84,6 +84,34 @@ internal static class SectorObjects
         return Path.Combine(install, Path.GetDirectoryName(rel) ?? "", "pak_" + Path.GetFileName(rel));
     }
 
+    private static readonly Dictionary<string, Dictionary<int, string>> Overrides = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The spawn file the game uses for a world: the one definitions\pak_worldinfo names (DatPathOverride) when it is
+    /// on disk, else the one beside its level. Variants share a level but not a spawn file: the Dangerous Canyon Cave
+    /// (world 1034, "cavemap3a.dat") is cavemap3.bsp, whose own cavemap3.dat has other doors (5 Nov).
+    /// </summary>
+    public static string SpawnFile(string install, int worldId, string assetPath)
+    {
+        Dictionary<int, string> overrides;
+        lock (Overrides)
+        {
+            if (!Overrides.TryGetValue(install, out overrides!))
+            {
+                overrides = new();
+                try
+                {
+                    foreach (var (id, row) in NpcDefinitions.Parse(File.ReadAllBytes(Path.Combine(install, "definitions", "pak_worldinfo.csv"))))
+                        if (row.GetValueOrDefault("DatPathOverride") is { Length: > 0 } dat) overrides[id] = dat.Replace('\\', '/').TrimStart('.', '/');
+                }
+                catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException) { }
+                Overrides[install] = overrides;
+            }
+        }
+        if (overrides.TryGetValue(worldId, out var listed) && DatPath(install, listed) is var path && File.Exists(path)) return path;
+        return DatPath(install, assetPath);
+    }
+
     /// <summary>The props and doors of the sector whose level is <paramref name="assetPath"/>; empty when it has no spawn file.</summary>
     public static Contents Read(string install, string assetPath) => ReadDat(install, DatPath(install, assetPath));
 

@@ -69,6 +69,36 @@ internal static class TerrainTests
             Check(map.Landmarks.Any(l => l.Name == "Redrock Mine" && l.Cell == 2067), "outposts are landmarks (Redrock Mine in D 07)");
         });
 
+        test("Door objects in cells: Outdoor Cave 3 Entrance in F 12 leads into its cave, and you come back out at F 12's spot 4", () =>
+        {
+            var map = TerrainMap.Get(install);
+            var cave = map.Portals.FirstOrDefault(p => p.Cell == 2112 && p.To == 1034);
+            Check(cave != null && cave.Name.StartsWith("Outdoor Cave 3 Entrance") && cave.Index == "4" && cave.Arrival == 9
+                && Vector2.Distance(new(cave.Position.X, cave.Position.Z), new(-739, -3512)) < 5, $"the F 12 cave door ({cave})");
+            Check(map.Portals.Any(p => p.Cell == 2092 && p.To == 1033) && map.Portals.Any(p => p.Cell == 2093 && p.To == 1032), "Outdoor Caves 2 (E 12) and 1 (E 13)");
+            Check(!map.Portals.Any(p => p.Name.Contains("LOGOUT", StringComparison.OrdinalIgnoreCase)), "a Hacknet logout is not a door");
+            Check(map.ArrivalFrom(2112, 1034, 0)?.To == 1034, "coming out of the cave you arrive at its door");
+        });
+
+        test("Outdoor Cave 3 inside: its own spawn file; from the arrival, the exit back to F 12 and both supply boxes are walkable", () =>
+        {
+            Check(SectorObjects.SpawnFile(install, 1034, "worlds/canyon/cavemap3.bsp").EndsWith("pak_cavemap3a.dat", StringComparison.OrdinalIgnoreCase),
+                "world 1034 uses pak_worldinfo's cavemap3a.dat, not the level's cavemap3.dat");
+            Check(SectorObjects.SpawnFile(install, 1, "worlds/plaza/plaza_p1.bsp").EndsWith("pak_plaza_p1.dat", StringComparison.OrdinalIgnoreCase), "no listed file: the one beside the level");
+            string logs = Path.Combine(Path.GetTempPath(), "traversal-terraintests-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(logs);
+            var travel = new Travel(install, id => throw new NotSupportedException(), new Hud(), logs, 12, true);
+            var inside = InsideMap.Build(install, NavWorld.Bake(install, 1034), travel);
+            Check(inside.Marks.Any(m => m.Kind == "arrival" && m.Name == "arrival 9"), "you arrive at spot 9 (the entrance's ExitWorldEntity)");
+            Check(inside.Marks.Count(m => m.Kind == "box") == 2, "two supply boxes");
+            Check(inside.Routes.Count == 3 && inside.Routes.All(r => r.Complete), "routes to the exit and both boxes: " +
+                string.Join(", ", inside.Routes.Select(r => $"{r.Door.Name} {r.Complete}")));
+            Check(inside.Reached > inside.Polygons * 2 / 3, $"most of the floor is reachable ({inside.Reached} of {inside.Polygons})");
+            Check(travel.Links(1034).Any(l => l.To == 2112), "its way out leads to F 12");
+            Check(travel.SectorPath(1, 1034).Count > 0, "Plaza 1 to the cave plans");
+            Check(InsideMap.Svg(inside).Contains("Outdoor Cave 3 Exit"), "the map names the exit");
+        });
+
         test("Plans: Outzone 9 to Tech Haven crosses A 07 .. E 07; city plans are unchanged", () =>
         {
             string logs = Path.Combine(Path.GetTempPath(), "traversal-terraintests-" + Guid.NewGuid().ToString("N")[..8]);

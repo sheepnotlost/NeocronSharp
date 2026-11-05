@@ -31,12 +31,14 @@ internal sealed class TerrainCell
     public float[] Heights { get; }
     public IReadOnlyList<Placement> Placements { get; }
     public IReadOnlyList<Vector3> Props { get; }
+    /// <summary>Placed objects that are pak_worldmodels rows (cave entrances, GenReps, boxes...): the row id and where it stands.</summary>
+    public IReadOnlyList<(int Model, Vector3 Position)> Objects { get; }
 
     /// <summary>A BSP model placed in the cell, with its static geometry and exits already moved into cell space.</summary>
     public sealed record Placement(string Model, Vector3 Position, float Yaw, EnvironmentMesh? Mesh, IReadOnlyList<EnvironmentFeature> Exits, Vector3 Offset = default);
 
-    private TerrainCell(int id, string code, float[] heights, List<Placement> placements, List<Vector3> props)
-    { Id = id; Code = code; Heights = heights; Placements = placements; Props = props; }
+    private TerrainCell(int id, string code, float[] heights, List<Placement> placements, List<Vector3> props, List<(int, Vector3)> objects)
+    { Id = id; Code = code; Heights = heights; Placements = placements; Props = props; Objects = objects; }
 
     public static int Row(int id) => (id - FirstId) / Columns;
     public static int Column(int id) => (id - FirstId) % Columns;
@@ -145,7 +147,7 @@ internal sealed class TerrainCell
     {
         var heights = ReadHeights(install, id);
         string code = CodeOf(id);
-        var placements = new List<Placement>(); var props = new List<Vector3>();
+        var placements = new List<Placement>(); var props = new List<Vector3>(); var objects = new List<(int, Vector3)>();
         string dat = Path.Combine(install, "terrain", $"pak_{code}.dat");
         if (File.Exists(dat))
             foreach (var (type, e) in WorldObjects.Elements(Decode(File.ReadAllBytes(dat))))
@@ -168,9 +170,15 @@ internal sealed class TerrainCell
                         .Select(f => new EnvironmentFeature(f.Kind, $"{f.Name}@{name}", Place(f.Position, position, yaw), f.Properties)).ToList();
                     placements.Add(new(path, position, yaw, mesh, exits, V(e, 16)));
                 }
-                else if (type == Prop && e.Length >= 12) props.Add(V(e, 0));
+                else if (type == Prop && e.Length >= 12)
+                {
+                    props.Add(V(e, 0));
+                    // The pak_worldmodels row (u16 at 44, as in a sector's spawn file); 0 for plain scenery.
+                    int model = e.Length >= 46 ? BinaryPrimitives.ReadUInt16LittleEndian(e.AsSpan(44, 2)) : 0;
+                    if (model > 0) objects.Add((model, V(e, 0)));
+                }
             }
-        return new(id, code, heights, placements, props);
+        return new(id, code, heights, placements, props, objects);
     }
 
     private const uint PlacedModel = 1000008, Prop = 1000003;

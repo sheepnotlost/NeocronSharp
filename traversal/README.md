@@ -259,6 +259,23 @@ Tech Haven, the Military Base, Canyon, the wasteland dungeons and the 36 outpost
 - **Outzone 6 and 8:** their navmeshes are in pieces from the arrival spots used offline. Canyon's shortest route goes through them; a live run may need to back out as the offline plan does.
 - **Not handled:** creatures that attack, water, and props (908 per cell, not in the navmesh).
 
+## Cave doors in the wasteland, and the inside of a cave (5 Nov, offline)
+
+Asked for: Outdoor Cave 3, the cave outside Canyon's reloading point in F 12. **Not tried live.**
+
+- **Door objects in cells:** some wasteland doors are placed objects, not WorldChanges in a model, so the walking grid never had them. The game routes them through `pak_appplaces`, as it does city door objects. Each one is now a portal: a `pak_worldmodels` row of Type 20 (entrance) or 18 (sewer entrance) whose Value names an appplaces row. That row's ExitWorldId is where the door leads and its ExitWorldEntity is where you arrive. The next row is the way back; its ExitWorldEntity is the spot in the cell you come out at.
+  - About 50 new doors, among them Outdoor Caves 1 to 3 (E 13, E 12, F 12), the Canyon Abandoned Tunnel, the swamp caves, the storage bunkers, the Ceres labs and the underground entrances.
+  - Hacknet logouts (Winter Wonderland's) are left out: they are terminals.
+  - The terrain map cache is version 6, so it rebuilds once.
+- **The right spawn file:** `pak_worldinfo` names the spawn file of 530 worlds (DatPathOverride). Variants share a level but not that file: world 1034 is `cavemap3.bsp`, but its doors are in `cavemap3a.dat`, while `cavemap3.dat` has a Canyon Facility exit. Props, doors and door objects now come from the listed file, or from the one beside the level when none is listed.
+- **Outdoor Cave 3 (world 1034, DANGEROUS CANYON CAVE):**
+  - The entrance is at -739, -3512 in F 12, and you come out at spot 4 beside it.
+  - Inside, you arrive at spot 9 (-5534, -431, 4574), about 100 units from the "Outdoor Cave 3 Exit".
+  - 979 of the 1290 floor pieces are walkable from there: one loop of tunnels. The rest are rock tops.
+  - Two supply boxes: the far one is about 14,400 units away, the near one 8,300.
+  - `wasteplan 1034` from Plaza 1: subway to the Outzone, then A 08 … E 12, F 12 and the cave door. 14 legs, about 290,000 units (24-39 min).
+- **`traversal.exe insidemap <world>`:** draws any cave or dungeon from above to `out\inside-<world>.svg`. It shows the floor you can reach from where you arrive, the doors, the arrival spots, the supply boxes and the routes to them, and prints the same as text.
+
 ## Gravity lifts, doors and props (29 Oct, offline)
 
 **Not tried live.** Walks and Follow now use lifts and open doors inside a sector, and route round props.

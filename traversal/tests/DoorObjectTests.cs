@@ -103,8 +103,12 @@ internal static class DoorObjectTests
             var sec8 = list.First(e => e.Name == "Outzone 3 - Water Cleaning Sec 8 (hard)");
             // Its door is in BATTLEFIELD DOY SECTOR 8, whose own door stands in wasteland cell K 16: placed now the walker crosses the wasteland.
             Check(sec8.Why == null && sec8.Target != null, $"Sec 8 is reached across the wasteland, through the DoY sector its door is in: {sec8.Zone} {sec8.Target} {sec8.Why}");
-            var cave = list.First(e => e.Name == "E12 - Canyon Cave");
-            Check(cave.Why is { } wc && wc.Contains("E 12 - CANYONS") && wc.Contains("wasteland"), $"the canyon cave names the wasteland cell its door is in: {cave.Why}");
+            // The Outdoor Cave doors are objects in their wasteland cells: placed since the walking grid has them (5 Nov).
+            foreach (var name in new[] { "E12 - Canyon Cave", "F12 - Canyon Cave" })
+            {
+                var cave = list.First(e => e.Name == name);
+                Check(cave.Why == null && cave.Target != null, $"{name} is placed, through its door in the wasteland: {cave.Zone} {cave.Target} {cave.Why}");
+            }
             Check(list.Where(e => e.Why != null).All(e => !e.Why!.Contains("the files do not say where it is")), "no entry is left with the old vague reason");
         });
     }

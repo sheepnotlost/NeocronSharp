@@ -70,7 +70,7 @@ internal sealed class NavWorld
         // Props the spawn file places (barrels, crates, benches, desks, invisible walls) are not level
         // geometry: cut each out by its turned bounding box. Doors come from the same file.
         SectorObjects.Contents contents;
-        try { contents = SectorObjects.Read(install, world.Summary.Source); if (!UseProps) contents = new(Array.Empty<SectorObjects.Prop>(), contents.Doors); }
+        try { contents = SectorObjects.ReadDat(install, SectorObjects.SpawnFile(install, worldId, world.Summary.Source)); if (!UseProps) contents = new(Array.Empty<SectorObjects.Prop>(), contents.Doors); }
         catch (Exception e) when (e is IOException or InvalidDataException or ArgumentException) { contents = new(Array.Empty<SectorObjects.Prop>(), Array.Empty<SectorObjects.Door>()); }
         foreach (var prop in contents.Props)
             geometry.AddConvexVolume(SectorObjects.Outline(prop), prop.Bottom - 16, prop.Top, new DotRecast.Recast.RcAreaModification(0));

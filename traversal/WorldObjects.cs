@@ -100,12 +100,11 @@ internal sealed class WorldObjects(string install, Travel travel)
 
     private static Vector3 Vec(byte[] e, int at) => new(BitConverter.ToSingle(e, at), BitConverter.ToSingle(e, at + 4), BitConverter.ToSingle(e, at + 8));
 
-    /// <summary>The sector's decoded .dat: same folder and name as its world asset, "pak_" in front.</summary>
+    /// <summary>The sector's decoded .dat: the one pak_worldinfo names, else same folder and name as its world asset ("pak_" in front).</summary>
     private byte[] Read(int world)
     {
         var area = travel.Areas.FirstOrDefault(a => a.WorldId == world) ?? throw new InvalidDataException($"No world asset for sector {world}.");
-        string rel = Path.ChangeExtension(area.AssetPath, ".dat").Replace('/', Path.DirectorySeparatorChar);
-        string full = Path.Combine(install, Path.GetDirectoryName(rel) ?? "", "pak_" + Path.GetFileName(rel));
+        string full = SectorObjects.SpawnFile(install, world, area.AssetPath);
         if (!File.Exists(full)) throw new FileNotFoundException($"No spawn file for {travel.SectorName(world)}.", full);
         byte[] bytes = File.ReadAllBytes(full);
         try { return NpcDefinitions.DecodeBytes(bytes); }

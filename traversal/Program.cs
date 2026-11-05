@@ -709,6 +709,27 @@ try
             }
             return 0;
         }
+        case "insidemap":
+        {
+            // insidemap <world>: offline, the inside of a cave or dungeon: what is walkable from where you arrive,
+            // the doors out and the supply boxes, and the routes to them. Writes out\inside-<world>.svg.
+            int world = int.Parse(rest[0]);
+            string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+            var travel = new Travel(DefaultInstall, id => throw new NotSupportedException(), new Hud(), logs, pulse, run);
+            var map = InsideMap.Build(DefaultInstall, BakeLogged(DefaultInstall, world), travel);
+            Console.WriteLine($"{map.Reached} of {map.Polygons} floor pieces reachable from the arrival");
+            foreach (var m in map.Marks)
+                Console.WriteLine($"  {m.Kind,-8} {m.Name,-28} at {m.Position.X:F0},{m.Position.Y:F0},{m.Position.Z:F0}");
+            foreach (var (door, route, complete) in map.Routes)
+                Console.WriteLine($"  route to {door.Name,-28} {(complete ? "ok  " : "NONE")} {(route.Count > 1 ? new RouteFollower(route).Total : 0),7:F0} units, {route.Count} corners");
+            foreach (var (door, to) in travel.Links(world))
+                Console.WriteLine($"  way out: {door.Properties.GetValueOrDefault("Label") ?? door.Name} -> {travel.SectorName(to)}");
+            Directory.CreateDirectory(outDir);
+            string file = Path.Combine(outDir, $"inside-{world}.svg");
+            File.WriteAllText(file, InsideMap.Svg(map));
+            Console.WriteLine($"Wrote {file}");
+            return 0;
+        }
         case "survey":
             Survey.Run(DefaultInstall, 1, "WorldChange5", Path.Combine(outDir, "survey"), Math.Max(1, Environment.ProcessorCount - 2));
             return 0;
