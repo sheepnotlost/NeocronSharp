@@ -207,8 +207,8 @@ class ItemImages:
         if hit[0] == "ok":
             from PIL import Image
             try:
-                with Image.open(hit[1]) as image:
-                    result = ("ok", fit(image))
+                with Image.open(hit[1]) as image:  # As Tech Haven gave it: the slot scales it to its size.
+                    result = ("ok", image.convert("RGBA"))
             except OSError:
                 hit[1].unlink(missing_ok=True)
                 return "failed", None

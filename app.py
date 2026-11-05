@@ -19,27 +19,27 @@ from recycling import load_catalog, filter_recipes
 from appearance import SKINS, apply_skin, stop_sound
 from construction_catalog import load_construction_catalog, filter_construction
 from item_images import ItemImages, PictureLoader
+from picture_slot import PictureSlot, PICTURE_TEXT
 import gogo
 
 ROOT = Path(__file__).resolve().parent
 PROFILE_PATH = ROOT / "profile.json"
 OPERATION_LABELS = {"tech_parts": "Tech parts (T / E / A / L)", "blueprints": "Item → blueprint"}
 SEARCH_LABELS={"fast":"Fast — datacube icons","all_cells":"Thorough — every cell"}
-PICTURE_WELL=136      # px square slot for a recycling item's picture (pictures fit in 128 px)
-PICTURE_DELAY_MS=150  # let the selection settle before looking a picture up
-PICTURE_TEXT={"loading":"Loading\npicture…","missing":"No picture on\nTech Haven",
-              "failed":"No answer from\nTech Haven"}
+
+
+def build_picture_recipe(row):
+    """What the picture loader looks up for a Catalog item: its own Tech Haven page when the catalog has one."""
+    page=(row.get("item_url") or row.get("source_url") or "").replace("/show-item/","/item/")
+    return {"id":row["id"],"name":row["name"],"source_url":page}
 
 
 class App:
     def __init__(self, root, profile_path=PROFILE_PATH, backend=None, tracker=None, item_images=None):
         self.root = root
-        # Recycling pictures come from Tech Haven on a worker thread; results return through self.events.
+        # Recycling and Catalog pictures come from Tech Haven on a worker thread; results return through self.events.
         self.item_images = item_images if item_images is not None else ItemImages()
         self.picture_loader = PictureLoader(self.item_images, lambda rid, state, image: self.events.put(("item_image", (rid, state, image))))
-        self._picture_after = None
-        self._picture_shown = None  # (recipe id, PIL image) currently in the slot
-        self._picture_photo = None
         self.backend = backend if backend is not None else WindowsBackend()
         self.tracker = tracker  # neocronsharp_link.EmbeddedTracker; None leaves the NeocronSharp tabs empty (tests).
         self.profile_path = Path(profile_path)
@@ -294,7 +294,8 @@ class App:
         """Open the suite tab that holds NeocronSharp page `page` (and pick it there), e.g. after NPC quests."""
         import neocronsharp_link
         name=neocronsharp_link.tab_of(page)
-        if name not in getattr(self,"sharp_tabs",{}):return
+        if name not in getattr(self,"sharp_tabs",{}):
+            self.show_sharp_page();return  # A page with no tab (Recorder, Navigation): back to the one on show.
         self.sharp_pages[name].set(page)
         if self.tabs.select()!=str(self.sharp_tabs[name]):self.tabs.select(self.sharp_tabs[name])
 
@@ -385,11 +386,9 @@ class App:
         details.columnconfigure(0,weight=1)
         self.recycle_description=tk.StringVar()
         ttk.Label(details,textvariable=self.recycle_description,wraplength=340,justify="left").grid(row=0,column=0,sticky="nw")
-        # The item's picture sits in a fixed slot beside the text, so nothing moves when it loads.
-        self.picture_well=ttk.Frame(details,style="Picture.TFrame",width=PICTURE_WELL,height=PICTURE_WELL)
-        self.picture_well.grid(row=0,column=1,sticky="ne",padx=(10,2));self.picture_well.pack_propagate(False)
-        self.picture_label=ttk.Label(self.picture_well,style="Picture.TLabel",anchor="center",justify="center")
-        self.picture_label.pack(fill="both",expand=True,padx=1,pady=1)
+        # The item's picture sits in a slot beside the text that grows with the window.
+        self.recycle_picture=PictureSlot(self,details,self.recycling_tab,self.selected_recycle_recipe,pane=detail_canvas)
+        self.recycle_picture.well.grid(row=0,column=1,sticky="ne",padx=(10,2))
         source=ttk.Button(details,text="Open recipe source",command=self.open_recycle_source)
         source.grid(row=1,column=0,columnspan=2,sticky="w",pady=(10,14));self.editable.append(source)
         self.recycle_query.trace_add("write",lambda *args:self.filter_recycling())
@@ -410,63 +409,35 @@ class App:
     def show_recycle_recipe(self):
         selection=self.recycle_tree.selection()
         row=next((r for r in self.recycle_data["recipes"] if selection and r["id"]==selection[0]),None)
-        if row is None:self.recycle_description.set("No matching recipe.");self.queue_item_picture();return
+        if row is None:self.recycle_description.set("No matching recipe.");self.recycle_picture.queue();return
         text=row["name"]+"\n"+row["category"]+f" · TL {row['tech_level'] if row['tech_level'] is not None else 'not listed'}\n\nIngredients:\n"
         text+="\n".join(f"{p['quantity']} × {p['name']}" for p in row["ingredients"])
         if row["requirements"]:text+="\n\nItem requirements: "+row["requirements"]
         self.recycle_description.set(text)
-        self.queue_item_picture()
+        self.recycle_picture.queue()
 
     def selected_recycle_recipe(self):
         selection=self.recycle_tree.selection()
         return next((r for r in self.recycle_data["recipes"] if selection and r["id"]==selection[0]),None)
 
-    def pictures_visible(self):
-        """Pictures are only looked up while someone can see them: the Recycling tab open in a shown window."""
+    def pictures_visible(self,tab=None):
+        """Pictures are only looked up while someone can see them: their tab open in a shown window."""
         try:
-            return (self.tabs.select()==str(self.recycling_tab) and bool(self.root.winfo_viewable())
+            return (self.tabs.select()==str(tab if tab is not None else self.recycling_tab) and bool(self.root.winfo_viewable())
                     and float(self.root.attributes("-alpha"))>0)
         except tk.TclError:
             return False
 
-    def queue_item_picture(self):
-        """Ask for the selected recipe's picture once the selection settles (arrow-key scrolling skips rows)."""
-        if not hasattr(self,"picture_label"):return
-        if self._picture_after is not None:
-            self.root.after_cancel(self._picture_after);self._picture_after=None
-        row=self.selected_recycle_recipe()
-        if row is None:
-            self.set_item_picture(None,"");return
-        if self._picture_shown is not None and self._picture_shown[0]==row["id"]:return
-        self.set_item_picture(None,"")
-        if self.pictures_visible():
-            self._picture_after=self.root.after(PICTURE_DELAY_MS,lambda:self._request_item_picture(row["id"]))
+    def picture_slots(self):
+        return [slot for slot in (getattr(self,"recycle_picture",None),getattr(self,"build_picture",None)) if slot is not None]
 
-    def _request_item_picture(self,recipe_id):
-        self._picture_after=None
-        row=self.selected_recycle_recipe()
-        if row is not None and row["id"]==recipe_id and self.pictures_visible():
-            self.picture_loader.request(row)
+    def queue_item_picture(self):
+        for slot in self.picture_slots():slot.queue()
 
     def show_item_picture(self,recipe_id,state,image):
-        row=self.selected_recycle_recipe()
-        if row is None or row["id"]!=recipe_id:return  # The user moved on; a later request is pending.
-        if state=="ok" and image is not None:
-            self.set_item_picture((recipe_id,image),"")
-        else:
-            self.set_item_picture(None,PICTURE_TEXT.get(state,""))
-
-    def set_item_picture(self,shown,text):
-        self._picture_shown=shown
-        self._picture_photo=None
-        if shown is not None:
-            from PIL import Image, ImageTk
-            image=shown[1]
-            if image.mode=="RGBA":  # Flatten onto the slot colour so the edges match every skin.
-                flat=Image.new("RGB",image.size,self.skin_rgb("input"))
-                flat.paste(image,mask=image.getchannel("A"));image=flat
-            self._picture_photo=ImageTk.PhotoImage(image,master=self.root)
-        self.picture_label.configure(image=self._picture_photo or "",text=text)
+        """A loader result goes to the slot showing that recipe; one for a row nobody shows any more is dropped."""
+        for slot in self.picture_slots():
+            if slot.show(recipe_id,state,image):return
 
     def current_skin(self):
         key=self.profile.get("preferences",{}).get("skin","basic")
@@ -482,7 +453,8 @@ class App:
         style=ttk.Style(self.root)
         style.configure("Picture.TFrame",background=skin["edge"])
         style.configure("Picture.TLabel",background=skin["input"],foreground=skin["muted"],font=(skin["font"],9))
-        if self._picture_shown is not None:self.set_item_picture(self._picture_shown,"")
+        for slot in self.picture_slots():
+            if slot.shown is not None:slot.set(slot.shown,"")
 
     def open_recycle_source(self):
         selection=self.recycle_tree.selection()
@@ -744,7 +716,12 @@ class App:
         right=ttk.Frame(host);right.grid(row=1,column=1,sticky="nsew")
         body=self.scroll_body(right)
         self.build_description=tk.StringVar()
-        ttk.Label(body,textvariable=self.build_description,wraplength=330,justify="left").pack(anchor="w")
+        top=ttk.Frame(body);top.pack(fill="x");top.columnconfigure(0,weight=1)
+        ttk.Label(top,textvariable=self.build_description,wraplength=330,justify="left").grid(row=0,column=0,sticky="nw")
+        # The same picture slot as Recycling, from the item's Tech Haven page (the user's word, 4 Nov).
+        self.build_picture=PictureSlot(self,top,self.construction_catalog_tab,self.selected_build_recipe,
+                                       recipe_of=build_picture_recipe,pane=body.master)
+        self.build_picture.well.grid(row=0,column=1,sticky="ne",padx=(10,2))
         self.use_build_button=ttk.Button(body,text="Use blueprint recipe",command=self.use_build_recipe)
         self.use_build_button.pack(anchor="w",pady=(12,5))
         source=ttk.Button(body,text="Open item source",command=self.open_build_source);source.pack(anchor="w",pady=5)
@@ -775,6 +752,7 @@ class App:
                                        +(f"\n\n{materials}" if row["ingredients"] else ""))
         state="normal" if row and row["method"] in ("verified_example","check_blueprint") and not self.locked() else "disabled"
         self.use_build_button.configure(state=state)
+        if hasattr(self,"build_picture"):self.build_picture.queue()
 
     def store_build_recipe(self):
         row=self.selected_build_recipe()

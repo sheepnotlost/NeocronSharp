@@ -4,7 +4,7 @@ namespace NeocronSharp;
 
 /// <summary>Shows the tracker inside another program's window: the suite's NeocronSharp tabs. Commands arrive one per
 /// line on stdin: "parent &lt;hwnd&gt;" moves the form into that window, "page &lt;name&gt;" picks the page (Tracker, Quests,
-/// Loot library, Player, Recorder, Navigation, Environment or Plugins), "quit" or the end of input closes it. The form follows the parent's client size, so the
+/// Loot library, Player, Environment or Plugins), "quit" or the end of input closes it. The form follows the parent's client size, so the
 /// two programs' DPI settings never have to agree.</summary>
 internal static class EmbeddedHost
 {

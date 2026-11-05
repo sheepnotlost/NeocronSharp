@@ -18,14 +18,13 @@ EXECUTABLE = PROJECT / "dist" / "NeocronSharp.exe"
 SOLUTION = PROJECT / "NeocronSharp.sln"
 
 # The suite tabs that show NeocronSharp, with the pages each one holds (names match NeocronSharp's "page <name>"
-# command). A tab with several pages gets a row of buttons to pick one. Each page is its own tab now (the user's word, 4 Nov).
+# command). A tab with several pages gets a row of buttons to pick one. Each page is its own tab now, and the Recorder
+# and Navigation pages are not shown at all (the user's word, 4 Nov).
 TABS = (
     ("Tracker", ("Tracker",)),
     ("Quests", ("Quests",)),
     ("Loot library", ("Loot library",)),
     ("Player", ("Player",)),
-    ("Recorder", ("Recorder",)),
-    ("Navigation", ("Navigation",)),
     ("Environment", ("Environment",)),
     ("Plugins", ("Plugins",)),
 )

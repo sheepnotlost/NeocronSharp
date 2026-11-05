@@ -1,4 +1,4 @@
-"""Recycling item pictures: Tech Haven page parsing, the on-disk cache, and the Tk hand-off. No network."""
+"""Recycling and Catalog item pictures: Tech Haven page parsing, the on-disk cache, and the Tk hand-off. No network."""
 
 import io
 import json
@@ -242,20 +242,24 @@ class AppPictureTests(unittest.TestCase):
         app.recycle_tree.selection_set(rid)
         return rid
 
+    def shown_tab(self, tab):
+        """Pretend the window is on screen with only ``tab`` open (each slot asks about its own tab)."""
+        return patch.object(type(self.app), "pictures_visible", new=lambda app, asked=None: (asked or app.recycling_tab) is tab)
+
     def test_selecting_never_fetches_on_the_tk_thread_and_the_picture_arrives(self):
         app = self.app
-        with patch.object(type(app), "pictures_visible", return_value=True):
+        with self.shown_tab(app.recycling_tab):
             app.tabs.select(app.recycling_tab)
             started = time.perf_counter()
             self.select("Lazar Rifle"); self.root.update()
             self.assertLess(time.perf_counter() - started, 1.0)  # the fetcher is still blocked; Tk was not
-            self.assertTrue(self.pump(lambda: app.picture_label.cget("text") == app_module.PICTURE_TEXT["loading"]))
+            self.assertTrue(self.pump(lambda: app.recycle_picture.label.cget("text") == app_module.PICTURE_TEXT["loading"]))
             self.release.set()
-            self.assertTrue(self.pump(lambda: app._picture_shown is not None))
-        self.assertEqual(app._picture_shown[1].size, (128, 64))
+            self.assertTrue(self.pump(lambda: app.recycle_picture.shown is not None))
+        self.assertEqual(app.recycle_picture.shown[1].size, (128, 64))
         self.assertTrue(self.fetcher.threads)
         self.assertNotIn(threading.main_thread(), self.fetcher.threads)
-        self.assertTrue(str(app.picture_label.cget("image")))
+        self.assertTrue(str(app.recycle_picture.label.cget("image")))
 
     def test_hidden_window_or_other_tab_does_not_look_pictures_up(self):
         app = self.app
@@ -274,7 +278,7 @@ class AppPictureTests(unittest.TestCase):
         app = self.app
         rid = self.select("Lazar Rifle")
         app.show_item_picture(rid, "missing", None)
-        self.assertEqual(app.picture_label.cget("text"), app_module.PICTURE_TEXT["missing"])
+        self.assertEqual(app.recycle_picture.label.cget("text"), app_module.PICTURE_TEXT["missing"])
         app.show_item_picture(rid, "ok", Image.new("RGBA", (32, 32), (10, 20, 30, 0)))
         with patch("app.save_profile"):
             for skin in SKINS.values():
@@ -282,9 +286,38 @@ class AppPictureTests(unittest.TestCase):
                 style = ttk.Style(self.root)
                 self.assertEqual(style.lookup("Picture.TLabel", "background"), skin["input"])
                 self.assertEqual(style.lookup("Picture.TFrame", "background"), skin["edge"])
-                self.assertIsNotNone(app._picture_photo)
+                self.assertIsNotNone(app.recycle_picture.photo)
         app.show_item_picture("someone_else", "missing", None)  # stale result for another recipe is ignored
-        self.assertIsNotNone(app._picture_shown)
+        self.assertIsNotNone(app.recycle_picture.shown)
+
+    def test_the_catalog_shows_the_item_picture_from_its_own_page(self):
+        app = self.app
+        row = dict(app.build_catalog_data["recipes"][0], item_url="https://db.techhaven.org/en/show-item/lazar-rifle")
+        app.build_catalog_data["recipes"][0] = row
+        self.assertEqual(app_module.build_picture_recipe(row)["source_url"], "https://db.techhaven.org/en/item/lazar-rifle")
+        self.release.set()
+        with self.shown_tab(app.construction_catalog_tab):
+            app.tabs.select(app.construction_catalog_tab)
+            app.build_tree.selection_set(row["id"]); self.root.update()
+            self.assertTrue(self.pump(lambda: app.build_picture.shown is not None))
+        self.assertEqual(app.build_picture.shown[0], row["id"])
+        self.assertIsNone(app.recycle_picture.shown)          # the Recycling slot keeps its own row
+        self.assertIn("https://db.techhaven.org/en/item/lazar-rifle", self.fetcher.calls)
+
+    def test_pictures_grow_with_the_window_and_stay_crisp(self):
+        from picture_slot import WELL_MIN, WELL_MAX, well_size
+        self.assertEqual(well_size(400, 600), WELL_MIN)        # the default window: as before
+        self.assertEqual(well_size(2000, 2000), WELL_MAX)
+        self.assertEqual(well_size(700, 1000), 340)
+        app = self.app
+        rid = self.select("Lazar Rifle")
+        app.show_item_picture(rid, "ok", Image.new("RGBA", (128, 64), (10, 20, 30, 255)))
+        self.assertEqual(app.recycle_picture.photo.width(), 128)
+        app.recycle_picture.fit_to(1300, 1000)
+        self.assertTrue(self.pump(lambda: app.recycle_picture.photo.width() == 384))  # 3x, whole pixels
+        self.assertEqual(int(app.recycle_picture.well.cget("width")), WELL_MAX)
+        app.recycle_picture.fit_to(300, 300)
+        self.assertTrue(self.pump(lambda: app.recycle_picture.photo.width() == 128))
 
 
 if __name__ == "__main__":

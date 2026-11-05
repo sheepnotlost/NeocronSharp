@@ -7,9 +7,8 @@ One program, three engines, started from **Launch.cmd**:
 - **Screen automation (Python, this folder):** Research, Construction, Recycling and Tech Counter
   tabs, plus the older Nav-Ray walker. Reads the game from screenshots and OCR, sends ordinary mouse/keyboard input.
 - **NeocronSharp pages (C#, `NeocronSharp/`):** the NPC/player tracker on the native sector map, quest browser, loot
-  library, player inspector, coordinate recorder, point navigation, environment/BSP export and plugins, shown inside the
-  suite's **Tracker**, **Quests**, **Loot library**, **Player**, **Recorder**, **Navigation**, **Environment** and
-  **Plugins** tabs (one embedded NeocronSharp process; the window grows to fit it). NeocronSharp opens no windows of its own; only its Save/folder pickers pop up.
+  library, player inspector, environment/BSP export and plugins, shown inside the suite's **Tracker**, **Quests**,
+  **Loot library**, **Player**, **Environment** and **Plugins** tabs (one embedded NeocronSharp process; the window grows to fit it). NeocronSharp opens no windows of its own; only its Save/folder pickers pop up.
   Reads the game client's memory read-only (only the fingerprinted build). It needs the .NET 9 Desktop Runtime; **Build** in the Tracker tab
   (or `dotnet build NeocronSharp\NeocronSharp.sln -c Release`) rebuilds it with the .NET 9 SDK. Its own docs:
   [NeocronSharp/README.md](NeocronSharp/README.md), [NeocronSharp/SPEC.md](NeocronSharp/SPEC.md),
@@ -149,7 +148,7 @@ Enable **Stop at N or more slots** and choose 0–5 to stop as soon as a verifie
 
 ## Recycling
 
-The **Recycling** tab includes **201 discovered recipe entries**, searchable by result/ingredient and filterable by category. They include 161 Tech Haven Items DB records plus 40 supplemental legacy/community entries, explicitly labeled. See ingredient quantities, listed tech level, source and retrieval date in the details panel. Some legacy names/variants overlap; the catalog is not a claim that all entries are current/live verified. The incomplete published Swamp Shaman Trophy recipe is documented separately in the spec/data notes.
+The **Recycling** tab includes **201 discovered recipe entries**, searchable by result/ingredient and filterable by category. They include 161 Tech Haven Items DB records plus 40 supplemental legacy/community entries, explicitly labeled. See ingredient quantities, listed tech level, source and retrieval date in the details panel, with the item's picture from Tech Haven (the **Catalog** tab shows one too). Pictures grow when you make the window bigger. Some legacy names/variants overlap; the catalog is not a claim that all entries are current/live verified. The incomplete published Swamp Shaman Trophy recipe is documented separately in the spec/data notes.
 
 For execution, select a recipe and **prepare Recycling Tool in Processor slot 1 and the exact inputs yourself**. Start in 3 seconds verifies the tool name, clicks the freshly detected Start once, observes processing, verifies the output name and stops. It does not automatically transfer recycling materials or repeat consumed inputs. Cloning/salvage are described in the spec; this prepared-run executor does not guess those workflows.
 

@@ -147,7 +147,7 @@ Local Windows OCR reads tooltip names. Text is normalized to reference font size
 
 ### Searchable construction catalog
 
-Ship 1,263 item entries across 38 categories from sourced Tech Haven category listings and known part names, retrieved 26 October 2026. Search case-insensitive names/known material names and WP-number shorthand; filter by category. Display listed level, build method, source URL, notes and material names when published. Keep unavailable source categories recorded in the data.
+Ship 1,263 item entries across 38 categories from sourced Tech Haven category listings and known part names, retrieved 26 October 2026. Search case-insensitive names/known material names and WP-number shorthand; filter by category. Display listed level, build method, source URL, notes and material names when published, and the item's Tech Haven picture beside them (`picture_slot.py`, the Recycling slot's loader and cache; the catalog's own `item_url` page first). Keep unavailable source categories recorded in the data.
 
 Three supplied construction examples have known material names. Other item listings do not establish blueprint availability or publish construction materials; label them Check blueprint and leave ingredients null. Users must supply a matching in-game blueprint/materials. Rare-part and recycling-only references cannot enter the blueprint executor. Never describe the whole item catalog as verified build recipes.
 
@@ -226,6 +226,8 @@ Construction count zero uses the entered available stack. Positive count cannot 
 ### Offline recipe catalog
 
 Catalog snapshot: 201 discovered entries, including 161 primary Items DB recipes and 40 additional legacy/community entries. Some legacy names/ingredient variants overlap; the catalog labels their source status rather than claiming distinct current verified items.
+
+Both picture slots grow with the window: a square of the room the text leaves (360 px kept for it), at most 55% of the pane's height, 136 to 420 px; small icons grow by whole pixels. `ItemImages.lookup` gives the picture as Tech Haven has it and the slot scales it.
 
 Show searchable result/ingredient names, category, listed tech level, exact published ingredient quantities, source URL and retrieval date. Categories include chemicals, weapons, armor, implants, cubes, parts/upgrades, food, drugs, trophies and special items. Source retrieval date: 26 October 2026. This is not a claim of live verification or complete coverage of every event recipe.
 

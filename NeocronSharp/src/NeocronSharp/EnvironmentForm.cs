@@ -87,7 +87,9 @@ internal sealed class EnvironmentForm : Form
             int row = _areas.Rows.Add(area.Name, area.WorldId, s?.GroundPoints.ToString() ?? "—", s?.Transitions.ToString() ?? "—",
                 s == null ? "Not scanned" : s.Error != null ? "Unavailable" : $"{s.Faces:N0} faces"); _areas.Rows[row].Tag = area;
         }
-        SelectArea(selected);
+        // Picking a row makes the grid create its window. Before the page is shown inside the tracker, that would give
+        // the page a top-level window that can no longer be moved into the suite's tab (the empty Environment tab, 4 Nov).
+        if (_areas.IsHandleCreated) SelectArea(selected);
     }
     private async Task LoadSelected()
     {

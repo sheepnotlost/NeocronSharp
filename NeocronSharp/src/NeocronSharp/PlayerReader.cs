@@ -61,8 +61,16 @@ internal sealed partial class PlayerReader : IDisposable
                 throw new InvalidOperationException("The live orientation getter does not match the inspected executable.");
             ReadSample();
         }
+        catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode == 5)
+        {
+            _handle?.Dispose(); Process.Dispose();
+            throw new InvalidOperationException(AccessDenied);
+        }
         catch { _handle?.Dispose(); Process.Dispose(); throw; }
     }
+    /// <summary>Windows only lets a program read a game run by the same Windows account, at the same or a lower level.</summary>
+    internal const string AccessDenied = "Windows won't let NeocronSharp read the game: it runs under another Windows account " +
+        "(another sign-in or remote session) or as administrator. Open the suite in the same account as the game.";
 
     private byte[] Read(ulong address, int size)
     {

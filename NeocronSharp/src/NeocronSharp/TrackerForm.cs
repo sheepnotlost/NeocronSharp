@@ -36,10 +36,8 @@ internal sealed class TrackerForm : Form
     private readonly TabPage _lootTab = new("Loot library");
     private LootLibraryForm? _lootPage;
     // The former separate windows, each now a page of this form (and a tab of the suite when embedded).
-    private readonly TabPage _playerTab = new("Player"), _recorderTab = new("Recorder"), _navigationTab = new("Navigation"), _environmentTab = new("Environment");
+    private readonly TabPage _playerTab = new("Player"), _environmentTab = new("Environment");
     private PlayerInspectorForm? _inspector;
-    private CoordinateRecorderForm? _recorderPage;
-    private MainForm? _navigationPage;
     private EnvironmentForm? _environmentPage;
     private readonly ComboBox _skins = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private bool _skinEvidence;
@@ -109,21 +107,18 @@ internal sealed class TrackerForm : Form
         filters.Controls.Add(topmost, 5, 0);
         filters.Controls.Add(_showPlayers, 6, 0);
         layout.Controls.Add(filters, 0, 2);
-        var statusRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 1 };
+        var statusRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1 };
         statusRow.RowStyles.Add(new(SizeType.Percent, 100));
         statusRow.ColumnStyles.Add(new(SizeType.Percent, 100));
-        foreach (int width in new[] { 150, 115, 135, 120, 120, 125, 130 }) statusRow.ColumnStyles.Add(new(SizeType.Absolute, width));
+        foreach (int width in new[] { 150, 115, 135, 120, 130 }) statusRow.ColumnStyles.Add(new(SizeType.Absolute, width));
         statusRow.Controls.Add(_status, 0, 0);
         var export = new SkinButton { Text = "Export snapshot", Dock = DockStyle.Fill };
-        var navigation = new SkinButton { Text = "Navigation", Dock = DockStyle.Fill };
         var loot = new SkinButton { Text = "Loot library", Dock = DockStyle.Fill };
         var mapping = new SkinButton { Text = "Environment", Dock = DockStyle.Fill };
         var inspect = new SkinButton { Text = "Inspect player", Dock = DockStyle.Fill };
         inspect.Click += (_, _) => InspectPlayer();
-        statusRow.Controls.Add(inspect, 1, 0); statusRow.Controls.Add(loot, 2, 0); statusRow.Controls.Add(mapping, 3, 0); statusRow.Controls.Add(export, 4, 0); statusRow.Controls.Add(navigation, 5, 0);
-        var recorder = new SkinButton { Text = "Recorder", Dock = DockStyle.Fill };
-        recorder.Click += (_, _) => _mainTabs.SelectedTab = _recorderTab;
-        statusRow.Controls.Add(recorder, 6, 0);
+        statusRow.Controls.Add(inspect, 1, 0); statusRow.Controls.Add(loot, 2, 0); statusRow.Controls.Add(mapping, 3, 0); statusRow.Controls.Add(export, 4, 0);
+        // The Recorder and Navigation pages are not shown any more (the user's word, 4 Nov); --recorder/--navigation still open them.
         var npcQuests = new SkinButton { Text = "NPC quests", Dock = DockStyle.Fill };
         npcQuests.Click += (_, _) =>
         {
@@ -132,7 +127,7 @@ internal sealed class TrackerForm : Form
             _questBrowser.FindNpc(entity.Name);
             _mainTabs.SelectedIndex = 1;
         };
-        statusRow.Controls.Add(npcQuests, 7, 0);
+        statusRow.Controls.Add(npcQuests, 5, 0);
         loot.Click += (_, _) => OpenLoot();
         mapping.Click += (_, _) => OpenEnvironment();
         layout.Controls.Add(statusRow, 0, 3);
@@ -177,7 +172,7 @@ internal sealed class TrackerForm : Form
         _pluginBrowser = new PluginBrowser(_pluginHost);
         var pluginsTab = new TabPage("Plugins"); pluginsTab.Controls.Add(_pluginBrowser);
         _playerTab.Controls.Add(new Label { Text = "Select a player in the Tracker list or on the map, then choose Inspect player (or double-click the row).", Dock = DockStyle.Fill, Padding = new Padding(12) });
-        foreach (var tab in new[] { trackerTab, questsTab, _lootTab, _playerTab, _recorderTab, _navigationTab, _environmentTab, pluginsTab }) _mainTabs.TabPages.Add(tab);
+        foreach (var tab in new[] { trackerTab, questsTab, _lootTab, _playerTab, _environmentTab, pluginsTab }) _mainTabs.TabPages.Add(tab);
         Controls.Add(_mainTabs);
         // Each page is built the first time it is opened: the loot and environment pages read the game's files, and the
         // recorder starts reading coordinates once it exists.
@@ -185,8 +180,6 @@ internal sealed class TrackerForm : Form
         {
             if (_closing) return;
             if (_mainTabs.SelectedTab == _lootTab) LootPage();
-            else if (_mainTabs.SelectedTab == _recorderTab && _recorderPage is not { IsDisposed: false }) _recorderPage = Embed(_recorderTab, new CoordinateRecorderForm());
-            else if (_mainTabs.SelectedTab == _navigationTab && _navigationPage is not { IsDisposed: false }) _navigationPage = Embed(_navigationTab, new MainForm());
             else if (_mainTabs.SelectedTab == _environmentTab) EnvironmentPage();
         };
         AddColumn("Name", 230, fill: true); AddColumn("Rank", 95); AddColumn("HP (client)", 160); AddColumn("Weapon", 300);
@@ -224,7 +217,6 @@ internal sealed class TrackerForm : Form
         };
         _map.Picked += entity => { _tracking.Track(entity); Render(); };
         export.Click += (_, _) => ExportSnapshot();
-        navigation.Click += (_, _) => _mainTabs.SelectedTab = _navigationTab;
         _timer.Tick += (_, _) => Tick();
         Shown += (_, _) => { _timer.Start(); Tick(); };
         FormClosing += async (_, e) =>
@@ -232,12 +224,12 @@ internal sealed class TrackerForm : Form
             if (_closing) return;
             _closing = true; _timer.Stop();
             // Pages inside this form are not closed for it: let the recorder save and a running walk release its keys first.
-            var pending = Task.WhenAll(new[] { _refresh, _recorderPage?.Shutdown(), _navigationPage?.Shutdown(), _environmentPage?.Shutdown() }.OfType<Task>());
+            var pending = Task.WhenAll(new[] { _refresh, _environmentPage?.Shutdown() }.OfType<Task>());
             if (!pending.IsCompleted) { e.Cancel = true; await pending; Close(); }
         };
         FormClosed += (_, _) =>
         {
-            foreach (Form? page in new Form?[] { _recorderPage, _navigationPage, _environmentPage, _lootPage, _inspector })
+            foreach (Form? page in new Form?[] { _environmentPage, _lootPage, _inspector })
                 if (page is { IsDisposed: false }) page.Close();
         };
         FormClosed += (_, _) => { _timer.Dispose(); _reader?.Dispose(); _nameFont.Dispose(); _pluginHost.Dispose(); };
@@ -246,7 +238,7 @@ internal sealed class TrackerForm : Form
     }
 
     /// <summary>Inside the suite (see <see cref="EmbeddedHost"/>): no frame or tab strip, since the suite's own
-    /// tabs choose the page (Tracker, Quests, Loot library, Player, Recorder, Navigation, Environment or Plugins). Starts off-screen until the suite gives it a parent window.</summary>
+    /// tabs choose the page (Tracker, Quests, Loot library, Player, Environment or Plugins). Starts off-screen until the suite gives it a parent window.</summary>
     public void UseEmbeddedLayout()
     {
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; MinimumSize = Size.Empty;
@@ -292,13 +284,13 @@ internal sealed class TrackerForm : Form
         if (_mainTabs.SelectedTab?.Text != "Quests" || !_questBrowser.Visible)
             throw new InvalidOperationException("Quest tab did not open.");
     }
-    /// <summary>Opens each former window's page (Player, Recorder, Navigation, Environment) and checks it sits inside
+    /// <summary>Opens each former window's page (Player, Environment) and checks it sits inside
     /// this form, with no separate top-level window. Needs no game; saves logs/page-*.png and logs/pages-ui-check.json.</summary>
     internal async Task VerifyPages()
     {
         string folder = Path.Combine(ProjectPaths.Root, "logs"); Directory.CreateDirectory(folder);
         var pages = new List<object>();
-        foreach (var tab in new[] { _playerTab, _recorderTab, _navigationTab, _environmentTab })
+        foreach (var tab in new[] { _playerTab, _environmentTab })
         {
             _mainTabs.SelectedTab = tab; await Task.Delay(400);
             if (_mainTabs.SelectedTab != tab || tab.Controls.Count != 1 || !tab.Controls[0].Visible)
@@ -373,6 +365,7 @@ internal sealed class TrackerForm : Form
         }
         catch (Exception error)
         {
+            _environmentTab.Controls.Clear();  // never leave a half-shown page over the message
             _environmentTab.Controls.Add(new Label { Text = "Environment data unavailable: " + error.Message, Dock = DockStyle.Fill, Padding = new Padding(12) });
             return null;
         }
