@@ -220,6 +220,12 @@ def first_option(frame, box):
     return None
 
 
+def inside(point, box, margin=0):
+    """Is the point on the conversation's panel?"""
+    left, top, wide, high = box
+    return left-margin <= point[0] < left+wide+margin and top-margin <= point[1] < top+high+margin
+
+
 def row_y(row):
     return ROW_TOP+row*ROW_STEP
 
@@ -686,13 +692,41 @@ class MissionRunner(LootRunner):
                 ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
                 box = dialog_box(self.frame())
                 continue
+            if point is not None and not inside(point, box):
+                self.note_pointer(frame, box, point)
+                point = None
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
+                if clicked is None and not getattr(self, "chat_pictured", False):
+                    self.chat_pictured = True
+                    self.emit("log", f"Chat panel at {box[0]},{box[1]} {box[2]}x{box[3]}; first option at {point[0]},{point[1]}.")
+                    self.picture(frame, box, point, "recruiter-chat.png")
                 self.click_option(point)
                 self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
                 clicked, at = point, self.clock()
             self.wait(.02)
         if box is not None:
             raise Interrupted(f"The conversation with {person['name']} did not end.")
+
+    def note_pointer(self, frame, box, point):
+        """An option read outside the chat panel is never clicked (the pointer drifted off to the right, 5 Nov). One picture a run."""
+        self.emit("log", f"Option read at {point[0]},{point[1]}, off the chat panel at {box[0]},{box[1]} {box[2]}x{box[3]}: not clicked.")
+        if not getattr(self, "pointer_noted", False):
+            self.pointer_noted = True
+            self.picture(frame, box, point, "chat-off-panel.png")
+
+    def picture(self, frame, box, point, name):
+        """The game's view with the chat panel (red) and the place to click (pink) marked, in diagnostics."""
+        try:
+            marked = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            cv2.rectangle(marked, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 0, 255), 3)
+            cv2.circle(marked, (int(point[0]), int(point[1])), 18, (255, 0, 255), 3)
+            folder = self.diagnostic_dir
+            folder.mkdir(parents=True, exist_ok=True)
+            written, data = cv2.imencode(".png", marked)
+            if written:
+                data.tofile(folder/name)
+        except (OSError, cv2.error):
+            pass
 
     def run_job(self, spot):
         """From wherever the last try broke off: taking a new job over an open one fails it, for a fee."""

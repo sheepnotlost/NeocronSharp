@@ -285,7 +285,8 @@ class Run(MissionRunner):
     """The loop's own order, with the screens replaced."""
     def __init__(self, engine, said, jobs=1):
         events = self.events = []
-        super().__init__(default_profile(), Backend(), Control(), lambda kind, payload: events.append((kind, payload)), detector=object(), engine=engine)
+        super().__init__(default_profile(), Backend(), Control(), lambda kind, payload: events.append((kind, payload)), detector=object(), engine=engine,
+                         diagnostic_dir=Path(tempfile.gettempdir())/"neocronsharp-test-diagnostics")
         self.said, self.jobs = said, jobs
         self.screens = []
 
@@ -853,6 +854,29 @@ class QuickTalkTests(unittest.TestCase):
         with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
             run.quick_talk(actor("Recruiter - Near"))
         self.assertEqual(clicks, [(300, 420)])
+
+    def test_an_option_read_off_the_chat_panel_is_never_clicked_and_is_pictured(self):
+        run = Run(FakeEngine([]), {})
+        run.open_talk = lambda person: None
+        run.close_talk = lambda: None
+        moved, clicks = [], []
+        run.move = moved.append
+        run.click = clicks.append
+        frame = self.screen(216)
+        run.frame = lambda: frame
+        now = iter(x*.1 for x in range(100000))
+        run.clock = lambda: next(now)
+        run.talk_wide = self.BOX[2]
+        run.dialog_lines = lambda: [{"text": "Well then", "left": 216, "point": (300, 390)}, {"text": "> Yes", "left": 223, "point": (2500, 420)}]
+        run.quick_talk = MissionRunner.quick_talk.__get__(run)
+        with tempfile.TemporaryDirectory() as folder, patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+            run.diagnostic_dir = Path(folder)
+            with self.assertRaises(Interrupted):
+                run.quick_talk(actor("Recruiter - Near"))
+            self.assertTrue((Path(folder)/"chat-off-panel.png").exists())
+        self.assertEqual(clicks, [])
+        self.assertFalse([point for point in moved if not mission_runner.inside(point, self.BOX)])
+        self.assertTrue(any("off the chat panel" in text for kind, text in run.events if kind == "log"))
 
     def test_the_ocr_waits_for_every_option_to_fade_in(self):
         run = Run(FakeEngine([]), {})
