@@ -226,7 +226,15 @@ class AppTests(unittest.TestCase):
             root.withdraw()
             app = App(root, profile_path=Path(folder) / "profile.json", backend=NoInput())
             try:
-                self.assertEqual(app.tabs.tab(app.traversal_tab, "text"), "Traversal")
+                self.assertEqual(app.tabs.tab(app.traversal_tab, "text"), "Walk")
+                self.assertEqual(app.tabs.tab(app.follow_tab, "text"), "Follow")
+                app.tabs.select(app.follow_tab)
+                root.update()
+                self.assertEqual(app.traversal.mode.get(), "follow")          # the tab on show is the mode
+                self.assertTrue(str(app.traversal.follow_page).startswith(str(app.follow_tab)))
+                self.assertEqual(str(app.start_button.cget("state")), "disabled")
+                app.traversal.append("seen in both")
+                self.assertTrue(all("seen in both" in log.get("1.0", "end") for log in app.traversal.logs))
                 self.assertFalse(app.traversal.autoload)
                 app.tabs.select(app.traversal_tab)
                 root.update()

@@ -323,11 +323,15 @@ class AppTests(unittest.TestCase):
             root.withdraw()
             app = App(root, profile_path=Path(folder) / "profile.json", backend=NoInput())
             try:
-                self.assertEqual(app.tabs.tab(app.target_tab, "text"), "Target Acquisition")
+                self.assertEqual(app.tabs.tab(app.target_tab, "text"), "Track & Heal")
+                self.assertEqual(app.tabs.tab(app.hunt_tab, "text"), "Hunt")
                 self.assertFalse(app.target.autoload)
-                app.tabs.select(app.target_tab)
-                root.update()
-                self.assertEqual(str(app.start_button.cget("state")), "disabled")
+                for tab in (app.target_tab, app.hunt_tab):
+                    app.tabs.select(tab)
+                    root.update()
+                    self.assertEqual(str(app.start_button.cget("state")), "disabled")
+                self.assertTrue(str(app.target.hunt_button).startswith(str(app.hunt_tab)))       # on the Hunt tab, with its own Stop and Refresh
+                self.assertEqual(len(app.target.stop_buttons), 2)
                 with self.assertRaisesRegex(ValueError, "own buttons"):
                     app.collect()
                 self.assertFalse(app.traversal.other_live())

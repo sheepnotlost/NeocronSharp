@@ -1,4 +1,4 @@
-"""The TL 60 Job Loop sub-tab of Research: its buttons and countdown, with a fake runner (no engine, no input)."""
+"""The Job Loop tab: its buttons and countdown, with a fake runner (no engine, no input)."""
 from pathlib import Path
 import tempfile
 import threading
@@ -131,12 +131,11 @@ class AppTests(unittest.TestCase):
             root.withdraw()
             app = App(root, profile_path=Path(folder) / "profile.json", backend=NoInput())
             try:
-                pages = app.research_pages
-                self.assertEqual([pages.tab(tab, "text") for tab in pages.tabs()], ["Research", "TL 60 Job Loop"])
+                self.assertEqual(app.tabs.tab(app.job_loop_tab, "text"), "Job Loop")
                 app.tabs.select(app.research_tab)
                 root.update()
                 self.assertEqual(str(app.start_button.cget("state")), "normal")
-                pages.select(app.job_loop_tab)
+                app.tabs.select(app.job_loop_tab)
                 root.update()
                 self.assertEqual(str(app.start_button.cget("state")), "disabled")
                 with self.assertRaisesRegex(ValueError, "own buttons"):

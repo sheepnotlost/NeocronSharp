@@ -211,8 +211,23 @@ def order_actors(actors, find=""):
 
 # ---- the tab ----
 
+
+def log_box(host, row, height):
+    """A read-only log under a tab's controls."""
+    logs = ttk.Frame(host)
+    logs.grid(row=row, column=0, sticky="ew", pady=(6, 0))
+    logs.columnconfigure(0, weight=1)
+    log = tk.Text(logs, height=height, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
+    log.grid(row=0, column=0, sticky="ew")
+    bar = ttk.Scrollbar(logs, orient="vertical", command=log.yview)
+    bar.grid(row=0, column=1, sticky="ns")
+    log.configure(yscrollcommand=bar.set)
+    return log
+
+
 class TraversalTab:
-    def __init__(self, parent, root, autoload=True):
+    def __init__(self, parent, root, autoload=True, follow_parent=None):
+        """Walk in parent. With follow_parent, Follow is its own tab there; without, the two share parent with a switch."""
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = lambda: False     # Target Acquisition or the job loop is steering the same mouse
@@ -235,32 +250,37 @@ class TraversalTab:
         host.pack(fill="both", expand=True)
         host.columnconfigure(0, weight=1)
         host.rowconfigure(2, weight=1)
-        modes = ttk.Frame(host)
-        modes.grid(row=0, column=0, sticky="ew")
+        self.split = follow_parent is not None
         self.mode = tk.StringVar(value="walk")
-        for value, text in (("walk", "Walk to a place"), ("follow", "Follow someone")):
-            ttk.Radiobutton(modes, text=text, value=value, variable=self.mode, style="Toolbutton",
-                            command=self.mode_changed).pack(side="left", padx=(0, 6))
+        if not self.split:
+            modes = ttk.Frame(host)
+            modes.grid(row=0, column=0, sticky="ew")
+            for value, text in (("walk", "Walk to a place"), ("follow", "Follow someone")):
+                ttk.Radiobutton(modes, text=text, value=value, variable=self.mode, style="Toolbutton",
+                                command=self.mode_changed).pack(side="left", padx=(0, 6))
         self.status = tk.StringVar(value=self.mode_status["walk"])
-        ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
-            row=1, column=0, sticky="ew", pady=(8, 4))
+        hosts = [host]
+        if self.split:
+            follow_host = ttk.Frame(follow_parent, padding=12)
+            follow_host.pack(fill="both", expand=True)
+            follow_host.columnconfigure(0, weight=1)
+            follow_host.rowconfigure(2, weight=1)
+            hosts.append(follow_host)
+        for place in hosts:     # one status, shown in each tab: it follows the tab you are on
+            ttk.Label(place, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
+                row=1, column=0, sticky="ew", pady=(8, 4))
         self.walk_page = ttk.Frame(host)
-        self.follow_page = ttk.Frame(host)
+        self.follow_page = ttk.Frame(hosts[-1])
         for page in (self.walk_page, self.follow_page):
             page.grid(row=2, column=0, sticky="nsew")
             page.columnconfigure(0, weight=1)
             page.rowconfigure(1, weight=1)
-        self.follow_page.grid_remove()
+        if not self.split:
+            self.follow_page.grid_remove()
         self.build_walk_page(self.walk_page)
         self.build_follow_page(self.follow_page)
-        logs = ttk.Frame(host)
-        logs.grid(row=3, column=0, sticky="ew", pady=(6, 0))
-        logs.columnconfigure(0, weight=1)
-        self.log = tk.Text(logs, height=5, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
-        self.log.grid(row=0, column=0, sticky="ew")
-        bar = ttk.Scrollbar(logs, orient="vertical", command=self.log.yview)
-        bar.grid(row=0, column=1, sticky="ns")
-        self.log.configure(yscrollcommand=bar.set)
+        self.logs = [log_box(place, 3, 5) for place in hosts]
+        self.log = self.logs[0]
         parent.bind("<Map>", self.first_view, add="+")
         self.update_buttons()
         self._after = self.root.after(100, self.poll)
@@ -359,8 +379,9 @@ class TraversalTab:
 
     def mode_changed(self):
         follow = self.mode.get() == "follow"
-        (self.follow_page if follow else self.walk_page).grid()
-        (self.walk_page if follow else self.follow_page).grid_remove()
+        if not self.split:
+            (self.follow_page if follow else self.walk_page).grid()
+            (self.walk_page if follow else self.follow_page).grid_remove()
         self.status.set(self.mode_status[self.mode.get()])
         if follow and not self.nearby_loaded and self.autoload:
             self.refresh_nearby()
@@ -398,15 +419,17 @@ class TraversalTab:
     # ---- log ----
 
     def append(self, text):
-        self.log.configure(state="normal")
-        self.log.insert("end", text.rstrip() + "\n")
-        self.log.see("end")
-        self.log.configure(state="disabled")
+        for log in self.logs:
+            log.configure(state="normal")
+            log.insert("end", text.rstrip() + "\n")
+            log.see("end")
+            log.configure(state="disabled")
 
     def clear_log(self):
-        self.log.configure(state="normal")
-        self.log.delete("1.0", "end")
-        self.log.configure(state="disabled")
+        for log in self.logs:
+            log.configure(state="normal")
+            log.delete("1.0", "end")
+            log.configure(state="disabled")
 
     # ---- workers ----
 

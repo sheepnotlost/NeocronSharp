@@ -16,9 +16,10 @@ class LinkTests(unittest.TestCase):
         self.assertFalse((root / "Open Coordinate Recorder.cmd").exists())
 
     def test_every_former_window_is_a_page_the_suite_shows_in_a_tab(self):
-        self.assertEqual([name for name, _ in neocronsharp_link.TABS], ["Tracker", "Quests", "Loot library", "Tools", "Plugins"])
+        self.assertEqual([name for name, _ in neocronsharp_link.TABS],
+                         ["Tracker", "Quests", "Loot library", "Player", "Recorder", "Navigation", "Environment", "Plugins"])
         for page in ("Player", "Recorder", "Navigation", "Environment"):
-            self.assertEqual(neocronsharp_link.tab_of(page), "Tools")
+            self.assertEqual(neocronsharp_link.tab_of(page), page)     # each its own tab, none behind a button (4 Nov)
         self.assertEqual(neocronsharp_link.tab_of("Quests"), "Quests")
         self.assertIsNone(neocronsharp_link.tab_of("Nowhere"))
         self.assertEqual(len(neocronsharp_link.PAGES), len(set(neocronsharp_link.PAGES)))
@@ -107,17 +108,16 @@ class SuiteTabTests(unittest.TestCase):
             root = tk.Tk(); root.withdraw()
             app = App(root, Path(folder) / "profile.json", NoInput(), tracker=tracker)
             try:
-                self.assertEqual(list(app.sharp_tabs), ["Tracker", "Quests", "Loot library", "Tools", "Plugins"])
-                tools = app.sharp_hosts["Tools"].winfo_id()
-                app.tabs.select(app.sharp_tabs["Tools"]); app.show_sharp_page()
-                self.assertEqual(tracker.shown[-1], (tools, "Player"))
-                app.sharp_pages["Tools"].set("Recorder"); app.show_sharp_page()
-                self.assertEqual(tracker.shown[-1], (tools, "Recorder"))
+                self.assertEqual(list(app.sharp_tabs), ["Tracker", "Quests", "Loot library", "Player", "Recorder", "Navigation", "Environment", "Plugins"])
+                app.tabs.select(app.sharp_tabs["Player"]); app.show_sharp_page()
+                self.assertEqual(tracker.shown[-1], (app.sharp_hosts["Player"].winfo_id(), "Player"))
+                app.tabs.select(app.sharp_tabs["Recorder"]); app.show_sharp_page()
+                self.assertEqual(tracker.shown[-1], (app.sharp_hosts["Recorder"].winfo_id(), "Recorder"))
                 self.assertEqual(app.selected_sharp_page(), "Recorder")
                 tracker.page = "Quests"; app.poll()  # NeocronSharp's NPC quests button
                 self.assertEqual(app.tabs.select(), str(app.sharp_tabs["Quests"]))
                 tracker.page = "Environment"; app.poll()  # its Environment button
-                self.assertEqual(app.tabs.select(), str(app.sharp_tabs["Tools"]))
+                self.assertEqual(app.tabs.select(), str(app.sharp_tabs["Environment"]))
                 self.assertEqual(app.selected_sharp_page(), "Environment")
             finally:
                 app.close()

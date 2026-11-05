@@ -69,7 +69,7 @@ class CatalogUiTests(unittest.TestCase):
     def test_catalog_loads_only_selected_recipe_and_preserves_job_counts(self):
         with ui() as app:
             app.construction_count.set("2");app.construction_available.set("55")
-            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_catalog_tab)
+            app.tabs.select(app.construction_catalog_tab)
             app.build_query.set("Crahn Blessed Heal")
             row=next(r for r in app.build_catalog_data["recipes"] if r["name"]=="Crahn Blessed Heal")
             app.build_tree.selection_set(row["id"])
@@ -79,7 +79,6 @@ class CatalogUiTests(unittest.TestCase):
             self.assertIsNotNone(key)
             self.assertEqual(len(catalog(app.profile)),4)
             self.assertEqual(app.tabs.select(),str(app.construction_tab))
-            self.assertEqual(app.construction_pages.select(),str(app.construction_job))
             self.assertEqual(app.construction_available.get(),"55")
             self.assertEqual(app.construction_count.get(),"2")
             self.assertEqual(app.collect()["construction"]["recipe"],key)
@@ -95,7 +94,7 @@ class CatalogUiTests(unittest.TestCase):
 
     def test_materials_row_saves_per_recipe_and_reloads(self):
         with ui() as app:
-            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.tabs.select(app.construction_tab)
             app.construction_recipe.set("WP9");app.select_recipe()
             self.assertIn("Gamonin=GAM",app.materials_text.get())     # built-in table shown
             app.materials_text.set("Gamonin=GAM, Metal D=MET")
@@ -112,7 +111,7 @@ class CatalogUiTests(unittest.TestCase):
             app.construction_recipe.set("WP9");app.select_recipe()
             self.assertIn("Strastin=STS",app.materials_text.get())     # built-in wins over guesses
             # A new name typed over a recipe whose (hidden) aliases are still loaded must save.
-            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.tabs.select(app.construction_tab)
             app.construction_recipe.set("Crahn Frozen Ball")
             self.assertEqual(app.collect()["operation"],"construction")
             self.assertIsNotNone(find_recipe("Crahn Frozen Ball",catalog(app.profile)) or "saved on start")
@@ -122,7 +121,7 @@ class CatalogUiTests(unittest.TestCase):
             self.assertNotIn("Favorites",[app.tabs.tab(t,"text") for t in app.tabs.tabs()])
             self.assertFalse(hasattr(app,"favorites_tab"))
             app.profile["settings"]["drag_button"]="right";app.profile["settings"]["drag_modifier"]="shift"
-            app.tabs.select(app.construction_tab);app.construction_pages.select(app.construction_job)
+            app.tabs.select(app.construction_tab)
             app.construction_recipe.set("WP7");app.construction_available.set("5");app.construction_count.set("1")
             settings=app.collect()["settings"]
             self.assertEqual((settings["drag_button"],settings["drag_modifier"]),("left","none"))

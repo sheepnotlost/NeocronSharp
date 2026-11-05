@@ -18,12 +18,15 @@ EXECUTABLE = PROJECT / "dist" / "NeocronSharp.exe"
 SOLUTION = PROJECT / "NeocronSharp.sln"
 
 # The suite tabs that show NeocronSharp, with the pages each one holds (names match NeocronSharp's "page <name>"
-# command). A tab with several pages gets a row of buttons to pick one; Tools holds what used to be separate windows.
+# command). A tab with several pages gets a row of buttons to pick one. Each page is its own tab now (the user's word, 4 Nov).
 TABS = (
     ("Tracker", ("Tracker",)),
     ("Quests", ("Quests",)),
     ("Loot library", ("Loot library",)),
-    ("Tools", ("Player", "Recorder", "Navigation", "Environment")),
+    ("Player", ("Player",)),
+    ("Recorder", ("Recorder",)),
+    ("Navigation", ("Navigation",)),
+    ("Environment", ("Environment",)),
     ("Plugins", ("Plugins",)),
 )
 PAGES = tuple(page for _, pages in TABS for page in pages)

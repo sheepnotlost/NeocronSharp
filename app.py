@@ -52,8 +52,8 @@ class App:
         self.editable = []
         self.root.title("NeocronSharp")
         self.root.iconbitmap(str(ROOT / "assets" / "research-tool.ico"))
-        self.root.geometry("1160x840")
-        self.root.minsize(1140, 800)
+        self.root.geometry("1160x900")
+        self.root.minsize(1140, 860)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         load_error = None
         if self.profile_path.exists():
@@ -103,31 +103,30 @@ class App:
         workspace.columnconfigure(0, weight=1)
         workspace.rowconfigure(0, weight=1)
         self.main_split.add(workspace, minsize=250, stretch="always")
-        self.tabs = ttk.Notebook(workspace)
+        # Every feature its own tab, listed down the left, none hidden inside another (the user's word, 4 Nov).
+        style.configure("Features.TNotebook", tabposition="wn")
+        style.configure("Features.TNotebook.Tab", padding=(12, 0), width=13, anchor="w")   # all 18 fit, labels in a straight column
+        self.tabs = ttk.Notebook(workspace, style="Features.TNotebook")
         self.tabs.grid(row=0, column=0, sticky="nsew")
         self.research_tab = ttk.Frame(self.tabs)
+        self.job_loop_tab = ttk.Frame(self.tabs)
         self.construction_tab = ttk.Frame(self.tabs)
+        self.construction_catalog_tab = ttk.Frame(self.tabs)
         self.recycling_tab = ttk.Frame(self.tabs)
-        self.traversal_tab = ttk.Frame(self.tabs)
-        self.target_tab = ttk.Frame(self.tabs)
         self.counter_tab = ttk.Frame(self.tabs)
+        self.traversal_tab = ttk.Frame(self.tabs)
+        self.follow_tab = ttk.Frame(self.tabs)
+        self.target_tab = ttk.Frame(self.tabs)
+        self.hunt_tab = ttk.Frame(self.tabs)
         from neocronsharp_link import TABS as SHARP_TABS
         self.sharp_tabs = {name: ttk.Frame(self.tabs) for name, _ in SHARP_TABS}
-        self.tabs.add(self.research_tab, text="Research")
-        self.tabs.add(self.construction_tab, text="Construction")
-        self.tabs.add(self.recycling_tab, text="Recycling")
-        self.tabs.add(self.traversal_tab, text="Traversal")
-        self.tabs.add(self.target_tab, text="Target Acquisition")
-        self.tabs.add(self.counter_tab, text="Tech Counter")
+        for tab, text in ((self.research_tab, "Research"), (self.job_loop_tab, "Job Loop"), (self.construction_tab, "Construction"),
+                          (self.construction_catalog_tab, "Catalog"), (self.recycling_tab, "Recycling"), (self.counter_tab, "Tech Counter"),
+                          (self.traversal_tab, "Walk"), (self.follow_tab, "Follow"), (self.target_tab, "Track & Heal"), (self.hunt_tab, "Hunt")):
+            self.tabs.add(tab, text=text)
         for page, tab in self.sharp_tabs.items():
             self.tabs.add(tab, text=page)
-        self.research_pages = ttk.Notebook(self.research_tab)
-        self.research_pages.pack(fill="both", expand=True)
-        self.research_job = ttk.Frame(self.research_pages)
-        self.job_loop_tab = ttk.Frame(self.research_pages)
-        self.research_pages.add(self.research_job, text="Research")
-        self.research_pages.add(self.job_loop_tab, text="TL 60 Job Loop")
-        self.research_pages.bind("<<NotebookTabChanged>>", lambda event: self.sync_start_button())
+        self.research_job = self.research_tab
         scroll_host = ttk.Frame(self.research_job)
         scroll_host.pack(fill="both", expand=True)
         canvas = tk.Canvas(scroll_host, background="#f3f5f5", highlightthickness=0, height=420)
@@ -224,7 +223,7 @@ class App:
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
-        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.sync_start_button(),self.show_sharp_page(),self.queue_item_picture()))
+        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.traversal_mode(),self.sync_start_button(),self.show_sharp_page(),self.queue_item_picture()))
 
     def install_responsive_text(self):
         """Wrap paragraphs to their allocated width, including after skin changes.
@@ -334,14 +333,22 @@ class App:
         """Walk to a place or follow someone (traversal_tab.py); it runs traversal.exe with its own buttons, not Start.
         Without a tracker (the tests) it does not read the game until Refresh is pressed."""
         from traversal_tab import TraversalTab
-        self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None)
+        self.traversal=TraversalTab(self.traversal_tab,self.root,autoload=self.tracker is not None,follow_parent=self.follow_tab)
         from target_tab import TargetTab
         self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
-                              other_live=lambda:self.traversal.process is not None or self.jobs.steering(),loot_runner=self.loot_runner)
+                              other_live=lambda:self.traversal.process is not None or self.jobs.steering(),loot_runner=self.loot_runner,
+                              hunt_parent=self.hunt_tab)
+        self.hunt_tab.bind("<Map>",self.target.first_view,add="+")
         self.traversal.other_live=lambda:self.target.steering() or self.jobs.steering()
         from jobs_tab import JobsTab
         self.jobs=JobsTab(self.job_loop_tab,self.root,other_live=lambda:self.traversal.process is not None or self.target.steering(),
                           mission_runner=self.mission_runner)
+
+    def traversal_mode(self):
+        """Walk and Follow are two tabs of one engine: the one on show sets its mode and status."""
+        mode={str(self.traversal_tab):"walk",str(self.follow_tab):"follow"}.get(self.tabs.select())
+        if mode and mode!=self.traversal.mode.get():
+            self.traversal.mode.set(mode);self.traversal.mode_changed()
 
     def build_recycling_tab(self):
         host=ttk.Frame(self.recycling_tab,padding=12);host.pack(fill="both",expand=True)
@@ -498,12 +505,7 @@ class App:
         stop_sound(self.stop_sound_var.get())
 
     def build_construction_tab(self):
-        self.construction_pages=ttk.Notebook(self.construction_tab)
-        self.construction_pages.pack(fill="both",expand=True)
-        self.construction_job=ttk.Frame(self.construction_pages)
-        self.construction_catalog_tab=ttk.Frame(self.construction_pages)
-        self.construction_pages.add(self.construction_job,text="Job")
-        self.construction_pages.add(self.construction_catalog_tab,text="Catalog")
+        self.construction_job=self.construction_tab
         canvas=tk.Canvas(self.construction_job,background="#f3f5f5",highlightthickness=0)
         scrollbar=ttk.Scrollbar(self.construction_job,orient="vertical",command=canvas.yview)
         scrollbar.pack(side="right",fill="y")
@@ -749,7 +751,6 @@ class App:
         self.editable.extend((self.use_build_button,source))
         self.build_query.trace_add("write",lambda *args:self.filter_build_catalog())
         self.build_category.trace_add("write",lambda *args:self.filter_build_catalog())
-        self.construction_pages.bind("<<NotebookTabChanged>>",lambda e:self.sync_start_button())
         self.filter_build_catalog()
 
     def selected_build_recipe(self):
@@ -788,7 +789,7 @@ class App:
 
     def load_construction_recipe(self,key):
         self.construction_recipe.set(self.recipes[key]["name"]);self.select_recipe()
-        self.tabs.select(self.construction_tab);self.construction_pages.select(self.construction_job)
+        self.tabs.select(self.construction_tab)
         self.sync_start_button();self.report("Loaded construction recipe: "+self.recipes[key]["name"]+". Check counts, then Start.")
 
     def use_build_recipe(self):
@@ -804,13 +805,13 @@ class App:
 
     def sync_start_button(self):
         if not hasattr(self,"start_button") or self.locked():return
-        browser=(self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab)
-                 or self.job_loop_showing()
-                 or self.selected_sharp_page() is not None or self.tabs.select() in (str(self.traversal_tab),str(self.target_tab)))
+        browser=(self.tabs.select()==str(self.construction_catalog_tab) or self.job_loop_showing()
+                 or self.selected_sharp_page() is not None
+                 or self.tabs.select() in (str(self.traversal_tab),str(self.follow_tab),str(self.target_tab),str(self.hunt_tab)))
         self.start_button.configure(state="disabled" if browser else "normal")
 
     def job_loop_showing(self):
-        return self.tabs.select()==str(self.research_tab) and self.research_pages.select()==str(self.job_loop_tab)
+        return self.tabs.select()==str(self.job_loop_tab)
 
     def materials_for(self,key):
         """Saved or built-in labels, else the catalog's parts with guessed labels to correct."""
@@ -910,13 +911,13 @@ class App:
             raise ValueError("Tech Counter uses its own scan settings. Click Start in 3 seconds to scan.")
         if self.selected_sharp_page() is not None:
             raise ValueError(f"{self.selected_sharp_page()} shows NeocronSharp; Start is for the macro tabs.")
-        if self.tabs.select()==str(self.traversal_tab):
-            raise ValueError("Traversal walks with its own buttons; Start is for the macro tabs.")
-        if self.tabs.select()==str(self.target_tab):
-            raise ValueError("Target Acquisition uses its own buttons; Start is for the macro tabs.")
+        if self.tabs.select() in (str(self.traversal_tab),str(self.follow_tab)):
+            raise ValueError("Walk and Follow use their own buttons; Start is for the macro tabs.")
+        if self.tabs.select() in (str(self.target_tab),str(self.hunt_tab)):
+            raise ValueError("Track & Heal and Hunt use their own buttons; Start is for the macro tabs.")
         if self.job_loop_showing():
-            raise ValueError("The TL 60 Job Loop uses its own buttons; Start is for the macro tabs.")
-        if self.tabs.select()==str(self.construction_tab) and self.construction_pages.select()==str(self.construction_catalog_tab):
+            raise ValueError("The Job Loop uses its own buttons; Start is for the macro tabs.")
+        if self.tabs.select()==str(self.construction_catalog_tab):
             raise ValueError("Load a catalog item into its job tab before starting.")
         profile = deepcopy(self.profile)
         try:
@@ -981,9 +982,6 @@ class App:
         selected=self.tabs.select()
         for tab in self.tabs.tabs():
             self.tabs.tab(tab,state="normal" if enabled or tab==selected else "disabled")
-        page=self.construction_pages.select()
-        for tab in self.construction_pages.tabs():
-            self.construction_pages.tab(tab,state="normal" if enabled or tab==page else "disabled")
         if enabled:
             self.sync_start_button()
             self.show_build_recipe()

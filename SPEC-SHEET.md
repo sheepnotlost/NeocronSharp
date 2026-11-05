@@ -12,8 +12,8 @@ NeoSharp ([sheepnotlost/neosharp](https://github.com/sheepnotlost/neosharp), `Do
 
 ## Shared interface and controls
 
-- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Traversal, Target Acquisition and Research's TL 60 Job Loop sub-tab use their own buttons (traversal.exe; see Target Acquisition below; only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
-- Construction contains Job and Catalog pages. Outside countdown/execution, only the construction Catalog page disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
+- Research, Construction, Recycling and Tech Counter tabs share one Start in 3 seconds execution button. Each feature is its own top-level tab, none behind another (4 Nov, the user's word). Walk, Follow, Track & Heal, Hunt and Job Loop use their own buttons (traversal.exe; Walk and Follow are two tabs of one TraversalTab whose shown tab sets its mode; Hunt is TargetTab's second tab with its own Refresh, Stop and log; see Target Acquisition below; only one of them may steer at a time; their Stop buttons leave `traversal/stop.request` rather than sending F8, which the game also takes as its Missions key).
+- Construction and Catalog are separate tabs. Outside countdown/execution, the Catalog tab disables Start; Use blueprint recipe never starts a job or overwrites batch counts.
 
 - No macro hotkeys, Stop button, coordinate calibration or automatic resume.
 - Bind the exact foreground Neocron window/process/client size at countdown end.
@@ -83,7 +83,7 @@ All aiming at a target is at `CameraAim.BodyMiddle`, 50 units above the position
 
 ### TL 60 Job Loop
 
-- `mission_runner.py`, a `LootRunner` without the fighting. `jobs_tab.py` is the TL 60 Job Loop sub-tab of Research, with its own Start, Stop, 5 s countdown and log. It builds traversal.exe if missing, as a fresh download has none, and it, Traversal and Target Acquisition each refuse to start while another steers. The start reads `spot` once; each job runs `usespot`, walks back there if needed, looks the same way and right-clicks (the terminal is no actor).
+- `mission_runner.py`, a `LootRunner` without the fighting. `jobs_tab.py` is the Job Loop tab, with its own Start, Stop, 5 s countdown and log. It builds traversal.exe if missing, as a fresh download has none, and it, Traversal and Target Acquisition each refuse to start while another steers. The start reads `spot` once; each job runs `usespot`, walks back there if needed, looks the same way and right-clicks (the terminal is no actor).
 - The R.N. window opens centred at exactly 640x480 pixels, whatever the client's size or UI scale (measured on a native 2560x1440 frame; its small text ignores UI scale 1.7), so its places are pixels from its corner. Page by which bright buttons show: Download (factions), Next and Back (list), Back alone (accepted). Closed with Tab through `set_ui`. Esc only closes a conversation with nothing to answer, at the user's word, and only while one is open.
 - Two buttons: TL60 jobs are in Easy, TL130 in Very Hard (`JOBS`). Before every download, return from a remembered list to the factions/difficulty page and select the job's level. Retry the click up to three times, checking that the complete selected-level label matches that row's letters; Very Easy, Hard and a hover highlight do not count. Move the pointer off the letters before checking. Failure stops before Download or Accept.
 - Download also retries up to three clicks while the difficulty page remains visible. Once downloading starts it waits for the list without further clicks. Status/log messages distinguish selecting the level, downloading, and searching for the job; losing focus still stops immediately.

@@ -28,6 +28,7 @@ HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
 TICKED, UNTICKED = "\u2611", "\u2610"
+log_box = tt.log_box
 
 
 def enemy_rows(actors, ticked=()):
@@ -43,7 +44,8 @@ def enemy_rows(actors, ticked=()):
 
 
 class TargetTab:
-    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None):
+    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None, hunt_parent=None):
+        """Track and Follow and heal in parent. With hunt_parent, the Hunt is its own tab there; without, it sits beside them."""
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk, follow or job loop is steering the same mouse
@@ -101,8 +103,19 @@ class TargetTab:
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_buttons())
         self.tree.bind("<Double-1>", lambda e: self.track())
-        hunting = ttk.Frame(holder)
-        hunting.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
+        hunt_host = None
+        if hunt_parent is not None:
+            hunt_host = ttk.Frame(hunt_parent, padding=12)
+            hunt_host.pack(fill="both", expand=True)
+            hunt_host.columnconfigure(0, weight=1)
+            hunt_host.rowconfigure(1, weight=1)
+            ttk.Label(hunt_host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
+                row=0, column=0, sticky="ew", pady=(0, 4))
+            hunting = ttk.Frame(hunt_host)
+            hunting.grid(row=1, column=0, sticky="nsew")
+        else:
+            hunting = ttk.Frame(holder)
+            hunting.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
         hunting.columnconfigure(0, weight=1)
         hunting.rowconfigure(1, weight=1)
         ttk.Label(hunting, text="Enemies in this zone: click to tick who to hunt").grid(row=0, column=0, sticky="w", pady=(0, 4))
@@ -125,6 +138,7 @@ class TargetTab:
         self.heal_button = ttk.Button(buttons, text="Follow and heal", command=self.heal)
         for button in (self.track_button, self.stop_button, self.refresh_button, self.heal_button):
             button.pack(side="left", padx=(0, 6))
+        self.stop_buttons, self.refresh_buttons = [self.stop_button], [self.refresh_button]
         ttk.Label(buttons, text="Fighter:").pack(side="left", padx=(6, 0))
         try:
             saved = FIGHTER_FILE.read_text(encoding="utf-8").strip()
@@ -133,21 +147,23 @@ class TargetTab:
         self.fighter = tk.StringVar(value=saved)
         self.fighter.trace_add("write", lambda *_: self.update_buttons())
         ttk.Entry(buttons, textvariable=self.fighter, width=16).pack(side="left", padx=6)
-        self.hunt_button = ttk.Button(buttons, text="Start hunt", command=self.start_hunt)
+        hunt_buttons = buttons
+        if hunt_host is not None:
+            hunt_buttons = ttk.Frame(hunt_host)
+            hunt_buttons.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+            for text, command, kept in (("Refresh", self.refresh, self.refresh_buttons), ("Stop", self.stop, self.stop_buttons)):
+                button = ttk.Button(hunt_buttons, text=text, command=command)
+                button.pack(side="left", padx=(0, 6))
+                kept.append(button)
+        self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
-        ttk.Label(buttons, text="units").pack(side="right", padx=(0, 8))
+        ttk.Label(hunt_buttons, text="units").pack(side="right", padx=(0, 8))
         self.reach = tk.StringVar(value=str(REACH))
         self.reach.trace_add("write", lambda *_: self.update_buttons())
-        ttk.Entry(buttons, textvariable=self.reach, width=6).pack(side="right", padx=4)
-        ttk.Label(buttons, text="Attack from").pack(side="right")
-        logs = ttk.Frame(host)
-        logs.grid(row=4, column=0, sticky="ew", pady=(6, 0))
-        logs.columnconfigure(0, weight=1)
-        self.log = tk.Text(logs, height=3, wrap="word", state="disabled", font=("Consolas", 9), relief="flat", padx=6, pady=4)
-        self.log.grid(row=0, column=0, sticky="ew")
-        bar = ttk.Scrollbar(logs, orient="vertical", command=self.log.yview)
-        bar.grid(row=0, column=1, sticky="ns")
-        self.log.configure(yscrollcommand=bar.set)
+        ttk.Entry(hunt_buttons, textvariable=self.reach, width=6).pack(side="right", padx=4)
+        ttk.Label(hunt_buttons, text="Attack from").pack(side="right")
+        self.logs = [log_box(host, 4, 3)] + ([log_box(hunt_host, 3, 5)] if hunt_host is not None else [])
+        self.log = self.logs[0]
         parent.bind("<Map>", self.first_view, add="+")
         self.ready = True
         self.update_buttons()
@@ -190,15 +206,18 @@ class TargetTab:
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
-        self.refresh_button.configure(state="normal" if idle else "disabled")
+        for button in self.refresh_buttons:
+            button.configure(state="normal" if idle else "disabled")
         self.client_box.configure(state="readonly" if idle else "disabled")
-        self.stop_button.configure(state="normal" if self.steering() else "disabled")
+        for button in self.stop_buttons:
+            button.configure(state="normal" if self.steering() else "disabled")
 
     def append(self, text):
-        self.log.configure(state="normal")
-        self.log.insert("end", text.rstrip() + "\n")
-        self.log.see("end")
-        self.log.configure(state="disabled")
+        for log in self.logs:
+            log.configure(state="normal")
+            log.insert("end", text.rstrip() + "\n")
+            log.see("end")
+            log.configure(state="disabled")
 
     def poll(self):
         if self.closed:

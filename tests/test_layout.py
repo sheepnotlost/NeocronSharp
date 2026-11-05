@@ -53,7 +53,7 @@ class LayoutTests(unittest.TestCase):
             apply_skin(self.root, skin, app.heading)
             for tab, frame in ((app.research_tab, app.stacks_frame), (app.construction_job, app.construction_choice.master)):
                 with self.subTest(skin=skin, tab=str(tab)):
-                    (app.tabs.select(tab) if tab is app.research_tab else (app.tabs.select(app.construction_tab), app.construction_pages.select(tab)))
+                    app.tabs.select(tab)
                     self.root.update_idletasks()
                     self.assertGreater(frame.winfo_width(), tab.winfo_width() * .8)
 
