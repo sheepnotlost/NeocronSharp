@@ -383,8 +383,9 @@ class Engine(loot_runner.Engine):
 
 
 class MissionRunner(LootRunner):
-    def __init__(self, *args, job="TL60", **kwargs):
+    def __init__(self, *args, job="TL60", turns=None, **kwargs):
         kwargs.setdefault("engine", None)
+        self.turns = turns           # with research on a second client (turns.py): the mouse is shared, a step at a time
         super().__init__(*args, **kwargs)
         self.job = JOBS[job]
         if kwargs["engine"] is None:
@@ -395,6 +396,15 @@ class MissionRunner(LootRunner):
 
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
+
+    def give_way(self):
+        """A safe gap between steps: research on the other client may click Start now. Never inside a step."""
+        if self.turns is not None:
+            self.turns.give_way(self.control.stopped)
+
+    def rest(self):
+        self.give_way()
+        self.wait(STAGE_REST)
 
     def move(self, point):
         """Glide there, starting and stopping gently as a hand would, then land exactly on it."""
@@ -450,6 +460,7 @@ class MissionRunner(LootRunner):
                 if self.clock()-clear >= PLAYER_GONE:
                     self.emit("log", "No other player in the zone: carrying on.")
                     return
+            self.give_way()
             self.wait(PLAYER_LOOK)
 
     def people(self, word):
@@ -700,7 +711,7 @@ class MissionRunner(LootRunner):
         if not self.job_open:
             self.take_job(spot)
             self.recruited = False
-            self.wait(STAGE_REST)
+            self.rest()
         if not self.recruited:
             self.wait_alone()
             recruiters = self.people("Recruiter")
@@ -709,10 +720,10 @@ class MissionRunner(LootRunner):
             self.emit("status", f"Talking to {recruiters[0]['name']}.")
             self.quick_talk(recruiters[0])
             self.recruited = True
-            self.wait(STAGE_REST)
+            self.rest()
         paid = False
         for manager in self.people("Faction Supply Manager"):
-            self.wait(STAGE_REST)
+            self.rest()
             self.wait_alone()
             self.emit("status", f"Talking to {manager['name']}.")
             said = " ".join(self.talk(manager)).lower()
@@ -759,6 +770,7 @@ class MissionRunner(LootRunner):
         tries = 0
         while True:
             self.checkpoint()
+            self.give_way()
             try:
                 if tries:
                     self.recover()
@@ -777,6 +789,8 @@ class MissionRunner(LootRunner):
 
     def run(self):
         try:
+            if self.turns is not None:
+                self.turns.hold("jobs", self.control.stopped, home=self.backend.hwnd)
             self.guard()
             self.execute()
         except Exception as exc:
@@ -787,3 +801,5 @@ class MissionRunner(LootRunner):
         finally:
             self.engine.close()
             self.backend.release_all()
+            if self.turns is not None:
+                self.turns.release("jobs")

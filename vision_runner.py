@@ -173,7 +173,33 @@ RESTART_WAIT = (1, 5)        # seconds, a fresh random wait after each finished 
 
 
 class BlueprintRunner(VisualRunner):
-    """Only click Start; observe a full processing-to-result transition per copy."""
+    """Only click Start; observe a full processing-to-result transition per copy.
+
+    With turns (turns.py), it runs beside the job loop on a second client: it watches from behind and takes a turn
+    at the mouse only to click Start."""
+
+    def __init__(self, *args, turns=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.turns = turns
+
+    def start_research(self, processor):
+        """Click Start, or adopt a run already going. True once one is going."""
+        if self.turns is None:
+            self.click(processor.start_point())
+            self.move((24, 80))
+            return True
+        self.emit("status", "Blueprint: waiting for a gap in the job loop to click Start.")
+        with self.turns.turn(self.backend.hwnd, self.control.stopped):
+            self.backend.in_turn = True
+            try:
+                processor, state = self.blueprint_state()       # in front now: look again where Start is
+                if state["busy"]:
+                    return False
+                self.click(processor.start_point())
+                self.move((24, 80))
+            finally:
+                self.backend.in_turn = False
+        return True
 
     def blueprint_state(self):
         frame, processor = self.processor_state()
@@ -215,10 +241,9 @@ class BlueprintRunner(VisualRunner):
             else:
                 # Completion already has three idle observations. Re-verify the
                 # current location once before clicking, without an extra idle wait.
-                self.click(processor.start_point())
-                self.move((24, 80))
+                clicked = self.start_research(processor)
                 self.emit("status", "Blueprint: Start clicked; waiting for progress and a new blueprint result.")
-                made = self.await_blueprint()
+                made = self.await_blueprint(seen_busy=not clicked)
             finished = True
             if not made:
                 failed += 1
