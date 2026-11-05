@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 from vision import cv2
 
+import job_aim
 import mission_runner
 from mission_runner import MissionRunner, answer, dialog_box, dialog_open, first_option, is_job, place, rn_open, rn_page, still_open, text_lines
 from macro_core import Control, Interrupted, default_profile
@@ -17,6 +18,9 @@ BRIGHT, PANEL = (115, 255, 168), (41, 105, 62)
 
 def actor(name, distance=300., kind="npc", dead=False):
     return {"id": name, "name": name, "kind": kind, "distance": distance, "dead": dead}
+
+
+job_aim.AIM_FILE = None      # the tests never write this PC's learned aim
 
 
 def blank():
@@ -122,6 +126,73 @@ class ScaleTests(unittest.TestCase):
     def test_labels_of_different_widths_never_match(self):
         word = np.full((10, 30), 200, np.uint8)
         self.assertFalse(mission_runner.same_label(word, np.full((10, 55), 200, np.uint8)))
+
+
+class AimTests(unittest.TestCase):
+    """The job loop corrects its own clicks and keeps what worked (the user's ask, 5 Nov)."""
+    def run_at(self, path=None):
+        run = Run(FakeEngine([]), {})
+        run.aim = job_aim.Aim(path)
+        run.frame = blank
+        run.last_frame = blank()
+        self.clicks = []
+        run.move = lambda point: None
+        run.click = self.clicks.append
+        return run
+
+    def test_a_missed_button_is_tried_a_little_to_the_side_and_the_shift_is_kept(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/"job-aim.json"
+            run = self.run_at(path)
+            pages = iter(["list"]*2 + ["accepted"]*99)       # two clicks at the usual place miss; the shifted one takes
+            run.wait_for_page = lambda page, seconds: next(pages) == page
+            run.accept()
+            usual = place(blank(), mission_runner.ACCEPT)
+            self.assertEqual(self.clicks[:2], [usual, usual])
+            self.assertEqual(self.clicks[2], (usual[0]+4, usual[1]))
+            self.assertEqual(run.aim.rn(blank()), (4, 0))
+            again = self.run_at(path)                          # the next run starts from what worked
+            again.wait_for_page = lambda page, seconds: True
+            again.accept()
+            self.assertEqual(self.clicks, [(usual[0]+4, usual[1])])
+            self.assertTrue(any("kept for next time" in text for kind, text in run.events if kind == "log"))
+
+    def test_a_click_that_takes_first_time_changes_nothing(self):
+        run = self.run_at()
+        run.wait_for_page = lambda page, seconds: True
+        run.accept()
+        self.assertEqual(run.aim.rn(blank()), (0, 0))
+        self.assertEqual(run.trial, (0, 0))
+
+    def test_shifts_never_reach_the_next_button(self):
+        aim = job_aim.Aim(None)
+        for _ in range(20):
+            aim.learn_rn(blank(), (8, 2))
+            aim.learn_chat(blank(), .012)
+        self.assertEqual(aim.rn(blank()), job_aim.RN_MOST)
+        self.assertEqual(aim.chat(blank()), job_aim.CHAT_MOST)
+
+    def test_a_new_screen_size_says_so_and_a_known_one_starts_from_its_saved_scale(self):
+        mission_runner.rn_scales.clear()
+        self.addCleanup(mission_runner.rn_scales.clear)
+        run = self.run_at()
+        run.calibrate()
+        self.assertIn("New screen size 2560x1440", run.events[-1][1])
+        run.aim.learn_scale(blank(), 1.5)
+        run.calibrate()
+        self.assertEqual(mission_runner.rn_scale(blank()), 1.5)
+        self.assertIn("1.5 times", run.events[-1][1])
+
+    def test_a_chat_option_clicked_again_is_nudged_and_the_nudge_that_worked_is_kept(self):
+        run = self.run_at()
+        run.talk_high = 1000
+        run.click_option((300, 400))
+        run.click_option((300, 400), .006)
+        self.assertEqual(self.clicks, [(300, 400), (300, 406)])
+        run.chat_took(.006, "Recruiter")
+        self.assertEqual(run.aim.chat(blank()), .006)
+        run.click_option((300, 400))
+        self.assertEqual(self.clicks[-1], (300, 406))
 
 
 class ReadingTests(unittest.TestCase):
@@ -684,7 +755,7 @@ class SelectTests(unittest.TestCase):
         run.frame = lambda: difficulty_frame()
         with self.assertRaisesRegex(Interrupted, "Easy difficulty did not select"):
             run.select_level()
-        self.assertEqual(tapped, [mission_runner.level_point(1)]*mission_runner.SELECT_TRIES)
+        self.assertEqual(tapped, [mission_runner.level_point(1)]*mission_runner.AIM_TRIES)
 
     def choose(self, selected_after):
         run = Run(FakeEngine([]), {})
@@ -836,7 +907,7 @@ class DownloadTests(unittest.TestCase):
         run.tap = tapped.append
         with patch.object(mission_runner, "rn_page", return_value="factions"), self.assertRaisesRegex(Interrupted, "did not respond"):
             run.download_missions()
-        self.assertEqual(tapped, [mission_runner.DOWNLOAD]*mission_runner.SELECT_TRIES)
+        self.assertEqual(tapped, [mission_runner.DOWNLOAD]*mission_runner.AIM_TRIES)
 
     def test_focus_loss_stops_before_another_download_click(self):
         run = Run(FakeEngine([]), {})

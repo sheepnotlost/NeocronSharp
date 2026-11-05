@@ -21,6 +21,7 @@ from datetime import datetime
 
 import numpy as np
 
+import job_aim
 import loot_runner
 from loot_runner import LootRunner
 from macro_core import Interrupted
@@ -76,7 +77,8 @@ MISSIONS_EVERY = 8           # looks between clicks on its tab
 OPEN_GIVE_UP = 15            # looks with no window before the right-click counts as missed
 LIST_WAIT = 1.5              # seconds for a new list page to show
 LIST_SLOW = 15               # seconds a page of the list may take to download
-ACCEPT_TRIES, ACCEPT_WAIT = 6, 1     # one click a second, not a burst
+ACCEPT_WAIT = 1              # seconds after each Accept: one click a second, not a burst
+AIM_TRIES = len(job_aim.RN_TRIES)    # clicks on an R.N. button before giving up: the usual place twice, then a little to each side
 JOB_TRIES = 6                # tries in a row without a job done before the loop gives up
 UNPAID_TRIES = 2             # tries with nobody paying before the job counts as lost: it may have paid unread, and the fee for a new one is small
 ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
@@ -450,10 +452,13 @@ class Engine(loot_runner.Engine):
 
 
 class MissionRunner(LootRunner):
-    def __init__(self, *args, job="TL60", **kwargs):
+    def __init__(self, *args, job="TL60", aim=None, **kwargs):
         kwargs.setdefault("engine", None)
         super().__init__(*args, **kwargs)
         self.job = JOBS[job]
+        self.aim = aim if aim is not None else job_aim.Aim()    # what this PC's clicks needed, learned as it runs
+        self.trial = (0, 0)          # a shift being tried on the R.N. window's clicks after a miss
+        self.talk_high = 0           # the open conversation's height
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -481,11 +486,26 @@ class MissionRunner(LootRunner):
         super().move(point)
 
     def tap(self, point):
-        """The game must see the pointer arrive first: a click straight after a move only lit the row up (live, 2 Nov)."""
-        at = place(self.frame(), point)
+        """The game must see the pointer arrive first: a click straight after a move only lit the row up (live, 2 Nov).
+        On the R.N. window, shifted as this PC's clicks have needed, and by any shift being tried after a miss."""
+        frame = self.aim_frame = self.frame()
+        shift = self.aim.rn(frame)
+        at = place(frame, (point[0]+shift[0]+self.trial[0], point[1]+shift[1]+self.trial[1]))
         self.move(at)
         self.wait(SETTLE)
         self.click(at)
+
+    def aim_try(self, attempt):
+        """The shift for this try at a click: none twice, then a little to each side."""
+        self.trial = job_aim.RN_TRIES[attempt % len(job_aim.RN_TRIES)]
+
+    def took(self, what):
+        """The click worked. A shift that made it work is kept for the next one."""
+        trial, self.trial = self.trial, (0, 0)
+        frame = getattr(self, "aim_frame", None)
+        if trial != (0, 0) and frame is not None:
+            now = self.aim.learn_rn(frame, trial)
+            self.emit("log", f"{what} took a click shifted {trial[0]:+d},{trial[1]:+d}: terminal clicks now shift {now[0]:+d},{now[1]:+d}, kept for next time.")
 
     def hide_pointer(self):
         """Tab, looking as often as the OCR allows instead of the fixed .6 s of set_ui."""
@@ -540,6 +560,7 @@ class MissionRunner(LootRunner):
             frame = self.frame()
             kind = rn_page(frame)
             if kind in ("factions", "list"):
+                self.aim.learn_scale(frame, rn_scale(frame))
                 return kind
             if not opened and rn_open(frame):
                 opened = True
@@ -556,13 +577,16 @@ class MissionRunner(LootRunner):
             frame = self.frame()
             row = job_row(self.reader(), frame, self.job)
             if row is not None:
-                for attempt in range(SELECT_TRIES):
+                for attempt in range(AIM_TRIES):
+                    self.aim_try(attempt)
                     self.tap((ROW_CLICK_X, row_y(row)))
                     for look in range(5):
                         self.wait(.1)
                         if row_is_blue(self.frame(), row):
+                            self.took("The mission row")
                             self.accept()
                             return True
+                self.trial = (0, 0)
                 raise Interrupted("The mission row did not select.")
             self.tap(NEXT)
             self.next_page(list_picture(frame))
@@ -572,38 +596,48 @@ class MissionRunner(LootRunner):
 
     def select_level(self):
         """A click may only highlight the row: require the selected-level label to change."""
-        for attempt in range(SELECT_TRIES):
+        for attempt in range(AIM_TRIES):
+            self.aim_try(attempt)
             self.tap(level_point(self.job.row))
             self.move(place(self.frame(), (600, 400)))   # Keep the pointer off the letters being compared.
             for look in range(5):
                 self.wait(.1)
                 if level_selected(self.frame(), self.job.row):
+                    self.took(f"{self.job.level} difficulty")
                     return
+        self.trial = (0, 0)
         raise Interrupted(f"{self.job.level} difficulty did not select; missions were not downloaded.")
 
     def download_missions(self):
         """Retry a missed Download click only while its original page is still visible."""
-        for attempt in range(SELECT_TRIES):
+        for attempt in range(AIM_TRIES):
+            self.aim_try(attempt)
             self.tap(DOWNLOAD)
             for look in range(5):
                 self.wait(.1)
                 page = rn_page(self.frame())
                 if page == "list":
+                    self.took("Download Missions")
                     return
                 if page != "factions":
                     # The button worked; let the download finish without clicking into the next page.
+                    self.took("Download Missions")
                     if self.wait_for_page("list", 15):
                         return
                     raise Interrupted("The mission download started but the list did not appear.")
-            self.emit("log", f"Download did not open the list (click {attempt+1} of {SELECT_TRIES}).")
-        raise Interrupted("Download Missions did not respond after three clicks.")
+            self.emit("log", f"Download did not open the list (click {attempt+1} of {AIM_TRIES}).")
+        self.trial = (0, 0)
+        raise Interrupted(f"Download Missions did not respond after {AIM_TRIES} clicks.")
 
     def accept(self):
         """Until it takes: a row turns blue before its details load, and a click before they have is ignored (live, 2 Nov)."""
-        for attempt in range(ACCEPT_TRIES):
+        for attempt in range(AIM_TRIES):
+            self.aim_try(attempt)
             self.tap(ACCEPT)
             if self.wait_for_page("accepted", ACCEPT_WAIT):
+                self.took("Accept")
                 return
+        self.trial = (0, 0)
         raise Interrupted("The job was not accepted.")
 
     def next_page(self, before):
@@ -630,8 +664,14 @@ class MissionRunner(LootRunner):
         else:
             raise Interrupted("The terminal did not open: stand at it with the crosshair on it.")
         if page == "list":
-            self.tap(BACK)
-            if not self.wait_for_page("factions", 5):
+            for attempt in range(AIM_TRIES):
+                self.aim_try(attempt)
+                self.tap(BACK)
+                if self.wait_for_page("factions", 1.5):
+                    self.took("Back")
+                    break
+            else:
+                self.trial = (0, 0)
                 raise Interrupted("Could not return to the mission difficulty selection.")
         self.emit("status", f"Selecting {self.job.level} difficulty.")
         self.select_level()
@@ -655,7 +695,7 @@ class MissionRunner(LootRunner):
         if box is None:
             return None
         left, top, wide, high = box
-        self.talk_wide = wide
+        self.talk_wide, self.talk_high = wide, high
         words = self.detector.gray(frame[top:top+round(high*.55), left:left+wide])    # The lower part of the panel stays empty.
         return text_lines(self.reader().read_words(words, up=max(2, round(2*TALK_WIDE/wide))), left, top)
 
@@ -706,12 +746,20 @@ class MissionRunner(LootRunner):
                     break
         raise Interrupted(f"The conversation with {person['name']} did not end.")
 
-    def click_option(self, point):
-        """The pointer rests on an option first, or the game only lights it up, and a moment after, for the button to come up on it."""
+    def click_option(self, point, trial=0.):
+        """The pointer rests on an option first, or the game only lights it up, and a moment after, for the button to come up on it.
+        Nudged up or down as this PC's chat clicks have needed, and by any nudge being tried after a miss."""
+        nudge = (self.aim.chat(self.last_frame) if self.last_frame is not None else 0.)+trial
+        point = (point[0], point[1]+round(nudge*self.talk_high))
         self.move(point)
         self.wait(SETTLE)
         self.click(point)
         self.wait(QUICK_LEAVE)
+
+    def chat_took(self, trial, who):
+        if trial:
+            now = self.aim.learn_chat(self.last_frame, trial)
+            self.emit("log", f"{who} took a chat click nudged {trial:+.3f} of the panel: chat clicks now nudge {now:+.3f}, kept for next time.")
 
     def close_talk(self):
         """Esc, and only on an open conversation: some screens show words and no option, and no click moves them on (live, 2 Nov)."""
@@ -736,10 +784,14 @@ class MissionRunner(LootRunner):
         self.hide_pointer()
         self.open_talk(person)
         ends, clicked, at, reopened = self.clock()+QUICK_MOST, None, self.clock(), 0
+        misses, trial = 0, 0.
         box = dialog_box(self.frame())
         while box is not None and self.clock() < ends:
+            self.talk_high = box[3]
             frame = self.frame()
             if not still_open(frame, box):
+                if clicked is not None:
+                    self.chat_took(trial, person["name"])
                 return
             point = first_option(frame, box)
             if point is None and self.clock() >= at+QUICK_READ:
@@ -757,11 +809,17 @@ class MissionRunner(LootRunner):
                 self.note_pointer(frame, box, point)
                 point = None
             if point is not None and (point != clicked or self.clock() >= at+QUICK_AGAIN):
+                if clicked is not None and point != clicked:
+                    self.chat_took(trial, person["name"])      # the last click moved the talk on
+                    misses, trial = 0, 0.
+                elif point == clicked:
+                    misses += 1         # the same option again: the last click missed it
+                    trial = job_aim.CHAT_TRIES[misses % len(job_aim.CHAT_TRIES)]
                 if clicked is None and not getattr(self, "chat_pictured", False):
                     self.chat_pictured = True
                     self.emit("log", f"Chat panel at {box[0]},{box[1]} {box[2]}x{box[3]}; first option at {point[0]},{point[1]}.")
                     self.picture(frame, box, point, "recruiter-chat.png")
-                self.click_option(point)
+                self.click_option(point, trial)
                 self.move((box[0]+round(box[2]*QUICK_PARK), box[1]+round(box[3]*QUICK_PARK)))
                 clicked, at = point, self.clock()
             self.wait(.02)
@@ -788,6 +846,14 @@ class MissionRunner(LootRunner):
                 data.tofile(folder/name)
         except (OSError, cv2.error):
             pass
+
+    def calibrate(self):
+        """Start from what this screen size needed last time: the terminal window's size and the clicks' shifts."""
+        frame = self.frame()
+        saved = self.aim.entry(frame).get("rn_scale") if self.aim.known(frame) else None
+        self.emit("log", self.aim.describe(frame))
+        if saved:
+            rn_scales[frame.shape[:2]] = saved
 
     def run_job(self, spot):
         """From wherever the last try broke off: taking a new job over an open one fails it, for a fee."""
@@ -851,6 +917,7 @@ class MissionRunner(LootRunner):
             self.emit("log", self.backend.describe())
         except (AttributeError, RuntimeError, OSError):
             pass
+        self.calibrate()
         self.hide_pointer()
         if not self.people("Recruiter") or not self.people("Faction Supply Manager"):
             raise Interrupted("No recruiters or faction supply managers here: start at the terminal in the headquarters.")

@@ -14,6 +14,8 @@ tech-counter/
 .env.*
 !.env.example
 routes.json
+# what the job loop's clicks needed on this PC, learned as it runs
+job-aim.json
 Neocron Macro Suite Portable.zip
 # NeocronSharp (C#): personal settings/recordings and IDE/agent state stay local; build output is ignored by NeocronSharp/.gitignore
 NeocronSharp/settings/
