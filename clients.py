@@ -48,11 +48,8 @@ def focus():
     found = windows()
     chosen = os.environ.get("NEOCRON_PID")
     hwnd = found.get(int(chosen)) if chosen else next(iter(found.values()), None)
-    return hwnd is not None and bring(hwnd)
-
-
-def bring(hwnd):
-    """Put this window in front. True if it is."""
+    if hwnd is None:
+        return False
     user32, kernel32 = ctypes.WinDLL("user32"), ctypes.WinDLL("kernel32")
     user32.GetForegroundWindow.restype = wintypes.HWND
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.c_void_p]

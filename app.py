@@ -343,7 +343,7 @@ class App:
         self.traversal.other_live=lambda:self.target.steering() or self.jobs.steering()
         from jobs_tab import JobsTab
         self.jobs=JobsTab(self.job_loop_tab,self.root,other_live=lambda:self.traversal.process is not None or self.target.steering(),
-                          mission_runner=self.mission_runner,research_runner=self.research_runner)
+                          mission_runner=self.mission_runner)
 
     def traversal_mode(self):
         """Walk and Follow are two tabs of one engine: the one on show sets its mode and status."""
@@ -976,25 +976,12 @@ class App:
         if hasattr(self,"jobs") and self.tabs.select()==str(self.job_loop_tab) and not self.jobs.steering():
             self.jobs.refresh_clients()
 
-    def mission_runner(self,emit,control,job="TL60",turns=None):
+    def mission_runner(self,emit,control,job="TL60"):
         from mission_runner import MissionRunner
         import clients,os
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)
-        return MissionRunner(self.profile,self.backend,control,emit,job=job,turns=turns)
-
-    def research_runner(self,emit,control,hwnd,pid,turns):
-        """Item-to-blueprint research on the client behind the job loop's, with the copies set on the Research tab."""
-        from copy import deepcopy
-        from turns import BackgroundBackend
-        from vision_runner import BlueprintRunner
-        try:count=int(self.blueprint_count.get())
-        except ValueError:raise ValueError("Enter a whole number of blueprint copies on the Research tab (0 runs until stopped).") from None
-        backend=BackgroundBackend(hwnd,pid)
-        profile=deepcopy(self.profile)
-        profile.update(operation="blueprints",blueprints={"count":count},client_size=backend.client_size(),points={},samples={})
-        profile.setdefault("settings",{})["positioning"]="visual"
-        return BlueprintRunner(profile,backend,control,emit,turns=turns)
+        return MissionRunner(self.profile,self.backend,control,emit,job=job)
 
     def ensure_bound(self):
         title, size = self.backend.bind_foreground()

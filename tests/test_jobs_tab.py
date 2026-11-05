@@ -33,20 +33,13 @@ class JobsTabTests(unittest.TestCase):
         self.addCleanup(windows.stop)
         jobs_tab.clients.choose(None)
         self.addCleanup(jobs_tab.clients.choose, None)
-        self.tab = jobs_tab.JobsTab(self.frame, self.root, other_live=lambda: self.busy, mission_runner=self.make,
-                                   research_runner=self.make_research)
-        self.researched, self.turns = [], []
-
-    def make_research(self, emit, control, hwnd, pid, turns):
-        self.researched.append((hwnd, pid, control))
-        return Runner()
+        self.tab = jobs_tab.JobsTab(self.frame, self.root, other_live=lambda: self.busy, mission_runner=self.make)
 
     def tearDown(self):
         self.tab.close()
         self.root.destroy()
 
-    def make(self, emit, control, job, turns=None):
-        self.turns.append(turns)
+    def make(self, emit, control, job):
         self.started.append(control)
         self.jobs.append(job)
         return self.runner
@@ -181,36 +174,6 @@ class JobsTabTests(unittest.TestCase):
         self.assertIn("could not start: no module", self.tab.status.get())
         self.assertFalse(self.tab.steering())
 
-    def started_with(self, chosen):
-        begin = self.counted()
-        jobs_tab.clients.choose(chosen)
-        with patch.object(jobs_tab.tt, "build_tool", lambda progress=None: None), patch.object(jobs_tab.clients, "focus", lambda: True):
-            begin()
-            self.tab.event(*self.tab.queue.get(timeout=5))
-
-    def test_research_runs_on_the_other_client_sharing_turns_with_the_jobs(self):
-        self.open = {7: 70, 8: 80}
-        self.tab.research.set(True)
-        self.started_with(7)
-        self.assertEqual([(hwnd, pid) for hwnd, pid, _ in self.researched], [(80, 8)])
-        self.assertIsNotNone(self.turns[0])
-        research = self.researched[0][2]
-        self.tab.stop()
-        self.assertTrue(research.stopped.is_set(), "Stop ends the research too")
-
-    def test_research_needs_a_second_client(self):
-        self.tab.research.set(True)
-        self.started_with(None)
-        self.assertEqual(self.started, [])
-        self.assertEqual(self.tab.status.get(), jobs_tab.SECOND)
-
-    def test_without_the_tick_no_research_starts(self):
-        self.open = {7: 70, 8: 80}
-        self.started_with(7)
-        self.assertEqual(self.researched, [])
-        self.assertEqual(self.turns, [None])
-
-
 
 class AppTests(unittest.TestCase):
     def test_it_is_a_sub_tab_of_research_with_no_start_and_shares_the_mouse(self):
@@ -243,7 +206,6 @@ class AppTests(unittest.TestCase):
                 app.jobs.control = None
             finally:
                 app.close()
-
 
 
 if __name__ == "__main__":

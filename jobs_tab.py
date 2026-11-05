@@ -13,21 +13,16 @@ from macro_core import Control
 HOW = ("Stand at the R.N. terminal in a faction headquarters with the crosshair on it, and keep the 3 blueprints the job "
        "asks for in Inventory. Finish any job already open first: taking a new one fails the old one and costs a fee. "
        "It waits between steps while the game shows any other player in the zone. With two clients open, pick the one "
-       "that runs the jobs in the Client list. Tick Research on the other client to make blueprints there at the same time: "
-       "open its Processor with the item in it, leave that client behind this one (not minimized), and set the copies on "
-       "the Research tab (0 runs until stopped). Between job steps it brings that client up, clicks Start, and comes back.")
+       "that runs the jobs in the Client list.")
 PICK = "Two Neocron clients are open: pick the one that runs the jobs in the Client list first."
-SECOND = "Research on the other client needs a second client open on this Windows account."
 
 
 class JobsTab:
-    def __init__(self, parent, root, other_live=lambda: False, mission_runner=None, research_runner=None):
+    def __init__(self, parent, root, other_live=lambda: False, mission_runner=None):
         self.root = root
         self.other_live = other_live        # a walk, follow, camera or hunt is steering the same mouse
         self.mission_runner = mission_runner  # makes a MissionRunner(emit, control) bound to the game
         self.control = None                 # the running loop's Control
-        self.research_runner = research_runner  # makes a BlueprintRunner(emit, control, hwnd, pid, turns) for the other client
-        self.research_control = None        # research's, when it runs beside the jobs
         self.countdown = None               # its 5 s countdown
         self.job = "TL60"                   # which jobs it runs
         self.queue = queue.Queue()
@@ -54,10 +49,6 @@ class JobsTab:
         self.client_box.bind("<<ComboboxSelected>>", lambda e: self.client_chosen())
         self.refresh_button = ttk.Button(buttons, text="Refresh clients", command=self.refresh_clients)
         self.refresh_button.pack(side="left", padx=6)
-        self.research = tk.BooleanVar(value=False)
-        self.research_box = ttk.Checkbutton(buttons, text="Research on the other client", variable=self.research)
-        if research_runner is not None:
-            self.research_box.pack(side="left", padx=(12, 0))
         self.clients = []
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
@@ -84,7 +75,6 @@ class JobsTab:
         idle = not self.steering()
         self.client_box.configure(state="readonly" if idle else "disabled")
         self.refresh_button.configure(state="normal" if idle else "disabled")
-        self.research_box.configure(state="normal" if idle else "disabled")
 
     def append(self, text):
         self.log.configure(state="normal")
@@ -115,27 +105,10 @@ class JobsTab:
             self.built(payload)
         elif kind == "clients":
             self.show_clients(payload)
-        elif kind == "research":
-            self.research_event(*payload)
         elif kind == "done":
             self.say(payload)
             self.control = None
-            self.stop_research()
             self.update_buttons()
-
-    def research_event(self, kind, payload):
-        if kind == "blueprint_cycle":
-            made = payload["completed"]
-            self.append(f"Research: {made} blueprint{'' if made == 1 else 's'} made.")
-        elif kind == "status" and "failed" in payload:
-            self.append(f"Research: {payload}")
-        elif kind in ("done", "error"):
-            self.append(f"Research: {payload}")
-            self.research_control = None
-
-    def stop_research(self):
-        if self.research_control is not None:
-            self.research_control.stopped.set()
 
     def refresh_clients(self):
         """List the open clients (by their health and PSI) in the background."""
@@ -183,7 +156,6 @@ class JobsTab:
     def begin(self):
         """A fresh download has no traversal.exe yet: only the Traversal and Target Acquisition tabs built it."""
         self.countdown = None
-        self.with_research = self.research.get()        # read here: Tk's variables belong to its own thread
 
         def work():
             problem = tt.build_tool(lambda text: self.queue.put(("log", text)))
@@ -199,7 +171,7 @@ class JobsTab:
             return None
         if len(open_now) < 2:
             clients.choose(next(iter(open_now), None))
-            return SECOND if getattr(self, "with_research", False) else None
+            return None
         self.queue.put(("clients", clients.list_clients()))
         return PICK
 
@@ -209,34 +181,15 @@ class JobsTab:
             return
         try:
             clients.focus()         # no need to have clicked into the game in time
-            emit = lambda kind, payload: self.queue.put((kind, payload))
-            if not self.research.get():
-                runner = self.mission_runner(emit, self.control, self.job)
-                threading.Thread(target=runner.run, daemon=True, name="jobs").start()
-                return
-            from turns import Turns
-            chosen = os.environ.get("NEOCRON_PID")
-            others = [(pid, hwnd) for pid, hwnd in clients.windows().items() if str(pid) != chosen]
-            if len(others) != 1:
-                raise RuntimeError(SECOND if not others else "Three or more clients are open: research needs just one other.")
-            turns = Turns()
-            runner = self.mission_runner(emit, self.control, self.job, turns=turns)
-            self.research_control = Control()
-            pid, hwnd = others[0]
-            research = self.research_runner(lambda kind, payload: self.queue.put(("research", (kind, payload))),
-                                            self.research_control, hwnd, pid, turns)
+            runner = self.mission_runner(lambda kind, payload: self.queue.put((kind, payload)), self.control, self.job)
             threading.Thread(target=runner.run, daemon=True, name="jobs").start()
-            threading.Thread(target=research.run, daemon=True, name="jobs-research").start()
-            self.append(f"Research runs on client {pid} between job steps.")
         except Exception as exc:
-            self.stop_research()
             self.event("done", f"The job loop could not start: {exc}")
 
     def stop(self):
         if self.control is None:
             return
         self.control.stopped.set()
-        self.stop_research()
         if self.countdown is not None:
             self.root.after_cancel(self.countdown)
             self.countdown = None
