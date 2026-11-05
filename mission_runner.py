@@ -94,10 +94,54 @@ JOBS = {      # wide: of the window, the title. The OCR reads 130 well and 150 n
 }
 
 
+RN_SCALES = [round(.5+step*.005, 3) for step in range(501)]    # the R.N. window's size against 640x480, from half to three times
+SIDE_GREEN = 120              # the R.N. window's sides: its panels stay under 80
+LABEL_ALIKE = .7            # how alike two stretched labels must be: the same word scored .76 to 1, 'easy' on 'very easy' under .55
+rn_scales = {}               # (height, width) of the client -> the scale the window was last found at
+
+
+def rn_scale(frame):
+    """How big the R.N. window is drawn, 1 for 640x480. It is 640x480 at 2560x1440 whatever the UI scale, but another screen size
+    or Windows' display scaling stretches it, and the clicks missed (5 Nov). The last size it was found at, or 1."""
+    return rn_scales.get(frame.shape[:2], 1.)
+
+
+def rn_sides(frame, scale):
+    """Both of the window's bright green sides, at this size, centred on the client?"""
+    height, width = frame.shape[:2]
+    left, top = round((width-RN_WIDE*scale)/2), round((height-RN_HIGH*scale)/2)
+    right = left+round(RN_WIDE*scale)-1
+    if left < 2 or right >= width-2 or top < 0:
+        return False
+    for x in (left, right):
+        band = frame[top+round(120*scale):top+round(420*scale), x-2:x+3].astype(int)
+        # A one-pixel line, which a stretched picture blurs: 228 green at 640x480 is 202 at 1.5 times and 169 at .625.
+        if not ((band[..., 1] > SIDE_GREEN) & (band[..., 1]-band[..., 0] > 60)).any(axis=1).mean() > .5:
+            return False
+    return True
+
+
+def find_rn(frame):
+    """The R.N. window's scale, or None with no window open. Remembered for the clicks that follow."""
+    known = rn_scale(frame)
+    if rn_sides(frame, known):
+        return known
+    height, width = frame.shape[:2]
+    middle = frame[height//2-20:height//2+20].astype(int)        # the sides cross the middle of the client: try only sizes that put them on a line there
+    lines = set(((middle[..., 1] > SIDE_GREEN) & (middle[..., 1]-middle[..., 0] > 60)).any(axis=0).nonzero()[0].tolist())
+    found = [scale for scale in RN_SCALES if round((width-RN_WIDE*scale)/2) in lines | {x+1 for x in lines} | {x-1 for x in lines}
+             and rn_sides(frame, scale)]
+    if not found:
+        return None
+    rn_scales[frame.shape[:2]] = found[len(found)//2]      # its sides are a few pixels wide: the middle of the sizes that fit
+    return rn_scales[frame.shape[:2]]
+
+
 def place(frame, point):
     """A place in the R.N. window, on the client."""
     height, width = frame.shape[:2]
-    return round((width-RN_WIDE)/2+point[0]), round((height-RN_HIGH)/2+point[1])
+    scale = rn_scale(frame)
+    return round((width-RN_WIDE*scale)/2+point[0]*scale), round((height-RN_HIGH*scale)/2+point[1]*scale)
 
 
 def area(frame, x0, y0, x1, y1):
@@ -107,9 +151,7 @@ def area(frame, x0, y0, x1, y1):
 
 def rn_open(frame):
     """The R.N. window's sides, on any of its pages."""
-    left, top = place(frame, (0, 0))
-    sides = frame[top+120:top+420, [left, left+RN_WIDE-1]].astype(int)
-    return bool(((sides[..., 1] > 200) & (sides[..., 1]-sides[..., 0] > 60)).mean() > .5)
+    return find_rn(frame) is not None
 
 
 def lit(frame, point):
@@ -120,12 +162,13 @@ def lit(frame, point):
 
 
 def label_pixels(cell):
-    """The near-white letters, trimmed so labels at different places can be compared."""
-    mask = cell.min(axis=2) > 120
-    rows, columns = mask.nonzero()
+    """The near-white letters' brightness, trimmed so labels at different places can be compared. They are over 120 at 640x480;
+    a stretched window's are blurred, so they are trimmed where they reach 100."""
+    light = cell.min(axis=2)
+    rows, columns = (light > 100).nonzero()
     if not rows.size:
         return None
-    return mask[rows.min():rows.max()+1, columns.min():columns.max()+1]
+    return light[rows.min():rows.max()+1, columns.min():columns.max()+1]
 
 
 def level_point(row):
@@ -139,11 +182,29 @@ def level_selected(frame, row):
     top = LEVEL_Y-6+row*LEVEL_STEP
     selected = label_pixels(area(frame, 468, 105, 572, 119))
     level = label_pixels(area(frame, 468, top, 572, top+13))
-    return selected is not None and level is not None and np.array_equal(selected, level)
+    return same_label(selected, level)
+
+
+def same_label(one, other):
+    """The same word: pixel for pixel at 640x480. A stretched window blurs each label its own way, so there they must be the
+    same size to a pixel or two and their brightness alike. 'easy' and 'very easy' are nowhere near (5 Nov)."""
+    if one is None or other is None:
+        return False
+    if one.shape == other.shape and np.array_equal(one > 120, other > 120):
+        return True
+    slack = max(2, round(.04*one.shape[1]))
+    if abs(one.shape[0]-other.shape[0]) > 2 or abs(one.shape[1]-other.shape[1]) > slack:
+        return False
+    # Each is blurred at its own fraction of a pixel: compare them four times bigger, shifted up to two pixels to line up.
+    a = cv2.resize(one.astype(np.float32), None, fx=4, fy=4, interpolation=cv2.INTER_LINEAR)
+    b = cv2.resize(other.astype(np.float32), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_LINEAR)
+    b = cv2.copyMakeBorder(b, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=float(other.min()))
+    return float(cv2.matchTemplate(b, a, cv2.TM_CCOEFF_NORMED).max()) >= LABEL_ALIKE
 
 
 def rn_page(frame):
     """Which page of the R.N. window shows, by its buttons. None for its splash, or no window."""
+    find_rn(frame)
     if lit(frame, NEXT_SHOWS) and lit(frame, BACK_SHOWS):
         return "list"
     if lit(frame, BACK_SHOWS):
@@ -240,7 +301,7 @@ def title_width(frame, row):
     """Of the window's width. The title's letters are near white on green."""
     cell = area(frame, TITLE[0], row_y(row)-7, TITLE[1], row_y(row)+7)
     columns = (cell.min(axis=2) > 120).any(axis=0).nonzero()[0]
-    return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/RN_WIDE
+    return 0. if columns.size == 0 else float(columns[-1]-columns[0]+1)/(RN_WIDE*rn_scale(frame))
 
 
 def wide_enough(width, job):
@@ -786,6 +847,10 @@ class MissionRunner(LootRunner):
             pass
 
     def execute(self):
+        try:
+            self.emit("log", self.backend.describe())
+        except (AttributeError, RuntimeError, OSError):
+            pass
         self.hide_pointer()
         if not self.people("Recruiter") or not self.people("Faction Supply Manager"):
             raise Interrupted("No recruiters or faction supply managers here: start at the terminal in the headquarters.")

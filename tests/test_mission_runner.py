@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
+from vision import cv2
 
 import mission_runner
 from mission_runner import MissionRunner, answer, dialog_box, dialog_open, first_option, is_job, place, rn_open, rn_page, still_open, text_lines
@@ -63,6 +64,64 @@ def conversation(box):
 
 def words(frame, top, left, wide=400, high=23):
     frame[top:top+high, left:left+wide:2] = (200, 230, 200)
+
+
+def panel():
+    """A client filled with the R.N. window's dark green, which its sides blur into when stretched."""
+    frame = blank()
+    frame[:] = (26, 71, 46)
+    return frame
+
+
+def rn_sides(frame):
+    """The R.N. window's one-pixel bright sides, where the game draws them at 640x480."""
+    (left, top), (right, _) = place(frame, (0, 0)), place(frame, (mission_runner.RN_WIDE-1, 0))
+    frame[top:top+mission_runner.RN_HIGH, [left, right]] = (78, 228, 145)
+    return frame
+
+
+def stretched(frame, scale):
+    """The whole client drawn bigger or smaller, as another screen size or Windows' display scaling draws the game."""
+    high, wide = frame.shape[:2]
+    return cv2.resize(frame, (round(wide*scale), round(high*scale)), interpolation=cv2.INTER_LINEAR if scale > 1 else cv2.INTER_AREA)
+
+
+class ScaleTests(unittest.TestCase):
+    """The R.N. window found at whatever size it is drawn: the clicks missed on another PC (5 Nov)."""
+    def setUp(self):
+        mission_runner.rn_scales.clear()
+        self.addCleanup(mission_runner.rn_scales.clear)
+
+    def test_the_window_is_found_at_every_size_and_its_buttons_are_placed_to_match(self):
+        for scale in (.5, .625, .75, .9, 1, 1.25, 1.5, 1.75, 2):
+            mission_runner.rn_scales.clear()
+            frame = rn_sides(panel())
+            button(frame, mission_runner.DOWNLOAD_SHOWS)
+            frame = stretched(frame, scale)
+            self.assertAlmostEqual(mission_runner.find_rn(frame), scale, delta=.006, msg=scale)
+            self.assertEqual(rn_page(frame), "factions", scale)
+            x, y = place(frame, mission_runner.DOWNLOAD)
+            self.assertAlmostEqual(x, (1280+(mission_runner.DOWNLOAD[0]-320))*scale, delta=4)
+            self.assertAlmostEqual(y, (720+(mission_runner.DOWNLOAD[1]-240))*scale, delta=4)
+
+    def test_no_window_is_no_scale_and_the_last_one_found_is_kept(self):
+        self.assertIsNone(mission_runner.find_rn(blank()))
+        frame = stretched(rn_sides(blank()), 1.5)
+        mission_runner.find_rn(frame)
+        self.assertIsNone(mission_runner.find_rn(np.zeros_like(frame)))
+        self.assertEqual(mission_runner.rn_scale(frame), 1.5)
+
+    def test_the_difficulty_reads_in_a_stretched_window(self):
+        for scale in (.75, .9, 1.25, 1.5, 2):
+            mission_runner.rn_scales.clear()
+            easy, very_easy = (stretched(rn_sides(difficulty_frame(easy=chosen)), scale) for chosen in (True, False))
+            mission_runner.find_rn(easy)
+            self.assertEqual([mission_runner.level_selected(easy, row) for row in (0, 1)], [False, True], scale)
+            self.assertEqual([mission_runner.level_selected(very_easy, row) for row in (0, 1)], [True, False], scale)
+
+    def test_labels_of_different_widths_never_match(self):
+        word = np.full((10, 30), 200, np.uint8)
+        self.assertFalse(mission_runner.same_label(word, np.full((10, 55), 200, np.uint8)))
 
 
 class ReadingTests(unittest.TestCase):

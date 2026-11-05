@@ -102,6 +102,23 @@ class WindowsBackend:
         if self.client_size() != list(expected_size):
             raise Interrupted("Game client size changed. Restart at the new window size.")
 
+    def describe(self):
+        """The client's size, Windows' display scaling and whether this app sees real pixels: what differs from PC to PC."""
+        size = self.client_size()
+        try:
+            self.user.GetDpiForWindow.argtypes = [wintypes.HWND]
+            scaling = f"{round(self.user.GetDpiForWindow(self.hwnd)/96*100)}%"
+        except (AttributeError, OSError):
+            scaling = "unknown"
+        try:
+            self.user.GetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+            self.user.GetAwarenessFromDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+            aware = {0: "no", 1: "system", 2: "per monitor"}.get(
+                self.user.GetAwarenessFromDpiAwarenessContext(self.user.GetThreadDpiAwarenessContext()), "unknown")
+        except (AttributeError, OSError):
+            aware = "unknown"
+        return f"Game client {size[0]}x{size[1]}, Windows display scaling {scaling}, this app DPI-aware: {aware}."
+
     def cursor_client(self):
         point = wintypes.POINT()
         if not self.user.GetCursorPos(ctypes.byref(point)):
