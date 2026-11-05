@@ -24,8 +24,10 @@ def arrow(frame, tip, high=16):
 class Game:
     """A client with its own pointer. tracks: it sits where Windows' cursor is, times scale. raw: only mouse motion moves
     it, times speed. hidden: mouse-look, where motion turns the camera; Tab shows it in a conversation."""
-    def __init__(self, mode="tracks", scale=1., speed=1., hidden=False, talk=False, decoys=()):
+    def __init__(self, mode="tracks", scale=1., speed=1., hidden=False, talk=False, decoys=(), green=None):
         self.mode, self.scale, self.speed, self.hidden, self.talk, self.decoys = mode, scale, speed, hidden, talk, decoys
+        self.green = green          # (left, top, right, bottom): a bright green button, where the arrow can't be seen
+        self.nudges = 0
         self.cursor = [300., 300.]
         self.raw = [300., 300.]
         self.turned = self.swept = 0
@@ -44,11 +46,13 @@ class Game:
             arrow(frame, decoy)
         if not self.hidden:
             x, y = self.at()
-            if 0 <= x < 2530 and 0 <= y < 1420:
+            on_green = self.green is not None and self.green[0] <= x < self.green[2] and self.green[1] <= y < self.green[3]
+            if 0 <= x < 2530 and 0 <= y < 1420 and not on_green:
                 arrow(frame, (x, y))
         return frame
 
     def move_relative(self, dx, dy):
+        self.nudges += 1
         if self.hidden:
             self.turned += dx
             self.swept += abs(dx)
@@ -86,15 +90,35 @@ def runner(game):
 
 
 class PointerTests(unittest.TestCase):
-    def land(self, game, target=(1200, 700)):
-        runner(game).aim_click(target)
-        self.assertEqual(len(game.clicks), 1)
-        x, y = game.clicks[0]
+    def land(self, game, target=(1200, 700), run=None):
+        before = len(game.clicks)
+        (run or runner(game)).aim_click(target)
+        self.assertEqual(len(game.clicks), before+1)
+        x, y = game.clicks[-1]
         self.assertLessEqual(abs(x-target[0]), mission_runner.STEER_CLOSE, game.clicks)
         self.assertLessEqual(abs(y-target[1]), mission_runner.STEER_CLOSE, game.clicks)
 
-    def test_a_pointer_that_follows_windows_cursor_lands(self):
-        self.land(Game())
+    def test_a_pointer_that_follows_windows_cursor_lands_with_no_nudging(self):
+        game = Game()
+        run = runner(game)
+        for target in ((1200, 700), (400, 900), (2000, 300)):
+            self.land(game, target, run)
+        self.assertEqual(game.nudges, 0)
+
+    def test_on_a_green_button_it_finds_the_pointer_once_then_trusts_the_plain_move(self):
+        game = Game(green=(1100, 690, 1300, 712))           # a tab bar, the arrow lost in it
+        run = runner(game)
+        self.land(game, (1200, 700), run)
+        nudged = game.nudges
+        self.land(game, (1250, 700), run)
+        self.assertEqual(game.nudges, nudged, "once the plain move is proven, no more nudges")
+
+    def test_the_far_off_pointer_of_the_other_pc_is_steered_on_every_click(self):
+        game = Game(mode="raw", speed=1.3, talk=True)
+        run = runner(game)
+        for target in ((600, 500), (900, 520), (700, 800)):
+            self.land(game, target, run)
+        self.assertTrue(run.steering)
 
     def test_a_pointer_scaled_from_windows_cursor_lands(self):
         self.land(Game(scale=1.25))
@@ -107,11 +131,9 @@ class PointerTests(unittest.TestCase):
     def test_arrows_painted_on_the_screen_are_not_the_pointer(self):
         self.land(Game(decoys=[(1190, 690), (1215, 705), (320, 300)]))
 
-    def test_with_no_pointer_showing_nothing_is_clicked_and_the_camera_barely_turns(self):
+    def test_with_no_pointer_showing_the_camera_ends_where_it_was(self):
         game = Game(hidden=True)
-        with self.assertRaisesRegex(Interrupted, "nowhere on the screen"):
-            runner(game).aim_click((1200, 700))
-        self.assertEqual(game.clicks, [])
+        runner(game).aim_click((1200, 700))         # outside a conversation: it clicks as it always did
         self.assertEqual(game.turned, 0)            # each nudge that found no pointer was undone by the next
         self.assertLessEqual(game.swept, 8*mission_runner.PROBE)
         self.assertNotIn("esc", game.keys)
@@ -120,6 +142,14 @@ class PointerTests(unittest.TestCase):
         game = Game(hidden=True, talk=True)
         self.land(game, (600, 500))
         self.assertEqual(game.keys, ["tab"])
+
+    def test_a_conversation_whose_pointer_never_shows_is_not_clicked(self):
+        game = Game(hidden=True, talk=True)
+        game.key = lambda name, down: game.keys.append(name) if down else None      # Tab does nothing
+        with self.assertRaisesRegex(Interrupted, "did not show in the conversation"):
+            runner(game).aim_click((600, 500))
+        self.assertEqual(game.clicks, [])
+        self.assertEqual(game.keys, ["tab", "tab"])         # freed once, then put back
 
     def test_the_arrow_is_found_at_every_size_and_lines_and_blocks_are_not(self):
         for high in (10, 16, 24, 40):

@@ -467,6 +467,9 @@ class MissionRunner(LootRunner):
         self.trial = (0, 0)          # a shift being tried on the R.N. window's clicks after a miss
         self.talk_high = 0           # the open conversation's height
         self.tip, self.gain = None, 1.   # where the game's pointer was last seen, and how far it goes per pixel sent
+        self.steering = False        # True once the game's pointer was seen not to follow Windows' cursor: steered by sight
+        self.tracks = False          # True once the plain move was seen to put the game's pointer on its target
+        self.blind_rn = False        # True once a nudge could not find the pointer on the terminal: it clicks as it always did
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -505,9 +508,11 @@ class MissionRunner(LootRunner):
             if step < steps:
                 self.wait(seconds/steps)
 
-    def probe(self):
+    def probe(self, near=None):
         """(tip, gain) of the game's pointer, found as the one arrow that moves when the mouse does. None: no pointer moved,
-        so none shows, and the game is in mouse-look, where any move turns the camera instead."""
+        so none shows, and the game is in mouse-look, where any move turns the camera instead. With near, where the pointer
+        should be: an arrow that shows up beside it after a nudge, out of nowhere, was hidden on green there. Then the gain is
+        None: unmeasured."""
         # Right, left, down, up, then further: off the screen's edge, or off green the pointer sits on, it shows on its own.
         for size in (PROBE, 3*PROBE):
             for nudge in ((size, 0), (-size, 0), (0, size), (0, -size)):
@@ -519,6 +524,13 @@ class MissionRunner(LootRunner):
                 if pairs:
                     a, b = min(pairs, key=lambda pair: abs(pair[1][1-along]-pair[0][1-along]))
                     return b, abs(b[along]-a[along])/size
+                if near is not None:
+                    old = pointer.candidates(before)
+                    came = [c[:2] for c in pointer.candidates(after, (near[0]-8*size, near[1]-8*size, near[0]+8*size, near[1]+8*size))
+                            if not any(pointer.close(c, o) for o in old)]
+                    came = [c for c in came if (c[along]-near[along])*nudge[along] > 0 and abs(c[1-along]-near[1-along]) <= 4]
+                    if came:
+                        return min(came, key=lambda c: abs(c[along]-near[along]-nudge[along])), None
         return None
 
     def free_pointer(self):
@@ -534,18 +546,13 @@ class MissionRunner(LootRunner):
             raise Interrupted("The game's pointer did not show in the conversation, so no click was made.")
         return found
 
-    def point_at(self, target):
-        """Steer the game's own pointer until its tip is on target, by sight: probe for it, glide most of the way, then correct
-        until it is there. Returns where it is."""
-        found = self.probe()
-        if found is None:
-            found = self.free_pointer()
-        tip, self.gain = found
+    def steer(self, tip, target):
+        """Move the game's pointer from tip onto target by mouse motion, looking after each move. Near a green button the arrow
+        can't be told from it (live, 5 Nov): lost from sight close to the target, it is where it was sent."""
         for attempt in range(STEER_TRIES):
             error = (target[0]-tip[0], target[1]-tip[1])
             if abs(error[0]) <= STEER_CLOSE and abs(error[1]) <= STEER_CLOSE:
-                self.tip = tip
-                return tip
+                break
             share = 1 if attempt == 0 else .9          # corrections stop short rather than overshoot
             sent = (round(error[0]/self.gain*share) or (1 if error[0] > 0 else -1 if error[0] < 0 else 0),
                     round(error[1]/self.gain*share) or (1 if error[1] > 0 else -1 if error[1] < 0 else 0))
@@ -556,17 +563,27 @@ class MissionRunner(LootRunner):
                       max(tip[0], expected[0])+reach, max(tip[1], expected[1])+reach)
             pairs = pointer.moves(before, after, start=tip, region=region)
             if not pairs:
-                found = self.probe()
-                if found is None:
-                    raise Interrupted("Lost sight of the game's pointer while moving it, so no click was made.")
-                tip, self.gain = found
-                continue
+                tip = (round(expected[0]), round(expected[1]))
+                if math.hypot(target[0]-tip[0], target[1]-tip[1]) <= STEER_SLACK:
+                    continue            # out of sight on the target's own green: trust the sum
+                raise Interrupted("Lost sight of the game's pointer far from where it was sent, so no click was made.")
             new = min((b for a, b in pairs), key=lambda b: (b[0]-expected[0])**2+(b[1]-expected[1])**2)
             went, size = math.hypot(new[0]-tip[0], new[1]-tip[1]), math.hypot(*sent)
             if size >= 4 and went > 0:
                 self.gain = min(5., max(.2, .5*self.gain+.5*went/size))
             tip = new
-        raise Interrupted(f"The game's pointer would not reach {target[0]},{target[1]} (it got to {tip[0]},{tip[1]}), so no click was made.")
+        self.tip = tip
+        return tip
+
+    def find_after_move(self, before, after, target):
+        """Where the game's pointer is after a move towards target: the arrow that showed up, nearest the target, or one
+        already sitting on it. None when none shows: on green the arrow can't be seen."""
+        came = [b for a, b in pointer.moves(before, after)]
+        if not came:
+            came = [c[:2] for c in pointer.candidates(after, (target[0]-8, target[1]-8, target[0]+8, target[1]+8))]
+        if not came:
+            return None
+        return min(came, key=lambda b: (b[0]-target[0])**2+(b[1]-target[1])**2)
 
     def click_here(self):
         """Click where the pointer is, without moving it again."""
@@ -578,20 +595,56 @@ class MissionRunner(LootRunner):
             self.backend.button("left", False)
 
     def aim_click(self, point):
-        """Onto it by sight, then click. Without a real mouse (the tests), the plain move and click."""
-        if self.sees_pointer():
-            self.point_at(point)
-            self.wait(SETTLE)
-            self.click_here()
-        else:
+        """Move there and click, checking by sight that the game's own pointer went there.
+
+        The plain move first: it ran 90 jobs on this PC. Then a look. On the target: the plain move works, and the run trusts
+        it. Seen elsewhere, or not seen while the plain move is still unproven: a nudge finds the pointer, and it is steered on
+        by mouse motion; far off, every later click in the run is steered (on another PC the game's pointer did not follow
+        Windows' cursor, 5 Nov). Not seen once the plain move is proven: it is on a green button, where the arrow can't be told
+        apart, and it clicks as it always did. Without a real mouse (the tests), the plain move and click."""
+        if not self.sees_pointer():
             self.move(point)
             self.wait(SETTLE)
             self.click(point)
+            return
+        if self.steering and self.tip is not None:
+            self.steer(self.tip, point)
+        else:
+            before = self.frame()
+            self.move(point)
+            self.wait(STEER_LOOK)
+            seen = self.find_after_move(before, self.frame(), point)
+            in_talk = dialog_open(self.last_frame)
+            if seen is None and not self.tracks and (in_talk or not self.blind_rn):
+                found = self.probe(near=point)
+                if found is not None and found[1] is None:
+                    # It was on the target all along, lost in a green button, and showed once nudged off it: the plain move
+                    # works. Back onto the target the same way.
+                    self.tracks = True
+                    self.move(point)
+                    found = None
+                elif found is None and in_talk:
+                    found = self.free_pointer()        # a conversation is dark: no arrow there means it is hidden
+                elif found is None:
+                    self.blind_rn = True               # all green here: no more nudges on the terminal this run
+                if found is not None:
+                    seen, self.gain = found
+            if seen is not None:
+                off = math.hypot(seen[0]-point[0], seen[1]-point[1])
+                if off > 4*PROBE:
+                    self.emit("log", f"The game's pointer is at {seen[0]},{seen[1]}, not {point[0]},{point[1]}: steering it by sight from now on.")
+                    self.steering, self.tracks = True, False
+                elif not self.steering:
+                    self.tracks = True          # the plain move put it there, give or take a nudge
+                if off > STEER_CLOSE:
+                    self.steer(seen, point)
+        self.wait(SETTLE)
+        self.click_here()
 
     def move(self, point):
         """Glide there, starting and stopping gently as a hand would, then land exactly on it. With the pointer seen, by mouse
         motion from where it was: an unchecked move, for keeping it off the words."""
-        if self.tip is not None and self.sees_pointer():
+        if self.steering and self.tip is not None and self.sees_pointer():
             self.glide_relative(round((point[0]-self.tip[0])/self.gain), round((point[1]-self.tip[1])/self.gain))
             self.tip = tuple(point)
             return
