@@ -66,8 +66,8 @@ TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
 SELECT_TRIES = 3
 SETTLE = .2                  # seconds between the pointer arriving and a click
-GLIDE_SPEED = 2500           # pixels a second: the pointer glides to a place, never jumps there (the user's word, 3 Nov)
-GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .08, .35, .012     # seconds
+GLIDE_SPEED = 3125           # pixels a second: the pointer glides to a place, never jumps there (3 Nov); a quarter quicker (5 Nov)
+GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .064, .28, .012    # seconds
 PROBE = 12                   # pixels: the nudge that shows which arrow on the screen is the game's pointer
 STEER_CLOSE = 2              # pixels: the pointer's tip this near the target is on it
 STEER_TRIES = 12             # corrections before giving up
@@ -375,7 +375,7 @@ def text_lines(words, left=0, top=0):
 
 class Engine(loot_runner.Engine):
     """One traversal.exe for the whole loop: it keeps the sector's map, which each new one spent 2 s baking."""
-    pulse = "16"                 # gentler than a hunt's 24: no jerky turns while walking (the user's word, 3 Nov)
+    pulse = "20"                 # gentler than a hunt's 24: no jerky turns (3 Nov), and a quarter quicker than 16 (the user's word, 5 Nov)
     def __init__(self, log, control):
         super().__init__(log, control)
         self.server = None

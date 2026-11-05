@@ -708,7 +708,7 @@ class GlideTests(unittest.TestCase):
         self.assertEqual(self.glide((500, 500), (501, 500)), [(501, 500)])
 
     def test_the_job_loop_steers_gently(self):
-        self.assertEqual(mission_runner.Engine.pulse, "16")
+        self.assertEqual(mission_runner.Engine.pulse, "20")
         self.assertEqual(mission_runner.loot_runner.Engine.pulse, "24")
 
 

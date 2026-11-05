@@ -44,6 +44,14 @@ Test("Aim falls back to the next corner when the view ahead is blocked", () => {
     Check(near == P(100, 0), "blocked line: aim at the next corner");
 });
 
+Test("A corner underfoot is passed, not turned to", () => {
+    var follower = new RouteFollower(new[] { P(0, 0), P(-11, 2), P(-11, 200), P(150, 200) });
+    var aim = follower.Aim(P(0, 0), 150, (a, b) => false);
+    Check(aim == P(-11, 200), "the corner 11 units off is skipped for the next one");
+    var last = new RouteFollower(new[] { P(0, 0), P(10, 0) }).Aim(P(0, 0), 150, (a, b) => false);
+    Check(last == P(10, 0), "the end of the route is aimed at however near");
+});
+
 Test("Steering turns in place above the threshold and caps turns while moving", () => {
     var sharp = Steering.Decide(Vector3.Zero, P(1, 0), P(0, 100));
     Check(!sharp.Walk, "a 90-degree turn is made standing");

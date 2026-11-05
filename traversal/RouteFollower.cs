@@ -68,9 +68,15 @@ internal sealed class RouteFollower
             var candidate = PointAt(Progress + ahead);
             if (clear(position, candidate)) return candidate;
         }
-        int next = Array.FindIndex(_at, a => a > Progress + 1);
-        return next < 0 ? Corners[^1] : Corners[next];
+        // The next corner, but not one underfoot: from a start just off the route the first was 11 units away, and the job
+        // loop stood turning to face it, then turned back for the one after (2.7 s of a 5.7 s walk, 5 Nov).
+        for (int i = 0; i < Corners.Count; i++)
+            if (_at[i] > Progress + 1 && (i == Corners.Count - 1 || PointNavigation.Distance(position, Corners[i]) >= NearestAim)) return Corners[i];
+        return Corners[^1];
     }
+
+    /// <summary>Units: a corner nearer than this is passed, not turned to.</summary>
+    public const float NearestAim = 30;
 }
 
 /// <summary>One steering choice: whether to hold forward and how far to turn.</summary>
