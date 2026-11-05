@@ -223,7 +223,7 @@ class App:
         from tech_counter import TechCounterPanel
         self.counter = TechCounterPanel(self, self.counter_tab, self.profile_path.parent / "tech-counter")
         self.install_responsive_text()
-        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.traversal_mode(),self.sync_start_button(),self.show_sharp_page(),self.queue_item_picture()))
+        self.tabs.bind("<<NotebookTabChanged>>",lambda e:(self.traversal_mode(),self.sync_start_button(),self.show_sharp_page(),self.queue_item_picture(),self.job_clients()))
 
     def install_responsive_text(self):
         """Wrap paragraphs to their allocated width, including after skin changes.
@@ -970,6 +970,11 @@ class App:
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
+
+    def job_clients(self):
+        """Opening the Job Loop tab lists the open clients for its Client list (two open: pick the one for the jobs)."""
+        if hasattr(self,"jobs") and self.tabs.select()==str(self.job_loop_tab) and not self.jobs.steering():
+            self.jobs.refresh_clients()
 
     def mission_runner(self,emit,control,job="TL60"):
         from mission_runner import MissionRunner

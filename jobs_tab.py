@@ -1,4 +1,5 @@
 """TL 60 Job Loop, a sub-tab of Research: runs mission_runner.py for TL60 or TL130 jobs with its own buttons, not Start."""
+import os
 import queue
 import threading
 import tkinter as tk
@@ -11,7 +12,9 @@ from macro_core import Control
 
 HOW = ("Stand at the R.N. terminal in a faction headquarters with the crosshair on it, and keep the 3 blueprints the job "
        "asks for in Inventory. Finish any job already open first: taking a new one fails the old one and costs a fee. "
-       "It waits between steps while the game shows any other player in the zone.")
+       "It waits between steps while the game shows any other player in the zone. With two clients open, pick the one "
+       "that runs the jobs in the Client list.")
+PICK = "Two Neocron clients are open: pick the one that runs the jobs in the Client list first."
 
 
 class JobsTab:
@@ -38,6 +41,15 @@ class JobsTab:
         self.stop_button = ttk.Button(buttons, text="Stop", command=self.stop)
         for button in (self.start_button, self.tl130_button, self.stop_button):
             button.pack(side="left", padx=(0, 6))
+        # Which client runs the jobs, when two are open (the same choice as Track & Heal's: NEOCRON_PID).
+        ttk.Label(buttons, text="Client:").pack(side="left", padx=(18, 4))
+        self.client = tk.StringVar()
+        self.client_box = ttk.Combobox(buttons, textvariable=self.client, state="readonly", width=30)
+        self.client_box.pack(side="left")
+        self.client_box.bind("<<ComboboxSelected>>", lambda e: self.client_chosen())
+        self.refresh_button = ttk.Button(buttons, text="Refresh clients", command=self.refresh_clients)
+        self.refresh_button.pack(side="left", padx=6)
+        self.clients = []
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
             row=2, column=0, sticky="ew", pady=(8, 4))
@@ -60,6 +72,9 @@ class JobsTab:
         for button in (self.start_button, self.tl130_button):
             button.configure(state="normal" if self.mission_runner and not self.steering() else "disabled")
         self.stop_button.configure(state="normal" if self.steering() else "disabled")
+        idle = not self.steering()
+        self.client_box.configure(state="readonly" if idle else "disabled")
+        self.refresh_button.configure(state="normal" if idle else "disabled")
 
     def append(self, text):
         self.log.configure(state="normal")
@@ -88,10 +103,41 @@ class JobsTab:
             self.say(payload)
         elif kind == "built":
             self.built(payload)
+        elif kind == "clients":
+            self.show_clients(payload)
         elif kind == "done":
             self.say(payload)
             self.control = None
             self.update_buttons()
+
+    def refresh_clients(self):
+        """List the open clients (by their health and PSI) in the background."""
+        def work():
+            try:
+                self.queue.put(("clients", clients.list_clients()))
+            except Exception as exc:
+                self.queue.put(("log", f"Could not list the clients: {exc}"))
+        threading.Thread(target=work, daemon=True, name="jobs-clients").start()
+
+    def show_clients(self, found):
+        self.clients = found
+        self.client_box.configure(values=[c["label"] for c in found])
+        chosen = os.environ.get("NEOCRON_PID")
+        if len(found) < 2:
+            clients.choose(None)        # nothing to choose: the only one
+            self.client.set(found[0]["label"] if found else "")
+        elif chosen in [str(c["pid"]) for c in found]:
+            self.client.set(next(c["label"] for c in found if str(c["pid"]) == chosen))
+        else:
+            clients.choose(None)
+            self.client.set("")
+            self.say("Pick which client runs the jobs.")
+
+    def client_chosen(self):
+        pid = next((c["pid"] for c in self.clients if c["label"] == self.client.get()), None)
+        clients.choose(pid)
+        if pid is not None:
+            self.say(f"Jobs run on {self.client.get()}.")
 
     def start(self, job="TL60"):
         if self.steering():
@@ -108,8 +154,21 @@ class JobsTab:
     def begin(self):
         """A fresh download has no traversal.exe yet: only the Traversal and Target Acquisition tabs built it."""
         self.countdown = None
-        threading.Thread(target=lambda: self.queue.put(("built", tt.build_tool(lambda text: self.queue.put(("log", text))))),
-                         daemon=True, name="jobs-build").start()
+
+        def work():
+            problem = tt.build_tool(lambda text: self.queue.put(("log", text)))
+            if not problem:
+                problem = self.client_problem()
+            self.queue.put(("built", problem))
+        threading.Thread(target=work, daemon=True, name="jobs-build").start()
+
+    def client_problem(self):
+        """None when it knows which client to use: the only one open, or the one picked. Else lists them to pick from."""
+        open_now = clients.windows()
+        if len(open_now) < 2 or os.environ.get("NEOCRON_PID") in [str(pid) for pid in open_now]:
+            return None
+        self.queue.put(("clients", clients.list_clients()))
+        return PICK
 
     def built(self, problem):
         if problem or self.control.stopped.is_set():

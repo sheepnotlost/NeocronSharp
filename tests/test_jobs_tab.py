@@ -1,5 +1,6 @@
 """The Job Loop tab: its buttons and countdown, with a fake runner (no engine, no input)."""
 from pathlib import Path
+import os
 import tempfile
 import threading
 import tkinter as tk
@@ -26,6 +27,12 @@ class JobsTabTests(unittest.TestCase):
         self.busy = False
         self.started, self.jobs = [], []
         self.runner = Runner()
+        self.open = {7: 70}                 # pid -> window of the open clients
+        windows = patch.object(jobs_tab.clients, "windows", lambda: self.open)
+        windows.start()
+        self.addCleanup(windows.stop)
+        jobs_tab.clients.choose(None)
+        self.addCleanup(jobs_tab.clients.choose, None)
         self.tab = jobs_tab.JobsTab(self.frame, self.root, other_live=lambda: self.busy, mission_runner=self.make)
 
     def tearDown(self):
@@ -76,6 +83,46 @@ class JobsTabTests(unittest.TestCase):
         self.assertEqual(self.started, [])
         self.assertFalse(self.tab.steering())
         self.assertEqual(self.tab.status.get(), "No .NET here.")
+
+    def two_clients(self):
+        self.open = {11: 110, 22: 220}
+        return [{"pid": 11, "label": "HLT 500, PSI 100 (11)", "psi": 100}, {"pid": 22, "label": "HLT 300, PSI 900 (22)", "psi": 900}]
+
+    def test_with_two_clients_open_it_asks_which_one_and_lists_them(self):
+        found = self.two_clients()
+        begin = self.counted()
+        with patch.object(jobs_tab.tt, "build_tool", lambda progress=None: None), patch.object(jobs_tab.clients, "list_clients", lambda: found):
+            begin()
+            for _ in range(2):
+                self.tab.event(*self.tab.queue.get(timeout=5))
+        self.assertEqual(self.started, [])
+        self.assertFalse(self.tab.steering())
+        self.assertEqual(self.tab.status.get(), jobs_tab.PICK)
+        self.assertEqual(list(self.tab.client_box.cget("values")), [c["label"] for c in found])
+        self.assertEqual(self.tab.client.get(), "")
+
+    def test_the_picked_client_runs_the_jobs(self):
+        found = self.two_clients()
+        self.tab.show_clients(found)
+        self.tab.client.set(found[1]["label"])
+        self.tab.client_chosen()
+        self.assertEqual(os.environ["NEOCRON_PID"], "22")
+        begin = self.counted(self.tab.tl130_button)
+        self.assertEqual(str(self.tab.client_box.cget("state")), "disabled")   # no switching while it runs
+        with patch.object(jobs_tab.tt, "build_tool", lambda progress=None: None), patch.object(jobs_tab.clients, "focus", lambda: True):
+            begin()
+            self.tab.event(*self.tab.queue.get(timeout=5))
+        self.assertEqual(self.jobs, ["TL130"])
+        self.assertTrue(self.runner.ran.wait(5))
+
+    def test_a_pick_that_has_closed_is_dropped_and_one_client_needs_none(self):
+        found = self.two_clients()
+        jobs_tab.clients.choose(33)
+        self.tab.show_clients(found)
+        self.assertNotIn("NEOCRON_PID", os.environ)
+        self.tab.show_clients([{"pid": 7, "label": "Client 7", "psi": 0}])
+        self.assertEqual(self.tab.client.get(), "Client 7")
+        self.assertNotIn("NEOCRON_PID", os.environ)
 
     def test_stop_during_the_countdown_cancels_it(self):
         self.tab.start()

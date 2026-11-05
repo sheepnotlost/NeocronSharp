@@ -47,9 +47,7 @@ try
         case "heal": return FollowCommand.Heal(rest, root);
         case "places":
         {
-            var procs = Process.GetProcessesByName("neocronclient");
-            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client.");
-            foreach (var p in procs) p.Dispose();
+            string exe = FollowCommand.ClientExecutable();
             using var reader = new PlayerReader(exe);
             var here = reader.ReadSample().Position;
             int sec = reader.ReadSectorId(reader.ReadSample().World) ?? throw new InvalidOperationException("Zoning.");
@@ -67,9 +65,7 @@ try
             // travel <sectorId> [target in that sector | arrive]
             if (rest.Count < 1 || !int.TryParse(rest[0], out int toSector)) throw new InvalidOperationException("Usage: travel <sectorId> [target]");
             string targetSpec = rest.Count > 1 ? rest[1] : Travel.Arrive;
-            var procs = Process.GetProcessesByName("neocronclient");
-            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client and log in.");
-            foreach (var p in procs) p.Dispose();
+            string exe = FollowCommand.ClientExecutable();
             using var reader = new PlayerReader(exe);
             var baked = new Dictionary<int, NavWorld>();
             string install = Path.GetDirectoryName(exe)!;
@@ -81,9 +77,7 @@ try
         }
         case "where":
         {
-            var procs = Process.GetProcessesByName("neocronclient");
-            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client.");
-            foreach (var p in procs) p.Dispose();
+            string exe = FollowCommand.ClientExecutable();
             using var reader = new PlayerReader(exe);
             var s0 = reader.ReadSample();
             Console.WriteLine($"sector {reader.ReadSectorId(s0.World)} at {s0.Position} facing {s0.Forward}; map rotation {reader.ReadMapRotation(s0.World)?.ToString() ?? "unknown"}");
@@ -92,9 +86,7 @@ try
         case "actors":
         {
             // Read-only: every actor-registry node (class, position), e.g. to find the subway train.
-            var procs = Process.GetProcessesByName("neocronclient");
-            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client.");
-            foreach (var p in procs) p.Dispose();
+            string exe = FollowCommand.ClientExecutable();
             using var reader = new PlayerReader(exe);
             var me = reader.ReadSample();
             foreach (var a in reader.ReadRegistryActors().OrderBy(a => a.Position is { } q ? PointNavigation.Distance(q, me.Position) : 1e9f))
@@ -192,9 +184,8 @@ try
             int here = 1; Vector3? live = null; int? liveRotation = null; string source = "Plaza 1 (game not open)";
             try
             {
-                var procs = Process.GetProcessesByName("neocronclient");
-                string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : "";
-                foreach (var pr in procs) pr.Dispose();
+                string exe;
+                try { exe = FollowCommand.ClientExecutable(); } catch (InvalidOperationException) { exe = ""; }
                 if (exe.Length > 0)
                 {
                     using var reader = new PlayerReader(exe);
@@ -335,9 +326,8 @@ try
             int start = 1; Vector3? at = null;
             try
             {
-                var procs = Process.GetProcessesByName("neocronclient");
-                string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : "";
-                foreach (var pr in procs) pr.Dispose();
+                string exe;
+                try { exe = FollowCommand.ClientExecutable(); } catch (InvalidOperationException) { exe = ""; }
                 if (exe.Length > 0)
                 {
                     using var reader = new PlayerReader(exe);
@@ -538,9 +528,7 @@ try
         case "runprobe":
         {
             // Which key combination makes the character run? Short presses, distance measured.
-            var procs = Process.GetProcessesByName("neocronclient");
-            string exe = procs.Length == 1 ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client.");
-            foreach (var p in procs) p.Dispose();
+            string exe = FollowCommand.ClientExecutable();
             using var reader = new PlayerReader(exe);
             Thread.Sleep(6000);   // time to bring the game forward
             reader.RequireForeground();
@@ -887,9 +875,7 @@ int Live(List<string> list, bool steer)
 {
     if (list.Count == 0) throw new InvalidOperationException("Give a target: \"x,y,z\", ground:Name or exit:Name.");
     string executable;
-    var running = Process.GetProcessesByName("neocronclient");
-    try { executable = running.Length == 1 ? running[0].MainModule?.FileName ?? "" : throw new InvalidOperationException("Open exactly one Neocron client and log in first."); }
-    finally { foreach (var p in running) p.Dispose(); }
+    executable = FollowCommand.ClientExecutable();
     using var reader = new PlayerReader(executable);
     var sample = reader.ReadSample();
     int sector = reader.ReadSectorId(sample.World) ?? throw new InvalidOperationException("The current sector is unavailable. Finish zoning.");

@@ -22,11 +22,21 @@ internal static class FollowCommand
 
     private static bool Dead(WorldEntity e) => e.Stats?.Dead == true || e.Player?.Dead == true;
 
-    /// <summary>The single running client, or an error a person can act on.</summary>
-    private static string ClientExecutable()
+    /// <summary>
+    /// The client to read: the one NEOCRON_PID names (the suite's client picker, when two are open), else the only
+    /// one running; or an error a person can act on. PlayerReader picks the same process by NEOCRON_PID.
+    /// </summary>
+    internal static string ClientExecutable()
     {
         var procs = Process.GetProcessesByName("neocronclient");
-        try { return procs.Length == 1 || (procs.Length > 1 && Environment.GetEnvironmentVariable("NEOCRON_PID") != null) ? procs[0].MainModule?.FileName ?? "" : throw new InvalidOperationException(procs.Length == 0 ? "Neocron is not running." : "Open exactly one Neocron client."); }
+        try
+        {
+            if (procs.Length == 0) throw new InvalidOperationException("Neocron is not running.");
+            var chosen = int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int pid) ? procs.FirstOrDefault(p => p.Id == pid) : null;
+            if (chosen == null && procs.Length > 1)
+                throw new InvalidOperationException("Two Neocron clients are open: pick the one to use in the suite's Client list.");
+            return (chosen ?? procs[0]).MainModule?.FileName ?? "";
+        }
         finally { foreach (var p in procs) p.Dispose(); }
     }
 
