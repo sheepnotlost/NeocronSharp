@@ -23,6 +23,7 @@ import numpy as np
 
 import job_aim
 import loot_runner
+import pointer
 from loot_runner import LootRunner
 from macro_core import Interrupted
 from vision import cv2
@@ -67,6 +68,12 @@ SELECT_TRIES = 3
 SETTLE = .2                  # seconds between the pointer arriving and a click
 GLIDE_SPEED = 2500           # pixels a second: the pointer glides to a place, never jumps there (the user's word, 3 Nov)
 GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .08, .35, .012     # seconds
+PROBE = 12                   # pixels: the nudge that shows which arrow on the screen is the game's pointer
+STEER_CLOSE = 2              # pixels: the pointer's tip this near the target is on it
+STEER_TRIES = 12             # corrections before giving up
+STEER_LOOK = .05             # seconds for the game to draw the pointer where it went
+STEER_SLACK = 120            # pixels around where the pointer should be that a correction looks in
+STEER_PACKET = 16            # pixels a step when it glides: the probe's size, so the measured gain holds
 STAGE_REST = .5              # seconds between the terminal, the recruiter and each manager, for the game to catch up
 PLAYER_GONE = 3              # seconds with no other player in sight before it carries on
 PLAYER_LOOK = 1              # seconds between looks while it waits
@@ -459,6 +466,7 @@ class MissionRunner(LootRunner):
         self.aim = aim if aim is not None else job_aim.Aim()    # what this PC's clicks needed, learned as it runs
         self.trial = (0, 0)          # a shift being tried on the R.N. window's clicks after a miss
         self.talk_high = 0           # the open conversation's height
+        self.tip, self.gain = None, 1.   # where the game's pointer was last seen, and how far it goes per pixel sent
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -468,8 +476,125 @@ class MissionRunner(LootRunner):
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
 
+    def sees_pointer(self):
+        """A real mouse to steer: the tests' fake backends have none, and keep the plain moves."""
+        return callable(getattr(self.backend, "move_relative", None))
+
+    def look_moves(self, sent):
+        """Send a relative move and look: (before, after) pictures around it."""
+        before = self.frame()
+        self.glide_relative(*sent)
+        self.wait(STEER_LOOK)
+        return before, self.frame()
+
+    def glide_relative(self, dx, dy):
+        """The pointer moved by mouse motion, as a hand moves it, in small steps eased in and out. Windows' cursor position
+        alone did not move the game's pointer on another PC (5 Nov): motion moves it on every PC."""
+        distance = math.hypot(dx, dy)
+        steps = max(1, math.ceil(distance/STEER_PACKET))
+        seconds = 0 if steps == 1 else min(GLIDE_MOST, max(GLIDE_LEAST, distance/GLIDE_SPEED))
+        sent_x = sent_y = 0
+        for step in range(1, steps+1):
+            share = step/steps
+            eased = share*share*(3-2*share)
+            x, y = round(dx*eased), round(dy*eased)
+            if (x, y) != (sent_x, sent_y):
+                self.checkpoint()
+                self.backend.move_relative(x-sent_x, y-sent_y)
+                sent_x, sent_y = x, y
+            if step < steps:
+                self.wait(seconds/steps)
+
+    def probe(self):
+        """(tip, gain) of the game's pointer, found as the one arrow that moves when the mouse does. None: no pointer moved,
+        so none shows, and the game is in mouse-look, where any move turns the camera instead."""
+        # Right, left, down, up, then further: off the screen's edge, or off green the pointer sits on, it shows on its own.
+        for size in (PROBE, 3*PROBE):
+            for nudge in ((size, 0), (-size, 0), (0, size), (0, -size)):
+                before, after = self.look_moves(nudge)
+                along = 0 if nudge[0] else 1
+                pairs = [(a, b) for a, b in pointer.moves(before, after)
+                         if abs(b[1-along]-a[1-along]) <= 2 and (b[along]-a[along])*nudge[along] > 0
+                         and 2 <= abs(b[along]-a[along]) <= 8*size]
+                if pairs:
+                    a, b = min(pairs, key=lambda pair: abs(pair[1][1-along]-pair[0][1-along]))
+                    return b, abs(b[along]-a[along])/size
+        return None
+
+    def free_pointer(self):
+        """In a conversation the game frees its pointer; when it has not, Tab does, once. Never Esc."""
+        if not dialog_open(self.frame()):
+            raise Interrupted("The game's pointer is nowhere on the screen, so no click was made. Is a window open?")
+        self.emit("log", "The pointer is hidden in this conversation (mouse-look): pressing Tab to free it.")
+        self.press("tab")
+        self.wait(.6)
+        found = self.probe() if dialog_open(self.frame()) else None
+        if found is None:
+            self.press("tab")       # put it back as it was
+            raise Interrupted("The game's pointer did not show in the conversation, so no click was made.")
+        return found
+
+    def point_at(self, target):
+        """Steer the game's own pointer until its tip is on target, by sight: probe for it, glide most of the way, then correct
+        until it is there. Returns where it is."""
+        found = self.probe()
+        if found is None:
+            found = self.free_pointer()
+        tip, self.gain = found
+        for attempt in range(STEER_TRIES):
+            error = (target[0]-tip[0], target[1]-tip[1])
+            if abs(error[0]) <= STEER_CLOSE and abs(error[1]) <= STEER_CLOSE:
+                self.tip = tip
+                return tip
+            share = 1 if attempt == 0 else .9          # corrections stop short rather than overshoot
+            sent = (round(error[0]/self.gain*share) or (1 if error[0] > 0 else -1 if error[0] < 0 else 0),
+                    round(error[1]/self.gain*share) or (1 if error[1] > 0 else -1 if error[1] < 0 else 0))
+            before, after = self.look_moves(sent)
+            expected = (tip[0]+sent[0]*self.gain, tip[1]+sent[1]*self.gain)
+            reach = STEER_SLACK+abs(sent[0]*self.gain)+abs(sent[1]*self.gain)     # the pointer is between where it was and where it went
+            region = (min(tip[0], expected[0])-reach, min(tip[1], expected[1])-reach,
+                      max(tip[0], expected[0])+reach, max(tip[1], expected[1])+reach)
+            pairs = pointer.moves(before, after, start=tip, region=region)
+            if not pairs:
+                found = self.probe()
+                if found is None:
+                    raise Interrupted("Lost sight of the game's pointer while moving it, so no click was made.")
+                tip, self.gain = found
+                continue
+            new = min((b for a, b in pairs), key=lambda b: (b[0]-expected[0])**2+(b[1]-expected[1])**2)
+            went, size = math.hypot(new[0]-tip[0], new[1]-tip[1]), math.hypot(*sent)
+            if size >= 4 and went > 0:
+                self.gain = min(5., max(.2, .5*self.gain+.5*went/size))
+            tip = new
+        raise Interrupted(f"The game's pointer would not reach {target[0]},{target[1]} (it got to {tip[0]},{tip[1]}), so no click was made.")
+
+    def click_here(self):
+        """Click where the pointer is, without moving it again."""
+        self.checkpoint()
+        self.backend.button("left", True)
+        try:
+            self.wait(.06)
+        finally:
+            self.backend.button("left", False)
+
+    def aim_click(self, point):
+        """Onto it by sight, then click. Without a real mouse (the tests), the plain move and click."""
+        if self.sees_pointer():
+            self.point_at(point)
+            self.wait(SETTLE)
+            self.click_here()
+        else:
+            self.move(point)
+            self.wait(SETTLE)
+            self.click(point)
+
     def move(self, point):
-        """Glide there, starting and stopping gently as a hand would, then land exactly on it."""
+        """Glide there, starting and stopping gently as a hand would, then land exactly on it. With the pointer seen, by mouse
+        motion from where it was: an unchecked move, for keeping it off the words."""
+        if self.tip is not None and self.sees_pointer():
+            self.glide_relative(round((point[0]-self.tip[0])/self.gain), round((point[1]-self.tip[1])/self.gain))
+            self.tip = tuple(point)
+            return
         try:
             start = self.backend.cursor_client()
         except (AttributeError, RuntimeError):
@@ -491,9 +616,7 @@ class MissionRunner(LootRunner):
         frame = self.aim_frame = self.frame()
         shift = self.aim.rn(frame)
         at = place(frame, (point[0]+shift[0]+self.trial[0], point[1]+shift[1]+self.trial[1]))
-        self.move(at)
-        self.wait(SETTLE)
-        self.click(at)
+        self.aim_click(at)
 
     def aim_try(self, attempt):
         """The shift for this try at a click: none twice, then a little to each side."""
@@ -509,6 +632,7 @@ class MissionRunner(LootRunner):
 
     def hide_pointer(self):
         """Tab, looking as often as the OCR allows instead of the fixed .6 s of set_ui."""
+        self.tip = None          # hidden now, and the engine turns the view: found again by sight before the next click
         reader = self.reader()
         if not self.ui_visible(reader):
             return
@@ -701,6 +825,7 @@ class MissionRunner(LootRunner):
 
     def open_talk(self, person):
         """Walk up and right-click until the conversation shows."""
+        self.tip = None
         for reach in (TALK_REACH, TALK_CLOSE):
             if person["distance"] > reach and not self.walk_to(person, reach):
                 continue
@@ -751,9 +876,7 @@ class MissionRunner(LootRunner):
         Nudged up or down as this PC's chat clicks have needed, and by any nudge being tried after a miss."""
         nudge = (self.aim.chat(self.last_frame) if self.last_frame is not None else 0.)+trial
         point = (point[0], point[1]+round(nudge*self.talk_high))
-        self.move(point)
-        self.wait(SETTLE)
-        self.click(point)
+        self.aim_click(point)
         self.wait(QUICK_LEAVE)
 
     def chat_took(self, trial, who):
