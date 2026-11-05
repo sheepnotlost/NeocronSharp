@@ -124,7 +124,9 @@ class JobsTab:
         self.client_box.configure(values=[c["label"] for c in found])
         chosen = os.environ.get("NEOCRON_PID")
         if len(found) < 2:
-            clients.choose(None)        # nothing to choose: the only one
+            # The only one in view. Named, not left to chance: a client under another Windows account still runs
+            # but cannot be seen or read from here (the second client the job loop refused on 5 Nov).
+            clients.choose(found[0]["pid"] if found else None)
             self.client.set(found[0]["label"] if found else "")
         elif chosen in [str(c["pid"]) for c in found]:
             self.client.set(next(c["label"] for c in found if str(c["pid"]) == chosen))
@@ -165,7 +167,10 @@ class JobsTab:
     def client_problem(self):
         """None when it knows which client to use: the only one open, or the one picked. Else lists them to pick from."""
         open_now = clients.windows()
-        if len(open_now) < 2 or os.environ.get("NEOCRON_PID") in [str(pid) for pid in open_now]:
+        if os.environ.get("NEOCRON_PID") in [str(pid) for pid in open_now]:
+            return None
+        if len(open_now) < 2:
+            clients.choose(next(iter(open_now), None))
             return None
         self.queue.put(("clients", clients.list_clients()))
         return PICK

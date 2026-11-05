@@ -33,9 +33,20 @@ internal static class FollowCommand
         {
             if (procs.Length == 0) throw new InvalidOperationException("Neocron is not running.");
             var chosen = int.TryParse(Environment.GetEnvironmentVariable("NEOCRON_PID"), out int pid) ? procs.FirstOrDefault(p => p.Id == pid) : null;
-            if (chosen == null && procs.Length > 1)
-                throw new InvalidOperationException("Two Neocron clients are open: pick the one to use in the suite's Client list.");
-            return (chosen ?? procs[0]).MainModule?.FileName ?? "";
+            if (chosen == null)
+            {
+                // A client under another Windows account (another sign-in or remote session) cannot be read from here:
+                // with nothing picked, the one in this session is meant (5 Nov).
+                int session = Process.GetCurrentProcess().SessionId;
+                var here = procs.Where(p => { try { return p.SessionId == session; } catch (InvalidOperationException) { return false; } }).ToArray();
+                if (here.Length == 1) chosen = here[0];
+                else if (procs.Length > 1)
+                    throw new InvalidOperationException("Two Neocron clients are open: pick the one to use in the suite's Client list.");
+                else chosen = procs[0];
+                // PlayerReader picks its process by NEOCRON_PID when more than one is running.
+                Environment.SetEnvironmentVariable("NEOCRON_PID", chosen.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            return chosen.MainModule?.FileName ?? "";
         }
         finally { foreach (var p in procs) p.Dispose(); }
     }

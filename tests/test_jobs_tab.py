@@ -122,7 +122,16 @@ class JobsTabTests(unittest.TestCase):
         self.assertNotIn("NEOCRON_PID", os.environ)
         self.tab.show_clients([{"pid": 7, "label": "Client 7", "psi": 0}])
         self.assertEqual(self.tab.client.get(), "Client 7")
-        self.assertNotIn("NEOCRON_PID", os.environ)
+        # Named all the same: a client under another Windows account runs but is not in view (5 Nov).
+        self.assertEqual(os.environ["NEOCRON_PID"], "7")
+
+    def test_the_one_client_in_view_is_named_before_the_loop_starts(self):
+        begin = self.counted()
+        with patch.object(jobs_tab.tt, "build_tool", lambda progress=None: None), patch.object(jobs_tab.clients, "focus", lambda: True):
+            begin()
+            self.tab.event(*self.tab.queue.get(timeout=5))
+        self.assertEqual(os.environ["NEOCRON_PID"], "7")
+        self.assertEqual(self.jobs, ["TL60"])
 
     def test_stop_during_the_countdown_cancels_it(self):
         self.tab.start()

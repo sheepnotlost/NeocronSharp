@@ -260,7 +260,7 @@ class TargetTab:
                 # Keep a choice that is still open; with no choice to make, there is nothing to name. Two clients
                 # start on the healer: a list never shows its own character, so its list is the one with the fighter.
                 if os.environ.get("NEOCRON_PID") not in [str(c["pid"]) for c in found]:
-                    clients.choose(max(found, key=lambda c: c["psi"])["pid"] if len(found) > 1 else None)
+                    clients.choose(max(found, key=lambda c: c["psi"])["pid"] if found else None)   # one in view: that one
                 self.queue.put(("clients", found))
                 result = ("ok", tt.run_tool(["nearby"], track=self.offline))
             except Exception as exc:        # busy must clear whatever went wrong, or the tab stays locked
