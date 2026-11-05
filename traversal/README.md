@@ -276,6 +276,21 @@ Asked for: Outdoor Cave 3, the cave outside Canyon's reloading point in F 12. **
   - `wasteplan 1034` from Plaza 1: subway to the Outzone, then A 08 … E 12, F 12 and the cave door. 14 legs, about 290,000 units (24-39 min).
 - **`traversal.exe insidemap <world>`:** draws any cave or dungeon from above to `out\inside-<world>.svg`. It shows the floor you can reach from where you arrive, the doors, the arrival spots, the supply boxes and the routes to them, and prints the same as text.
 
+## The world map and zone maps (5 Nov)
+
+Double-click **World map.cmd** for the whole wasteland, or **Zone map.cmd** for one zone (it asks for the cell, for example J01). They are drawn by `worldmap.py` from the game's files and open when done, about a minute for the world map. They are saved to `out\World map.png` and `out\Zone <cell> map.png`.
+
+- **Ground:** each cell's own ground texture, the 16 x 16 JPEG tiles inside `terrain\pak_<cell>.tfl` (roads included). Water is drawn where the heightfield is under 150; the sea floor is at about 96.
+- **Layout:** row A (beside Neocron) at the bottom, as the game's own `pak_maps` world map places it; column 01 at the west. In cell space x runs east and z south.
+- **Points, all from the files:**
+  - Doors (`traversal.exe worlddata`): city gates, plus cave, bunker, tunnel and dungeon entrances.
+  - Outposts, with their kind.
+  - GenReps, GoGuardians, vehicle depots and CityComs.
+  - Traders and medics standing in the wasteland.
+- **Named places the files do not name** (villages, oases, camps, Canyon Reloading Point): names and rough spots are read off the EMS.ru and NEMA maps on techhaven.org. Each is pinned to the GenRep, GoGuardian or trader placed nearest, within 0.3 of a cell.
+- **Zone maps** name every object and draw a grid every 4096 units, labelled in game coordinates, so a spot can be described exactly.
+- **Not in the files:** creature spawns. The server places them, so leveling spots have to be marked by hand.
+
 ## Gravity lifts, doors and props (29 Oct, offline)
 
 **Not tried live.** Walks and Follow now use lifts and open doors inside a sector, and route round props.

@@ -709,6 +709,19 @@ try
             }
             return 0;
         }
+        case "worlddata":
+        {
+            // worlddata: JSON for the world map (worldmap.py): every door in the wasteland cells (WorldChanges of the
+            // placed models and door objects) with where it leads, and the outposts. Cell space; no baking.
+            var travel = new Travel(DefaultInstall, _ => throw new NotSupportedException(), new Hud(), Path.Combine(root, "logs"), pulse, run);
+            var map = travel.Terrain;
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                doors = map.Portals.Select(p => new { cell = p.Cell, name = p.Name, x = p.Position.X, y = p.Position.Y, z = p.Position.Z, to = p.To, toName = travel.SectorName(p.To) }),
+                outposts = map.Landmarks.Select(l => new { cell = l.Cell, name = l.Name, kind = l.Kind, x = l.Position.X, y = l.Position.Y, z = l.Position.Z }),
+            }));
+            return 0;
+        }
         case "insidemap":
         {
             // insidemap <world>: offline, the inside of a cave or dungeon: what is walkable from where you arrive,
