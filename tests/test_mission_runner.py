@@ -245,6 +245,22 @@ class ReadingTests(unittest.TestCase):
         self.assertTrue(dialog_open(frame))
         self.assertEqual(dialog_box(frame), (100, 300, 1200, 800))
 
+    def test_a_darker_conversation_on_a_1024_window_is_found_and_the_communicator_is_not(self):
+        # The other PC draws the panel at half the brightness, in scan lines (screenshot, 5 Nov).
+        frame = np.zeros((768, 1024, 3), np.uint8)
+        frame[:] = (45, 42, 36)                         # the walls
+        frame[170:636, 78:702] = (0, 13, 0)
+        frame[171:636:2, 78:702] = (73, 108, 87)
+        self.assertEqual(dialog_box(frame), (78, 170, 624, 466))
+        frame[170:636, 78:702] = (45, 42, 36)
+        frame[600:683, 20:870] = (36, 60, 43)           # the Communicator, long and flat
+        self.assertIsNone(dialog_box(frame))
+
+    def test_goodbye_is_never_the_option_clicked(self):
+        lines = [{"text": "If you have a problem, just ask.", "left": 87, "point": (0, 0)},
+                 {"text": "> Forget it, Goodbye.", "left": 89, "point": (144, 248)}]
+        self.assertIsNone(answer(lines, 624))
+
     def test_the_name_bar_and_scenery_touching_it_are_not_the_conversation(self):
         frame = blank()
         frame[320:1190, 200:1760] = PANEL
@@ -687,7 +703,7 @@ class AloneTests(unittest.TestCase):
         self.assertEqual(steps[:5], ["wait", "wait", "Recruiter - Near", "wait", "Faction Supply Manager - Lao"])
 
 
-class GlideTests(unittest.TestCase):
+class SnapTests(unittest.TestCase):
     def glide(self, start, end):
         run = Run(FakeEngine([]), {})
         moved = []
@@ -695,16 +711,8 @@ class GlideTests(unittest.TestCase):
         MissionRunner.move(run, end)
         return moved
 
-    def test_the_pointer_glides_and_eases_in_and_out(self):
-        moved = self.glide((0, 0), (1000, 0))
-        self.assertGreater(len(moved), 10)
-        self.assertEqual(moved[-1], (1000, 0))
-        steps = [b[0]-a[0] for a, b in zip(moved, moved[1:])]
-        self.assertTrue(all(step >= 0 for step in steps))
-        self.assertLess(steps[0], max(steps))
-        self.assertLess(steps[-1], max(steps))
-
-    def test_a_pointer_already_there_does_not_move_about(self):
+    def test_the_pointer_snaps_straight_there_in_one_move(self):
+        self.assertEqual(self.glide((0, 0), (1000, 0)), [(1000, 0)])
         self.assertEqual(self.glide((500, 500), (501, 500)), [(501, 500)])
 
     def test_the_job_loop_steers_gently(self):

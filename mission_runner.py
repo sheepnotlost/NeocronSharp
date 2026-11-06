@@ -23,7 +23,6 @@ import numpy as np
 
 import job_aim
 import loot_runner
-import pointer
 from loot_runner import LootRunner
 from macro_core import Interrupted
 from vision import cv2
@@ -42,6 +41,8 @@ TITLE, NUMBERS = (45, 340), (43, 507)
 ROW_CLICK_X, ROW_BLUE_X = 173, 253
 TALK_WIDE = 1550             # pixels: a conversation on the 2560x1440 client at UI scale 1.7
 TALK_SMALLEST = .05          # of the client: a conversation's panel fills .37 there, the HUD's under .03
+TALK_HIGH = .25              # of the client's height: a conversation is .3 of it on every screen seen (2560, 1920, 1024 wide)
+TALK_SHAPE = .45             # its height over its width: .56 to .75 seen; the Communicator .1, the R.N. window .26
 TALK_SOLID = .7              # of its outline: the other windows' panels are broken up
 TALK_FULL = .6               # of the block's widest row: a row of the panel, not the gap under the name bar
 LETTER_GREEN = 150           # a letter's green channel: the panel's stays under 135. Red won't do: an option under the pointer lights up green (live, 2 Nov)
@@ -66,14 +67,6 @@ TALK_CLOSE = 90              # and from here if the first try opened nothing
 MOST_PAGES = 20
 SELECT_TRIES = 3
 SETTLE = .2                  # seconds between the pointer arriving and a click
-GLIDE_SPEED = 3125           # pixels a second: the pointer glides to a place, never jumps there (3 Nov); a quarter quicker (5 Nov)
-GLIDE_LEAST, GLIDE_MOST, GLIDE_STEP = .064, .28, .012    # seconds
-PROBE = 12                   # pixels: the nudge that shows which arrow on the screen is the game's pointer
-STEER_CLOSE = 2              # pixels: the pointer's tip this near the target is on it
-STEER_TRIES = 12             # corrections before giving up
-STEER_LOOK = .05             # seconds for the game to draw the pointer where it went
-STEER_SLACK = 120            # pixels around where the pointer should be that a correction looks in
-STEER_PACKET = 16            # pixels a step when it glides: the probe's size, so the measured gain holds
 STAGE_REST = .5              # seconds between the terminal, the recruiter and each manager, for the game to catch up
 PLAYER_GONE = 3              # seconds with no other player in sight before it carries on
 PLAYER_LOOK = 1              # seconds between looks while it waits
@@ -94,6 +87,7 @@ RECOVER_WAIT = .6            # seconds for the next screen, when putting things 
 PAID_WORDS = ("payment", "credits", "quality")
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
+GOODBYES = ("goodbye", "forgetit")    # an option that ends the talk: never the one to click, even when the OCR misses the rest (5 Nov)
 LEAVING = "somebodyelse"     # the line under the first option, which ends the talk: it can be read first while the options fade in
 SPEECH_INDENT = .0013        # of the conversation's width: an option starts with a ">", so it never lines up with the words above
 Job = namedtuple("Job", "name level row wide mark")
@@ -222,9 +216,11 @@ def rn_page(frame):
 
 
 def panel_green(frame):
+    """A conversation panel's green, by how green it is against its red and blue rather than how bright: another PC draws
+    the same panel at half the brightness, (37, 61, 44) against (46, 116, 70) here (screenshot, 5 Nov)."""
     box = frame.astype(int)
     red, green, blue = box[..., 0], box[..., 1], box[..., 2]
-    return (green-red > 40) & (green-blue > 25) & (green > 90) & (green < 190)
+    return (green > 45) & (green < 190) & (green >= 1.35*red+5) & (green >= 1.2*blue+3)
 
 
 def longest_run(flags):
@@ -252,6 +248,10 @@ def dialog_box(frame):
     left, right = int(columns[0]), int(columns[-1])+1
     size = block[top:bottom, left:right].sum()
     if size < TALK_SMALLEST*small.shape[0]*small.shape[1] or size < TALK_SOLID*(bottom-top)*(right-left):
+        return None
+    # Its shape, which the Communicator, the R.N. window and the Inventory don't have: a conversation is a third of the
+    # screen and well over half as high as it is wide, the Communicator ten times wider than high.
+    if bottom-top < TALK_HIGH*small.shape[0] or (bottom-top) < TALK_SHAPE*(right-left):
         return None
     return left*2, top*2, (right-left)*2, (bottom-top)*2
 
@@ -348,7 +348,7 @@ def options(lines, width):
 
 def answer(lines, width):
     """The line to click: the first option, except in the shop."""
-    found = [line for line in options(lines, width) if LEAVING not in letters(line["text"])]
+    found = [line for line in options(lines, width) if not any(word in letters(line["text"]) for word in (LEAVING, *GOODBYES))]
     for line in found:
         if difflib.SequenceMatcher(None, letters(line["text"]), letters(SHOP_GOODBYE)).ratio() >= SAME_WORDS:
             return line
@@ -466,9 +466,6 @@ class MissionRunner(LootRunner):
         self.aim = aim if aim is not None else job_aim.Aim()    # what this PC's clicks needed, learned as it runs
         self.trial = (0, 0)          # a shift being tried on the R.N. window's clicks after a miss
         self.talk_high = 0           # the open conversation's height
-        self.tip, self.gain = None, 1.   # where the game's pointer was last seen, and how far it goes per pixel sent
-        self.steering = False        # True once the game's pointer was seen not to follow Windows' cursor: steered by sight
-        self.tracks = False          # True once the plain move was seen to put the game's pointer on its target
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -478,179 +475,15 @@ class MissionRunner(LootRunner):
     def watch_health(self):
         """Nothing fights back in a Secure Sector."""
 
-    def sees_pointer(self):
-        """A real mouse to steer: the tests' fake backends have none, and keep the plain moves."""
-        return callable(getattr(self.backend, "move_relative", None))
-
-    def look_moves(self, sent):
-        """Send a relative move and look: (before, after) pictures around it."""
-        before = self.frame()
-        self.glide_relative(*sent)
-        self.wait(STEER_LOOK)
-        return before, self.frame()
-
-    def glide_relative(self, dx, dy):
-        """The pointer moved by mouse motion, as a hand moves it, in small steps eased in and out. Windows' cursor position
-        alone did not move the game's pointer on another PC (5 Nov): motion moves it on every PC."""
-        distance = math.hypot(dx, dy)
-        steps = max(1, math.ceil(distance/STEER_PACKET))
-        seconds = 0 if steps == 1 else min(GLIDE_MOST, max(GLIDE_LEAST, distance/GLIDE_SPEED))
-        sent_x = sent_y = 0
-        for step in range(1, steps+1):
-            share = step/steps
-            eased = share*share*(3-2*share)
-            x, y = round(dx*eased), round(dy*eased)
-            if (x, y) != (sent_x, sent_y):
-                self.checkpoint()
-                self.backend.move_relative(x-sent_x, y-sent_y)
-                sent_x, sent_y = x, y
-            if step < steps:
-                self.wait(seconds/steps)
-
-    def probe(self, near=None):
-        """(tip, gain) of the game's pointer, found as the one arrow that moves when the mouse does. None: no pointer moved,
-        so none shows, and the game is in mouse-look, where any move turns the camera instead. With near, where the pointer
-        should be: an arrow that shows up beside it after a nudge, out of nowhere, was hidden on green there. Then the gain is
-        None: unmeasured."""
-        # Right, left, down, up, then further: off the screen's edge, or off green the pointer sits on, it shows on its own.
-        for size in (PROBE, 3*PROBE):
-            for nudge in ((size, 0), (-size, 0), (0, size), (0, -size)):
-                before, after = self.look_moves(nudge)
-                along = 0 if nudge[0] else 1
-                pairs = [(a, b) for a, b in pointer.moves(before, after)
-                         if abs(b[1-along]-a[1-along]) <= 2 and (b[along]-a[along])*nudge[along] > 0
-                         and 2 <= abs(b[along]-a[along]) <= 8*size]
-                if pairs:
-                    a, b = min(pairs, key=lambda pair: abs(pair[1][1-along]-pair[0][1-along]))
-                    return b, abs(b[along]-a[along])/size
-                if near is not None:
-                    old = pointer.candidates(before)
-                    came = [c[:2] for c in pointer.candidates(after, (near[0]-8*size, near[1]-8*size, near[0]+8*size, near[1]+8*size))
-                            if not any(pointer.close(c, o) for o in old)]
-                    came = [c for c in came if (c[along]-near[along])*nudge[along] > 0 and abs(c[1-along]-near[1-along]) <= 4]
-                    if came:
-                        return min(came, key=lambda c: abs(c[along]-near[along]-nudge[along])), None
-        return None
-
-    def free_pointer(self):
-        """In a conversation the game frees its pointer; when it has not, Tab does, once. Never Esc."""
-        if not dialog_open(self.frame()):
-            raise Interrupted("The game's pointer is nowhere on the screen, so no click was made. Is a window open?")
-        self.emit("log", "The pointer is hidden in this conversation (mouse-look): pressing Tab to free it.")
-        self.press("tab")
-        self.wait(.6)
-        found = self.probe() if dialog_open(self.frame()) else None
-        if found is None:
-            self.press("tab")       # put it back as it was
-            raise Interrupted("The game's pointer did not show in the conversation, so no click was made.")
-        return found
-
-    def steer(self, tip, target):
-        """Move the game's pointer from tip onto target by mouse motion, looking after each move. Near a green button the arrow
-        can't be told from it (live, 5 Nov): lost from sight close to the target, it is where it was sent."""
-        for attempt in range(STEER_TRIES):
-            error = (target[0]-tip[0], target[1]-tip[1])
-            if abs(error[0]) <= STEER_CLOSE and abs(error[1]) <= STEER_CLOSE:
-                break
-            share = 1 if attempt == 0 else .9          # corrections stop short rather than overshoot
-            sent = (round(error[0]/self.gain*share) or (1 if error[0] > 0 else -1 if error[0] < 0 else 0),
-                    round(error[1]/self.gain*share) or (1 if error[1] > 0 else -1 if error[1] < 0 else 0))
-            before, after = self.look_moves(sent)
-            expected = (tip[0]+sent[0]*self.gain, tip[1]+sent[1]*self.gain)
-            reach = STEER_SLACK+abs(sent[0]*self.gain)+abs(sent[1]*self.gain)     # the pointer is between where it was and where it went
-            region = (min(tip[0], expected[0])-reach, min(tip[1], expected[1])-reach,
-                      max(tip[0], expected[0])+reach, max(tip[1], expected[1])+reach)
-            pairs = pointer.moves(before, after, start=tip, region=region)
-            if not pairs:
-                tip = (round(expected[0]), round(expected[1]))
-                if math.hypot(target[0]-tip[0], target[1]-tip[1]) <= STEER_SLACK:
-                    continue            # out of sight on the target's own green: trust the sum
-                raise Interrupted("Lost sight of the game's pointer far from where it was sent, so no click was made.")
-            new = min((b for a, b in pairs), key=lambda b: (b[0]-expected[0])**2+(b[1]-expected[1])**2)
-            went, size = math.hypot(new[0]-tip[0], new[1]-tip[1]), math.hypot(*sent)
-            if size >= 4 and went > 0:
-                self.gain = min(5., max(.2, .5*self.gain+.5*went/size))
-            tip = new
-        self.tip = tip
-        return tip
-
-    def find_after_move(self, before, after, target):
-        """Where the game's pointer is after a move towards target: the arrow that showed up, nearest the target, or one
-        already sitting on it. None when none shows: on green the arrow can't be seen."""
-        came = [b for a, b in pointer.moves(before, after)]
-        if not came:
-            came = [c[:2] for c in pointer.candidates(after, (target[0]-8, target[1]-8, target[0]+8, target[1]+8))]
-        if not came:
-            return None
-        return min(came, key=lambda b: (b[0]-target[0])**2+(b[1]-target[1])**2)
-
-    def click_here(self):
-        """Click where the pointer is, without moving it again."""
-        self.checkpoint()
-        self.backend.button("left", True)
-        try:
-            self.wait(.06)
-        finally:
-            self.backend.button("left", False)
-
     def aim_click(self, point):
-        """Straight there and click, as it ran 90 jobs on this PC: no looking around for the pointer (the user's word, 5 Nov:
-        it hovered, nudging for an arrow it could not see on the terminal's green buttons).
-
-        Only a look after the move, which costs no motion. In a conversation, whose dark panel always shows the arrow, the
-        first click of a run makes sure the pointer went there: not seen, one nudge finds it, or one Tab frees it from
-        mouse-look; seen far off (on another PC it did not follow Windows' cursor), every click after that in the run is
-        steered by sight. Without a real mouse (the tests), the plain move and click."""
-        if not self.sees_pointer():
-            self.move(point)
-            self.wait(SETTLE)
-            self.click(point)
-            return
-        if self.steering and self.tip is not None:
-            self.steer(self.tip, point)
-        else:
-            before = self.frame()
-            self.move(point)
-            self.wait(STEER_LOOK)
-            seen = self.find_after_move(before, self.frame(), point)
-            in_talk = dialog_open(self.last_frame)
-            if seen is not None and math.hypot(seen[0]-point[0], seen[1]-point[1]) <= 4*PROBE:
-                self.tracks = True          # it went where it was sent: never look again this run
-            elif in_talk and not self.tracks:
-                found = self.probe(near=point)
-                if found is None:
-                    found = self.free_pointer()     # nothing moved: hidden, in mouse-look
-                tip, gain = found
-                if gain is None or math.hypot(tip[0]-point[0], tip[1]-point[1]) <= 4*PROBE:
-                    self.tracks = True      # it was there all along: back the same way
-                    self.move(point)
-                else:
-                    self.emit("log", f"The game's pointer is at {tip[0]},{tip[1]}, not {point[0]},{point[1]}: steering it by sight from now on.")
-                    self.steering, self.gain = True, gain
-                    self.steer(tip, point)
+        """Straight there in one move, a moment for the game to see it arrive, then the click (the user's word, 5 Nov:
+        snap to the place, no gliding and no looking around for the pointer)."""
+        self.move(point)
         self.wait(SETTLE)
-        self.click_here()
+        self.click(point)
 
     def move(self, point):
-        """Glide there, starting and stopping gently as a hand would, then land exactly on it. With the pointer seen, by mouse
-        motion from where it was: an unchecked move, for keeping it off the words."""
-        if self.steering and self.tip is not None and self.sees_pointer():
-            self.glide_relative(round((point[0]-self.tip[0])/self.gain), round((point[1]-self.tip[1])/self.gain))
-            self.tip = tuple(point)
-            return
-        try:
-            start = self.backend.cursor_client()
-        except (AttributeError, RuntimeError):
-            start = None
-        if start is not None:
-            dx, dy = point[0]-start[0], point[1]-start[1]
-            seconds = min(GLIDE_MOST, max(GLIDE_LEAST, math.hypot(dx, dy)/GLIDE_SPEED)) if math.hypot(dx, dy) > 2 else 0
-            steps = round(seconds/GLIDE_STEP)
-            for step in range(1, steps):
-                share = step/steps
-                eased = share*share*(3-2*share)
-                super().move((round(start[0]+dx*eased), round(start[1]+dy*eased)))
-                self.wait(GLIDE_STEP)
+        """One jump, straight onto the place."""
         super().move(point)
 
     def tap(self, point):
@@ -675,7 +508,6 @@ class MissionRunner(LootRunner):
 
     def hide_pointer(self):
         """Tab, looking as often as the OCR allows instead of the fixed .6 s of set_ui."""
-        self.tip = None          # hidden now, and the engine turns the view: found again by sight before the next click
         reader = self.reader()
         if not self.ui_visible(reader):
             return
@@ -868,7 +700,6 @@ class MissionRunner(LootRunner):
 
     def open_talk(self, person):
         """Walk up and right-click until the conversation shows."""
-        self.tip = None
         for reach in (TALK_REACH, TALK_CLOSE):
             if person["distance"] > reach and not self.walk_to(person, reach):
                 continue
