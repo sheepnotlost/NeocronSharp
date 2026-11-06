@@ -4,12 +4,11 @@ Follow's target list without the walk: the work is done by traversal.exe's "came
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 The hunt (loot_runner.py) repeats walk, fight, run and loot on the NPC names ticked in the enemy list, anywhere in the zone.
-Follow and heal has two forms. With two clients open here it runs without focus: traversal.exe's "heal" keeps the crosshair on your
-other client's character, walks after it and casts every 30 s. With one (a healer in a VM, its fighter elsewhere) it is "follow --heal",
-with real mouse input: Follow's routes to the fighter named here, then aiming and a click every 30 s when in reach. If that
-ends for any reason but Stop, it looks for the fighter again, so a healer left alone keeps going.
+Follow and heal runs on the healer's own PC (or VM), one Neocron client there, with the fighter played on another computer:
+"follow --heal", real mouse input, Follow's routes to the fighter named here, then aiming and a cast every 30 s when in reach.
+If that ends for any reason but Stop, it looks for the fighter again, so a healer left alone keeps going. Two clients on one
+PC are not supported any more: the tab says to close one.
 """
-import os
 import queue
 import re
 import subprocess
@@ -27,6 +26,8 @@ FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
+TWO_CLIENTS = ("{} Neocron clients are open on this PC. Close all but one: Follow and heal runs one client per PC, "
+               "with the fighter on another computer.")
 TICKED, UNTICKED = "\u2611", "\u2610"
 log_box = tt.log_box
 
@@ -79,12 +80,6 @@ class TargetTab:
         self.hold_left = tk.BooleanVar(value=False)
         self.hold_check = ttk.Checkbutton(top, text="Hold left mouse button (NPCs only)", variable=self.hold_left)
         self.hold_check.pack(side="left", padx=(12, 0))
-        ttk.Label(top, text="Client:").pack(side="left", padx=(12, 0))
-        self.client = tk.StringVar()
-        self.client_box = ttk.Combobox(top, textvariable=self.client, state="readonly", width=30)
-        self.client_box.pack(side="left", padx=6)
-        self.client_box.bind("<<ComboboxSelected>>", lambda e: self.client_chosen())
-        self.clients = []
         self.status = tk.StringVar(value="Press Refresh to see who is around you.")
         ttk.Label(host, textvariable=self.status, font=("Segoe UI", 11, "bold"), wraplength=900).grid(
             row=1, column=0, sticky="ew", pady=(8, 4))
@@ -180,13 +175,11 @@ class TargetTab:
         return self.rows.get(chosen[0]) if chosen else None
 
     def may_heal(self, actor):
-        """A living player. Two clients here: the engine checks it is your other one. One: it must be the fighter you named."""
-        if actor is None or actor["dead"] or actor["kind"] != "player":
-            return False
-        return len(self.clients) > 1 or self.named_fighter(actor)
+        """A living player; heal() then checks it is the fighter named in the box, and says so if not."""
+        return actor is not None and not actor["dead"] and actor["kind"] == "player"
 
     def named_fighter(self, actor):
-        return actor["name"].lower() == self.fighter.get().strip().lower()
+        return " ".join(actor["name"].lower().split()) == " ".join(self.fighter.get().lower().split())
 
     def steering(self):
         return self.process is not None or self.looting is not None or self.heal_name is not None
@@ -208,7 +201,6 @@ class TargetTab:
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
         for button in self.refresh_buttons:
             button.configure(state="normal" if idle else "disabled")
-        self.client_box.configure(state="readonly" if idle else "disabled")
         for button in self.stop_buttons:
             button.configure(state="normal" if self.steering() else "disabled")
 
@@ -229,8 +221,6 @@ class TargetTab:
                     self.last_line = payload
                     self.remember(payload)
                     self.append(payload)
-                elif kind == "clients":
-                    self.show_clients(payload)
                 elif kind == "nearby":
                     self.busy = False
                     self.show_nearby(payload)
@@ -256,27 +246,15 @@ class TargetTab:
                 problem = tt.build_tool(lambda text: self.queue.put(("log", text)))
                 if problem:
                     raise RuntimeError(problem)
-                found = clients.list_clients()
-                # Keep a choice that is still open; with no choice to make, there is nothing to name. Two clients
-                # start on the healer: a list never shows its own character, so its list is the one with the fighter.
-                if os.environ.get("NEOCRON_PID") not in [str(c["pid"]) for c in found]:
-                    clients.choose(max(found, key=lambda c: c["psi"])["pid"] if found else None)   # one in view: that one
-                self.queue.put(("clients", found))
+                found = clients.windows()
+                if len(found) > 1:
+                    raise RuntimeError(TWO_CLIENTS.format(len(found)))
+                clients.choose(next(iter(found), None))     # the one open here, whatever another tab picked before
                 result = ("ok", tt.run_tool(["nearby"], track=self.offline))
             except Exception as exc:        # busy must clear whatever went wrong, or the tab stays locked
                 result = ("error", str(exc))
             self.queue.put(("nearby", result))
         threading.Thread(target=work, daemon=True, name="target-nearby").start()
-
-    def show_clients(self, found):
-        self.clients = found
-        self.client_box.configure(values=[c["label"] for c in found])
-        chosen = os.environ.get("NEOCRON_PID")
-        self.client.set(next((c["label"] for c in found if str(c["pid"]) == chosen), found[0]["label"] if found else ""))
-
-    def client_chosen(self):
-        clients.choose(next(c["pid"] for c in self.clients if c["label"] == self.client.get()))
-        self.refresh()
 
     def show_nearby(self, result):
         state, data = result
@@ -289,9 +267,8 @@ class TargetTab:
             self.actors = [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
                             "dead": bool(e.get("dead"))} for e in data.get("entities", [])]
             players = sum(1 for a in self.actors if a["kind"] == "player")
-            seen_by = f" (seen by {self.client.get()})" if len(self.clients) > 1 else ""
             self.status.set(f"{data.get('sectorName') or 'This zone'}  ·  {tt.plural(players, 'player')} and "
-                            f"{tt.plural(len(self.actors) - players, 'NPC')} around you{seen_by}")
+                            f"{tt.plural(len(self.actors) - players, 'NPC')} around you")
         self.show_actors()
 
     def show_actors(self):
@@ -307,6 +284,13 @@ class TargetTab:
             self.rows[iid] = actor
             if actor["id"] == keep:
                 self.tree.selection_set(iid)
+        # The fighter named last time, picked for you: on the healer's PC, Refresh then Follow and heal is all there is to do.
+        if keep is None:
+            named = next((iid for iid, actor in self.rows.items() if actor["kind"] == "player" and not actor["dead"]
+                          and self.named_fighter(actor)), None)
+            if named is not None:
+                self.tree.selection_set(named)
+                self.tree.see(named)
         self.show_enemies()
         self.update_buttons()
 
@@ -349,24 +333,22 @@ class TargetTab:
         self.update_buttons()
 
     def heal(self):
-        """Two clients here: the one chosen above is the healer, and it needs no focus. One: this is the healer, focused, and the fighter is elsewhere."""
+        """This PC is the healer, Neocron focused here, and the fighter is played on another computer."""
         actor = self.selected()
         if self.busy or self.steering() or not self.may_heal(actor):
+            return
+        if not self.named_fighter(actor):
+            self.append(f"Type {actor['name']} in Fighter first: Follow and heal only follows the fighter named there.")
             return
         if self.other_live():
             self.append(OTHER_LIVE)
             return
         self.append(f"Tracking {actor['name']} and following. Slot 1 every 30 s, slots 2 and 3 every 120 s, on both of you.")
         try:
-            # A name in the box means the fighter is elsewhere, whatever else is open here: a leftover or closing client
-            # made a healer alone in a VM count two (1 Nov), and the engine then looked for the fighter in that one.
-            if len(self.clients) > 1 and not self.named_fighter(actor):
-                self.start_live(["heal", actor["id"]])
-            else:
-                FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
-                self.append("Starting in 5 s: Neocron must stay the focused window here.")
-                self.heal_name = actor["name"]
-                self.start_alone(actor["id"])
+            FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
+            self.append("Starting in 5 s: Neocron must stay the focused window here.")
+            self.heal_name = actor["name"]
+            self.start_alone(actor["id"])
             self.heal_button.configure(text="Healing...")
         except (OSError, RuntimeError) as exc:
             self.process = None

@@ -19,7 +19,8 @@ class TargetTabTests(unittest.TestCase):
         self.frame = tk.Frame(self.root)
         self.frame.pack()
         self.walking = False
-        self.tab = target_tab.TargetTab(self.frame, self.root, autoload=False, other_live=lambda: self.walking)
+        with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
+            self.tab = target_tab.TargetTab(self.frame, self.root, autoload=False, other_live=lambda: self.walking)
         self.tab.show_nearby(("ok", NEARBY))
 
     def tearDown(self):
@@ -77,23 +78,16 @@ class TargetTabTests(unittest.TestCase):
         with patch.object(self.tab, "start_live") as start:
             self.tab.heal()
         start.assert_not_called()
-        self.tab.clients = [{"pid": 1, "label": "a"}, {"pid": 2, "label": "b"}]
-        self.tab.tree.selection_set(children[0])
-        self.root.update()
-        self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")
-        with patch.object(self.tab, "start_live") as start:
-            self.tab.heal()
-        start.assert_called_once_with(["heal", "p1"])
 
-    def test_alone_in_a_vm_it_heals_only_the_named_fighter_with_real_input(self):
+    def test_it_heals_only_the_named_fighter_with_real_input(self):
         children = self.tab.tree.get_children()
-        self.tab.clients = [{"pid": 1, "label": "a"}]
         self.tab.tree.selection_set(children[0])
         self.root.update()
-        self.assertEqual(str(self.tab.heal_button.cget("state")), "disabled")
+        self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")      # clickable, so it can say why not
         with patch.object(self.tab, "start_live") as start:
             self.tab.heal()
         start.assert_not_called()
+        self.assertIn("Type Buddy in Fighter first", self.log())
         self.tab.fighter.set(" buddy ")
         self.root.update()
         self.assertEqual(str(self.tab.heal_button.cget("state")), "normal")
@@ -229,41 +223,38 @@ class TargetTabTests(unittest.TestCase):
         self.assertIn("Hunt could not start: no module", self.tab.log.get("1.0", "end"))
         self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
 
-    def test_a_named_fighter_means_real_input_even_with_a_second_client_listed(self):
-        self.tab.clients = [{"pid": 1, "label": "a"}, {"pid": 2, "label": "b"}]
-        self.tab.fighter.set("Buddy")
-        self.tab.tree.selection_set(self.tab.tree.get_children()[0])
-        self.root.update()
-        with tempfile.TemporaryDirectory() as folder, patch.object(target_tab, "FIGHTER_FILE", Path(folder) / "fighter.txt"), \
-                patch.object(self.tab, "start_live") as start:
-            self.tab.heal()
-        self.assertEqual(start.call_args.args[0][:3], ["follow", "p1", "--heal"])
-
-    def test_two_clients_are_told_apart_and_the_choice_reaches_the_engine(self):
-        found = [{"pid": 11, "label": "HLT 768, PSI 433 (11)"}, {"pid": 22, "label": "HLT 913, PSI 7 (22)"}]
-        self.addCleanup(clients.choose, None)
-        clients.choose(22)
-        self.tab.show_clients(found)
-        self.assertEqual(self.tab.client.get(), found[1]["label"])
-        self.tab.client.set(found[0]["label"])
-        with patch.object(self.tab, "refresh") as refresh:
-            self.tab.client_chosen()
-        refresh.assert_called_once()
-        self.assertEqual(os.environ["NEOCRON_PID"], "11")
-        self.tab.show_nearby(("ok", NEARBY))
-        self.assertTrue(self.tab.status.get().endswith("around you (seen by HLT 768, PSI 433 (11))"))
-
-    def test_two_clients_start_on_the_healer(self):
-        found = [{"pid": 22, "label": "HLT 913, PSI 7 (22)", "psi": 7}, {"pid": 30, "label": "HLT 768, PSI 433 (30)", "psi": 433}]
-        self.addCleanup(clients.choose, None)
-        clients.choose(None)
-        with patch.object(target_tab.tt, "build_tool", return_value=None), patch.object(clients, "list_clients", return_value=found),                 patch.object(target_tab.tt, "run_tool", return_value=NEARBY):
+    def read_with(self, windows):
+        with patch.object(target_tab.tt, "build_tool", return_value=None), patch.object(clients, "windows", return_value=windows), \
+                patch.object(target_tab.tt, "run_tool", return_value=NEARBY) as nearby:
             self.tab.refresh()
             while self.tab.busy:
                 self.root.update()
                 self.tab.poll()
+        return nearby
+
+    def test_two_clients_on_one_pc_are_refused(self):
+        self.addCleanup(clients.choose, None)
+        nearby = self.read_with({22: 1, 30: 2})
+        nearby.assert_not_called()
+        self.assertIn("2 Neocron clients are open on this PC. Close all but one", self.tab.status.get())
+        self.assertFalse(hasattr(self.tab, "client_box"))
+
+    def test_the_one_client_here_is_read_whatever_another_tab_picked(self):
+        self.addCleanup(clients.choose, None)
+        clients.choose(99)
+        self.read_with({30: 1})
         self.assertEqual(os.environ["NEOCRON_PID"], "30")
-        self.assertEqual(self.tab.client.get(), found[1]["label"])
+        self.assertTrue(self.tab.status.get().endswith("around you"))
+
+    def test_the_named_fighter_is_picked_after_a_refresh(self):
+        self.tab.tree.selection_remove(*self.tab.tree.selection())
+        self.tab.fighter.set("BUDDY")
+        self.tab.show_nearby(("ok", NEARBY))
+        self.assertEqual(self.tab.selected()["name"], "Buddy")
+        self.tab.tree.selection_set(self.tab.tree.get_children()[1])
+        kept = self.tab.selected()["id"]
+        self.tab.show_nearby(("ok", NEARBY))
+        self.assertEqual(self.tab.selected()["id"], kept)       # a row you picked yourself stays picked
 
     def test_will_not_start_while_a_walk_steers_the_same_mouse(self):
         self.walking = True

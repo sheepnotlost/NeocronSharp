@@ -264,43 +264,6 @@ internal static class FollowCommand
         return target;
     }
 
-    /// <summary>Is this the character in the user's other open client? Tried for a moment: this client's list arrives late.</summary>
-    private static bool OwnSecondClient(PlayerReader reader, WorldEntity target)
-    {
-        var others = Process.GetProcessesByName("neocronclient");
-        try
-        {
-            foreach (var process in others.Where(p => p.Id != reader.Process.Id))
-            {
-                using var other = new PlayerReader(reader.Executable, process.Id);
-                for (int i = 0; i < 10; i++, Thread.Sleep(100))
-                {
-                    var sample = other.ReadSteady();
-                    var seen = ReadSnapshot(reader).Entities.FirstOrDefault(e => e.Identity.Node == target.Identity.Node) ?? target;
-                    if (HoldDistance.SameCharacter(sample.Position, other.ReadSectorId(sample.World), seen.Position, reader.ReadSectorId(reader.ReadSteady().World))) return true;
-                }
-            }
-            return false;
-        }
-        finally { foreach (var process in others) process.Dispose(); }
-    }
-
-    /// <summary>heal &lt;player id&gt;: live and without focus (NEOCRON_PID picks the healer): keeps the crosshair on your own other client's character, walks after it, and casts with the Shoot key every 30 s. The one command that writes to the game's memory, and only the healer's camera.</summary>
-    public static int Heal(List<string> rest, string root)
-    {
-        if (rest.Count < 1) throw new InvalidOperationException("Usage: heal <player id from 'nearby'>");
-        using var reader = new PlayerReader(ClientExecutable());
-        var target = Pick(reader, rest[0]);
-        if (target.Identity.Kind != EntityKind.Player) throw new InvalidOperationException($"{target.Name} is not a player.");
-        if (!OwnSecondClient(reader, target)) throw new InvalidOperationException($"{target.Name} is not the character in your other open client. Follow and heal only works on your own second client.");
-        string keys = Path.Combine(Path.GetDirectoryName(reader.Executable)!, "ini", "keys.ini");
-        if (!File.ReadAllText(keys).Contains("bind \"INSERT\" \"Shoot\"", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Insert is not bound to Shoot in keys.ini, so the healer cannot cast without focus.");
-        string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
-        Console.WriteLine(new HealWatch(reader, target, Path.Combine(logs, $"heal-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
-        return 0;
-    }
-
     /// <summary>flee [--pulse N] [--calibration speed,gain]: live, runs to the nearest spot no NPC can see, for the hunt when hurt.</summary>
     public static int Flee(List<string> rest, string root, int pulse)
     {

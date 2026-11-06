@@ -76,35 +76,6 @@ internal sealed class PositionJumps
     }
 }
 
-/// <summary>The healer's walk: after the target when it gets further than the distance, and back only when it is right on top of you.</summary>
-internal sealed class HoldDistance(float distance)
-{
-    public const float MinDistance = 40, MaxDistance = 400, StartOff = 14, StopOff = 6, CastBeyond = 60,
-        RunBeyond = 250;   // Shift sprints and burns stamina, and with none left it crawls at 35 units/s (live, 1 Nov): only to catch up
-    /// <summary>Facing further off than this, W would walk past the target.</summary>
-    public const float MaxYawToWalk = 0.35f;
-    /// <summary>The other client's position against the same character in this client's list, which arrives late.</summary>
-    public const float SameSpot = 60;
-
-    public float Distance { get; } = Math.Clamp(distance, MinDistance, MaxDistance);
-    private int _forward;
-
-    /// <summary>Which way to walk (-1, 0, 1) and whether to run. A key once down stays down until nearly there, so it does not chatter.</summary>
-    public (int Forward, bool Run) Keys(float away, float yawError)
-    {
-        float off = away - Distance;
-        _forward = away < MinDistance ? -1 : off >= StartOff ? 1 : off < StopOff ? 0 : Math.Max(_forward, 0);
-        if (_forward > 0 && MathF.Abs(yawError) > MaxYawToWalk) _forward = 0;
-        return (_forward, off > RunBeyond);
-    }
-
-    public bool InReach(float away) => away - Distance < CastBeyond;
-
-    /// <summary>Only your own second client is healed: these are that client's position and the target's, in one sector.</summary>
-    public static bool SameCharacter(Vector3 otherClient, int? otherSector, Vector3 target, int? sector) =>
-        otherSector == sector && sector != null && PointNavigation.Distance(otherClient, target) <= SameSpot;
-}
-
 /// <summary>When to act on someone: the proof, or the crosshair having been on them this long since the first look.</summary>
 internal sealed class SteadyAim(long ms)
 {
