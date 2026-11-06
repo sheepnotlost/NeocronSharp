@@ -981,7 +981,7 @@ class QuickTalkTests(unittest.TestCase):
             shown.pop(0)
         run.click = click
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None):
             run.quick_talk(actor("Recruiter - Near"))
         return clicks
 
@@ -1022,7 +1022,7 @@ class QuickTalkTests(unittest.TestCase):
             shown.pop(0)
         run.click = click
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None):
             run.quick_talk(actor("Recruiter - Near"))
         self.assertEqual(clicks, [(300, 420)])
 
@@ -1040,7 +1040,7 @@ class QuickTalkTests(unittest.TestCase):
         run.talk_wide = self.BOX[2]
         run.dialog_lines = lambda: [{"text": "Well then", "left": 216, "point": (300, 390)}, {"text": "> Yes", "left": 223, "point": (2500, 420)}]
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with tempfile.TemporaryDirectory() as folder, patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+        with tempfile.TemporaryDirectory() as folder, patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None):
             run.diagnostic_dir = Path(folder)
             with self.assertRaises(Interrupted):
                 run.quick_talk(actor("Recruiter - Near"))
@@ -1059,7 +1059,7 @@ class QuickTalkTests(unittest.TestCase):
         now = iter(x*.1 for x in range(1000))
         run.clock = lambda: next(now)
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX), self.assertRaisesRegex(Interrupted, "did not end"):
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None), self.assertRaisesRegex(Interrupted, "did not end"):
             run.quick_talk(actor("Recruiter - Near"))
         self.assertGreater(looks[0], mission_runner.QUICK_READ)
 
@@ -1080,7 +1080,7 @@ class QuickTalkTests(unittest.TestCase):
             shown.pop(0)
         run.click = click
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX):
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None):
             run.quick_talk(actor("Recruiter - Near"))
         self.assertEqual((len(opened), len(closed), clicks), (2, 1, [(262, 422)]))
 
@@ -1094,6 +1094,16 @@ class QuickTalkTests(unittest.TestCase):
                 run.close_talk()
             self.assertEqual(pressed, presses)
 
+    def test_a_dim_panel_the_quick_look_misses_is_still_answered(self):
+        dim = self.screen(216, 223, 223)
+        dim[self.BOX[1]+self.BOX[3]//2:self.BOX[1]+self.BOX[3]] = 0        # the lower panel the quick look checks reads as gone
+        clicks = self.talk([dim, blank()])
+        self.assertEqual(clicks, [(262, 422)])
+
+    def test_a_conversation_that_closes_before_any_answer_is_a_slip(self):
+        with self.assertRaisesRegex(Interrupted, "closed before any answer"):
+            self.talk([blank()])
+
     def test_stops_when_it_never_ends(self):
         run = Run(FakeEngine([]), {})
         run.open_talk = lambda person: None
@@ -1103,7 +1113,7 @@ class QuickTalkTests(unittest.TestCase):
         now = iter(range(1000))
         run.clock = lambda: next(now)
         run.quick_talk = MissionRunner.quick_talk.__get__(run)
-        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX), self.assertRaisesRegex(Interrupted, "did not end"):
+        with patch.object(mission_runner, "dialog_box", lambda frame: self.BOX if frame.any() else None), self.assertRaisesRegex(Interrupted, "did not end"):
             run.quick_talk(actor("Recruiter - Near"))
 
 

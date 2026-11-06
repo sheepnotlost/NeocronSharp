@@ -59,6 +59,7 @@ QUICK_READ = 1               # seconds of seeing no option before the OCR looks:
 QUICK_PARK = .75             # of the panel, both ways: below the words, where the pointer can't touch them
 QUICK_LEAVE = .08            # seconds the pointer stays after a click, for the game to see the button come up on the option
 QUICK_STUCK = 3              # seconds with nothing to answer before the conversation is closed and opened again
+TALK_BOX_LOOKS = 20          # looks, .05 s apart, for a conversation's panel that has only just opened
 QUICK_REOPEN = 2             # times, in one talk
 SERVE_DONE = "<<done>>"
 
@@ -862,25 +863,34 @@ class MissionRunner(LootRunner):
         self.open_talk(person)
         ends, clicked, at, reopened = self.clock()+QUICK_MOST, None, self.clock(), 0
         misses, trial = 0, 0.
-        box = dialog_box(self.frame())
+        box = self.talk_box(person)
         while box is not None and self.clock() < ends:
             self.talk_high = box[3]
             frame = self.frame()
             if not still_open(frame, box):
-                if clicked is not None:
+                if dialog_open(frame):
+                    # Still there: the quick look misses a dim panel, or one still fading in (another PC, 5 Nov), and
+                    # took it for the end, so the loop went on to the manager with no mission.
+                    box = dialog_box(frame) or box
+                elif clicked is None:
+                    raise Interrupted(f"The conversation with {person['name']} closed before any answer.")
+                else:
                     self.chat_took(trial, person["name"])
-                return
+                    return
             point = first_option(frame, box)
             if point is None and self.clock() >= at+QUICK_READ:
                 point = self.read_option()
             if point is None and self.clock() >= at+QUICK_STUCK and reopened < QUICK_REOPEN:
                 self.emit("log", f"{person['name']} gave nothing to answer: closing the conversation and opening it again.")
+                if not getattr(self, "stuck_pictured", False):
+                    self.stuck_pictured = True
+                    self.picture(frame, box, (box[0]+box[2]//2, box[1]+box[3]//2), "recruiter-stuck.png")
                 self.close_talk()
                 self.hide_pointer()
                 self.open_talk(person)
                 reopened += 1
                 ends, clicked, at = self.clock()+QUICK_MOST, None, self.clock()
-                box = dialog_box(self.frame())
+                box = self.talk_box(person)
                 continue
             if point is not None and not inside(point, box):
                 self.note_pointer(frame, box, point)
@@ -902,6 +912,16 @@ class MissionRunner(LootRunner):
             self.wait(.02)
         if box is not None:
             raise Interrupted(f"The conversation with {person['name']} did not end.")
+
+    def talk_box(self, person):
+        """The open conversation's panel. Right after it opens it can still be fading in, too dim to find for a moment:
+        not finding it then ended the talk unanswered, and the loop went on with no mission (another PC, 5 Nov)."""
+        for look in range(TALK_BOX_LOOKS):
+            box = dialog_box(self.frame())
+            if box is not None:
+                return box
+            self.wait(.05)
+        raise Interrupted(f"The conversation with {person['name']} closed before any answer.")
 
     def note_pointer(self, frame, box, point):
         """An option read outside the chat panel is never clicked (the pointer drifted off to the right, 5 Nov). One picture a run."""
