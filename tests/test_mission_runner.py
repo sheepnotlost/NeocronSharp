@@ -435,6 +435,7 @@ class Run(MissionRunner):
                          diagnostic_dir=Path(tempfile.gettempdir())/"neocronsharp-test-diagnostics")
         self.said, self.jobs = said, jobs
         self.screens = []
+        self.opened = []
 
     def hide_pointer(self):
         pass
@@ -461,6 +462,7 @@ class Run(MissionRunner):
 
     def open_talk(self, person):
         self.who = person["name"]
+        self.opened.append(self.who)
         self.screens = list(self.said[self.who])
 
     def dialog_lines(self):
@@ -487,47 +489,11 @@ class LoopTests(unittest.TestCase):
     def test_nearest_recruiter_then_both_managers_then_back_to_the_terminal(self):
         engine = FakeEngine(PEOPLE)
         run = Run(engine, self.said(), jobs=2)
-        spoken = []
-        talk = run.talk
-        run.talk = lambda person: spoken.append(person["name"]) or talk(person)
         run.run()
-        self.assertEqual(spoken, ["Recruiter - Near", "Faction Supply Manager - Lao", "Faction Supply Manager - Yul"]*2)
+        self.assertEqual(run.opened, ["Recruiter - Near", "Faction Supply Manager - Lao", "Faction Supply Manager - Yul"]*2)
         self.assertEqual(engine.calls.count("spot"), 1)
         self.assertEqual(engine.calls.count("terminal"), 2)
         self.assertEqual(run.events[-1], ("done", "Enough. 2 jobs done."))
-
-    def test_once_a_manager_pays_the_other_is_left_alone(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=PAID))
-        run.run()
-        self.assertEqual(run.who, "Faction Supply Manager - Lao")
-        self.assertEqual(run.completed, 1)
-
-    def test_the_reward_is_clicked_by_its_pixels_when_its_option_reads_as_speech(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Quality. Here is your payment, 15000 credits"]]))     # its option not read at all
-        run.dialog_lines = lambda: None if not run.screens else [line(text) for text in run.screens[0]]
-        clicked = []
-        run.pixel_option = lambda: clicked.append(1) or (300, 400)
-        run.run()
-        self.assertEqual(clicked, [1])
-        self.assertEqual(run.completed, 1)
-
-    def test_a_reward_screen_that_stays_is_closed_and_the_job_counts(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=PAID))
-        run.click = lambda point: None if run.who.endswith("Lao") else run.screens.pop(0)     # the reward's click never moves it on
-        closed = []
-        run.close_talk = lambda: closed.append(run.completed) or run.screens.clear()
-        run.run()
-        self.assertEqual(closed[0], 0)      # closed at the manager, before the job counted
-        self.assertEqual(run.completed, 1)
-
-    def test_a_misread_reward_still_counts_as_paid_and_the_other_manager_is_left_alone(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Ouality. Here is your paymcnt, 15000 crcdits", "> (c1ick)"]]))
-        spoken = []
-        talk = run.talk
-        run.talk = lambda person: spoken.append(person["name"]) or talk(person)
-        run.run()
-        self.assertEqual(spoken[:2], ["Recruiter - Near", "Faction Supply Manager - Lao"])
-        self.assertEqual(run.completed, 1)
 
     def test_the_shop_is_never_answered_but_with_its_goodbye(self):
         lines = [{"text": t, "left": SPEECH if i == 0 else OPTION, "point": (0, i)} for i, t in enumerate(["Hello and welcome.", "> Buy something", "> 0h s0rry I g0t the wrong person."])]
@@ -546,12 +512,6 @@ class LoopTests(unittest.TestCase):
     def test_a_dim_click_option_read_without_its_mark_is_still_an_option(self):
         lines = [line("Here is your payment"), line("(click)")]
         self.assertEqual(answer(lines, WIDTH)["text"], "(click)")
-
-    def test_stops_with_the_job_open_when_nobody_pays(self):
-        run = Run(FakeEngine(PEOPLE), self.said(yul=SHOP))
-        run.run()
-        self.assertIn("Neither faction supply manager paid", run.events[-1][1])
-        self.assertEqual(run.completed, 0)
 
     def test_a_slip_at_the_recruiter_keeps_the_job_and_tries_again(self):
         engine = FakeEngine(PEOPLE)
@@ -586,23 +546,6 @@ class LoopTests(unittest.TestCase):
         run.run()
         self.assertEqual(run.completed, 1)
         self.assertEqual(len(recruiter), 1)
-
-    def test_nobody_paying_goes_back_to_the_recruiter_then_takes_a_new_job(self):
-        run = Run(FakeEngine(PEOPLE), self.said(yul=SHOP))
-        taken = []
-        take = run.take_job
-
-        def takes(spot):
-            take(spot)
-            taken.append(spot)
-            run.job_open = True
-        run.take_job = takes
-        recruiter = []
-        run.quick_talk = lambda person: recruiter.append(person["name"])
-        run.run()
-        self.assertEqual(len(taken), 3)            # At the first try and after each second one.
-        self.assertEqual(len(recruiter), mission_runner.JOB_TRIES)
-        self.assertEqual(run.completed, 0)
 
     def test_tries_again_each_job_but_gives_up_after_tries_in_a_row(self):
         run = Run(FakeEngine(PEOPLE), self.said(), jobs=3)
@@ -652,11 +595,37 @@ class LoopTests(unittest.TestCase):
         run.run()
         self.assertEqual(len(tries), 1)
 
-    def test_a_conversation_left_open_is_answered_to_its_end(self):
+    def test_a_conversation_left_open_is_shut_never_answered(self):
         run = Run(FakeEngine(PEOPLE), self.said())
         run.screens = list(RECRUITED)
+        closed = []
+        run.close_talk = lambda: closed.append(1)
         run.recover()
-        self.assertEqual(run.screens, [])
+        self.assertEqual((run.screens, closed), (list(RECRUITED), [1]))
+
+    def test_the_managers_are_opened_and_shut_never_clicked(self):
+        run = Run(FakeEngine(PEOPLE), self.said())
+        clicked, closed = [], []
+        run.click_option = lambda point, trial=0.: clicked.append(run.who)
+        run.close_talk = lambda: closed.append(run.who)
+        run.run()
+        self.assertNotIn("Faction Supply Manager - Lao", clicked)
+        self.assertNotIn("Faction Supply Manager - Yul", clicked)
+        self.assertEqual([who for who in closed if "Manager" in who][:2], ["Faction Supply Manager - Lao", "Faction Supply Manager - Yul"])
+        self.assertEqual(run.completed, 1)
+
+    def test_always_the_first_jobs_recruiter_even_when_another_is_nearer(self):
+        engine = FakeEngine(PEOPLE)
+        run = Run(engine, {**self.said(), "Recruiter - Far": RECRUITED}, jobs=2)
+        took = run.take_job
+
+        def nearer(spot):
+            took(spot)
+            if run.completed == 1:
+                engine.people = [actor("Recruiter - Far", 50), *PEOPLE]
+        run.take_job = nearer
+        run.run()
+        self.assertEqual([who for who in run.opened if who.startswith("Recruiter")], ["Recruiter - Near"]*2)
 
     def test_a_slip_leaves_a_picture_and_a_line(self):
         run = Run(FakeEngine([]), {})
@@ -671,14 +640,6 @@ class LoopTests(unittest.TestCase):
         run = Run(FakeEngine(PEOPLE), {**self.said(), "Recruiter - Near": [["You are here about the job, right?", "> Yes, I am here because of the job you have..."], *RECRUITED]})
         run.run()
         self.assertEqual(run.completed, 1)
-
-    def test_stops_when_the_options_never_come(self):
-        run = Run(FakeEngine(PEOPLE), self.said(yul=[["Where are my blueprints?"]]))
-        now = iter(range(1000))
-        run.clock = lambda: next(now)
-        run.run()
-        self.assertIn(("log", "Faction Supply Manager - Yul: nothing to answer, closed. They said: Where are my blueprints?"), run.events)
-        self.assertIn("Neither faction supply manager paid", run.events[-1][1])
 
     def test_will_not_start_away_from_the_headquarters(self):
         engine = FakeEngine([actor("Security - Bob")])
@@ -743,8 +704,8 @@ class AloneTests(unittest.TestCase):
         run = Run(FakeEngine(PEOPLE), LoopTests().said())
         steps = []
         run.wait_alone = lambda: steps.append("wait")
-        talk = run.talk
-        run.talk = lambda person: steps.append(person["name"]) or talk(person)
+        opened = run.open_talk
+        run.open_talk = lambda person: steps.append(person["name"]) or opened(person)
         run.run()
         self.assertEqual(steps[:5], ["wait", "wait", "Recruiter - Near", "wait", "Faction Supply Manager - Lao"])
 
@@ -971,6 +932,31 @@ class DownloadTests(unittest.TestCase):
         with self.assertRaisesRegex(Interrupted, "Game lost focus"):
             run.download_missions()
         self.assertEqual(tapped, [mission_runner.DOWNLOAD])
+
+
+class RewardTests(unittest.TestCase):
+    BOX = (78, 168, 624, 468)
+
+    def screen(self, *widths):
+        frame = conversation(self.BOX)
+        for i, wide in enumerate(widths):
+            words(frame, 204+16*i, 87, wide=round(wide*self.BOX[2]), high=12)
+        return frame
+
+    def test_the_reward_is_known_by_its_short_last_line(self):
+        self.assertEqual(mission_runner.reward_click(self.screen(.75, .5, .07), self.BOX), (87+16, 236+6))
+
+    def test_the_shop_is_not_the_reward(self):
+        self.assertIsNone(mission_runner.reward_click(self.screen(.2, .5, .3), self.BOX))
+        self.assertIsNone(mission_runner.reward_click(self.screen(.05, .4, .07), self.BOX))
+        self.assertIsNone(mission_runner.reward_click(self.screen(.6), self.BOX))
+
+    def test_the_screenshot_from_the_other_pc(self):
+        """Its rows as text_rows found them on that PC's reward screen, 5 Nov."""
+        frame = conversation(self.BOX)
+        for top, bottom, wide in ((204, 217, .74), (219, 231, .52), (238, 250, .07)):
+            frame[top:bottom, 87:87+round(wide*self.BOX[2]):2] = (200, 230, 200)
+        self.assertIsNotNone(mission_runner.reward_click(frame, self.BOX))
 
 
 class QuickTalkTests(unittest.TestCase):

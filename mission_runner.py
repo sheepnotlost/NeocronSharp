@@ -80,11 +80,13 @@ LIST_SLOW = 15               # seconds a page of the list may take to download
 ACCEPT_WAIT = 1              # seconds after each Accept: one click a second, not a burst
 AIM_TRIES = len(job_aim.RN_TRIES)    # clicks on an R.N. button before giving up: the usual place twice, then a little to each side
 JOB_TRIES = 6                # tries in a row without a job done before the loop gives up
+MANAGER_LOOK = 1.             # seconds a supply manager's chat stays open before Esc
 UNPAID_TRIES = 2             # tries with nobody paying before the job counts as lost: it may have paid unread, and the fee for a new one is small
 ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
 KEPT_PICTURES = 20           # of what went wrong, the oldest written over
 RECOVER_WAIT = .6            # seconds for the next screen, when putting things right
 PAID_WORDS = ("payment", "credits", "quality", "datacubes")
+REWARD_SHORT = .11           # of the panel's width: "> (click)" is .07 of it, any other line wider
 PAID_ALIKE = .75             # how alike a read word and a reward word must be
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
@@ -275,6 +277,25 @@ def text_rows(frame, box):
     letters = frame[y0:top+round(high*.55), x0:left+wide-edge, 1] > LETTER_GREEN
     rows = np.diff(np.concatenate(([0], (letters.sum(axis=1) >= 2).astype(np.int8), [0]))).nonzero()[0].reshape(-1, 2)
     return [(y0+int(start), y0+int(end), x0+int(letters[start:end].any(axis=0).argmax())) for start, end in rows if end-start >= high*LINE_HIGH]
+
+
+def row_widths(frame, box):
+    """Each of text_rows' lines' width, of the panel's."""
+    widths = []
+    for top, bottom, left in text_rows(frame, box):
+        lit = (frame[top:bottom, left:box[0]+box[2], 1] > LETTER_GREEN).any(axis=0).nonzero()[0]
+        widths.append((lit[-1]+1)/box[2] if lit.size else 0.)
+    return widths
+
+
+def reward_click(frame, box):
+    """Where to click the reward's "> (click)", by its pixels alone, or None on any other screen. The reward is the one
+    screen whose last line, and only that, is that short: the OCR can't read the words at 1024x768 (live, 5 Nov)."""
+    rows, widths = text_rows(frame, box), row_widths(frame, box)
+    if len(rows) < 2 or widths[-1] >= REWARD_SHORT or min(widths[:-1]) < REWARD_SHORT:
+        return None
+    top, bottom, left = rows[-1]
+    return left+round(box[2]*OPTION_CLICK), (top+bottom)//2
 
 
 def first_option(frame, box):
@@ -757,10 +778,13 @@ class MissionRunner(LootRunner):
                 return said
             words = " ".join(line["text"] for line in lines)
             said.append(words)
-            if rewarded(lines, self.talk_wide):
+            frame = self.frame()
+            box = dialog_box(frame)
+            by_sight = reward_click(frame, box) if box is not None else None
+            if by_sight is not None or rewarded(lines, self.talk_wide):
                 self.was_paid = True
                 line = answer(lines, self.talk_wide)
-                point = line["point"] if line else self.pixel_option()
+                point = by_sight or (line["point"] if line else self.pixel_option())
             else:
                 # Not the reward: the shop. Only its goodbye is ever clicked; its other options open the shop (5 Nov).
                 # Unread, the conversation is closed instead: nothing in it is worth answering.
@@ -919,37 +943,30 @@ class MissionRunner(LootRunner):
             recruiters = self.people("Recruiter")
             if not recruiters:
                 raise Interrupted("No recruiter here.")
-            self.emit("status", f"Talking to {recruiters[0]['name']}.")
-            self.quick_talk(recruiters[0])
+            # Always the recruiter of the first job: the nearest changes as it walks, and another one hands out his own mission (5 Nov).
+            self.recruiter = getattr(self, "recruiter", None) or recruiters[0]["name"]
+            recruiter = next((person for person in recruiters if person["name"] == self.recruiter), None)
+            if recruiter is None:
+                raise Interrupted(f"{self.recruiter} is not here.")
+            self.emit("status", f"Talking to {recruiter['name']}.")
+            self.quick_talk(recruiter)
             self.recruited = True
             self.wait(STAGE_REST)
-        paid = False
+        # Each manager: open the chat, which pays when it is the one, and Esc it shut. Nothing in it is read or clicked (the user's way, 5 Nov).
         for manager in self.people("Faction Supply Manager"):
             self.wait(STAGE_REST)
             self.wait_alone()
             self.emit("status", f"Talking to {manager['name']}.")
-            self.was_paid = False
-            said = " ".join(self.talk(manager))
-            paid = self.was_paid or paid_words(said)
-            if paid:
-                self.emit("log", f"{manager['name']} paid: back to the terminal.")
-            if paid:      # Either may be the one, and it changes from job to job.
-                break
-        if not paid:
-            self.recruited = False
-            self.unpaid += 1
-            self.job_open = self.job_open and self.unpaid % UNPAID_TRIES != 0
-            raise Interrupted("Neither faction supply manager paid. Are the blueprints in your Inventory? The job is still open.")
-        self.job_open, self.unpaid = False, 0
+            self.hide_pointer()
+            self.open_talk(manager)
+            self.wait(MANAGER_LOOK)
+            self.close_talk()
+        self.emit("log", "Both supply managers seen: back to the terminal.")
+        self.job_open = False
 
     def recover(self):
-        """Back in the world from wherever a try stopped: answer any conversation to its end, then Tab the menus away. Never Esc."""
-        for screen in range(MOST_SCREENS):
-            point = self.read_option()
-            if point is None:
-                break
-            self.click_option(point)
-            self.wait(RECOVER_WAIT)
+        """Back in the world from wherever a try stopped: Esc any conversation shut, never answer it (an answer to the wrong
+        recruiter takes his mission, 5 Nov), then Tab the menus away."""
         self.close_talk()
         self.hide_pointer()
 
