@@ -343,7 +343,12 @@ def letters(text):
 
 def options(lines, width):
     """The lines to answer with. The first line is always speech, and speech that wraps starts level with it."""
-    return [line for line in lines[1:] if ">" in line["text"][:3] or abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT]
+    return [line for line in lines[1:] if ">" in line["text"][:3] or abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT
+            or letters(line["text"]) == "click"]     # "> (click)" read without its ">" on another PC's dim chat (5 Nov)
+
+
+def paid_words(text):
+    return any(word in letters(text) for word in PAID_WORDS)
 
 
 def answer(lines, width):
@@ -735,15 +740,41 @@ class MissionRunner(LootRunner):
             words = " ".join(line["text"] for line in lines)
             said.append(words)
             line = answer(lines, self.talk_wide)
-            if line is None:
+            point = line["point"] if line else self.pixel_option()
+            if point is None:
+                if paid_words(words):       # the payment is given: nothing left to answer, so it is closed
+                    self.close_talk()
+                    return said
                 raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
-            self.click_option(line["point"])
+            self.click_option(point)
+            moved = False
             for attempt in range(40):      # By its words: the pointer now sits on an option and lights it up.
                 self.wait(.1)
                 now = self.dialog_lines()
                 if now is None or not now or now[0]["text"] != lines[0]["text"]:
+                    moved = True
                     break
+            if not moved and paid_words(words):
+                # The reward screen stayed after its "> (click)" (on another PC, 5 Nov). The credits are already paid
+                # with these words, so the conversation is closed rather than left open over the next job.
+                self.emit("log", f"{person['name']} paid; the last screen did not move on, so it is closed.")
+                self.close_talk()
+                return said
         raise Interrupted(f"The conversation with {person['name']} did not end.")
+
+    def pixel_option(self):
+        """Where the pixels put the option, for a screen the OCR makes nothing of: the first option, or the line under the
+        speech when the only option starts level with it, as "> (click)" does."""
+        frame = self.frame()
+        box = dialog_box(frame)
+        if box is None:
+            return None
+        point = first_option(frame, box)
+        rows = text_rows(frame, box)
+        if point is None and len(rows) >= 2:
+            top, bottom, left = rows[-1]
+            point = (left+round(box[2]*OPTION_CLICK), (top+bottom)//2)
+        return point
 
     def click_option(self, point, trial=0.):
         """The pointer rests on an option first, or the game only lights it up, and a moment after, for the button to come up on it.

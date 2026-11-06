@@ -502,6 +502,28 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(run.who, "Faction Supply Manager - Lao")
         self.assertEqual(run.completed, 1)
 
+    def test_the_reward_is_clicked_by_its_pixels_when_its_option_reads_as_speech(self):
+        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Quality. Here is your payment, 15000 credits", "(click)x"]]))
+        run.dialog_lines = lambda: None if not run.screens else [line(text) for text in run.screens[0]]
+        clicked = []
+        run.pixel_option = lambda: clicked.append(1) or (300, 400)
+        run.run()
+        self.assertEqual(clicked, [1])
+        self.assertEqual(run.completed, 1)
+
+    def test_a_reward_screen_that_stays_is_closed_and_the_job_counts(self):
+        run = Run(FakeEngine(PEOPLE), self.said(lao=PAID))
+        run.click = lambda point: None if run.who.endswith("Lao") else run.screens.pop(0)     # the reward's click never moves it on
+        closed = []
+        run.close_talk = lambda: closed.append(run.completed) or run.screens.clear()
+        run.run()
+        self.assertEqual(closed[0], 0)      # closed at the manager, before the job counted
+        self.assertEqual(run.completed, 1)
+
+    def test_a_dim_click_option_read_without_its_mark_is_still_an_option(self):
+        lines = [line("Here is your payment"), line("(click)")]
+        self.assertEqual(answer(lines, WIDTH)["text"], "(click)")
+
     def test_stops_with_the_job_open_when_nobody_pays(self):
         run = Run(FakeEngine(PEOPLE), self.said(yul=SHOP))
         run.run()
