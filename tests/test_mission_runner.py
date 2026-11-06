@@ -460,7 +460,7 @@ class Run(MissionRunner):
     def wait(self, seconds, safe_pause=False):
         pass
 
-    def open_talk(self, person):
+    def open_talk(self, person, reaches=None):
         self.who = person["name"]
         self.opened.append(self.who)
         self.screens = list(self.said[self.who])
@@ -486,11 +486,11 @@ class LoopTests(unittest.TestCase):
     def said(self, lao=SHOP, yul=PAID):
         return {"Recruiter - Near": RECRUITED, "Faction Supply Manager - Lao": lao, "Faction Supply Manager - Yul": yul}
 
-    def test_nearest_recruiter_then_both_managers_then_back_to_the_terminal(self):
+    def test_nearest_recruiter_then_the_nearest_manager_then_back_to_the_terminal(self):
         engine = FakeEngine(PEOPLE)
         run = Run(engine, self.said(), jobs=2)
         run.run()
-        self.assertEqual(run.opened, ["Recruiter - Near", "Faction Supply Manager - Lao", "Faction Supply Manager - Yul"]*2)
+        self.assertEqual(run.opened, ["Recruiter - Near", "Faction Supply Manager - Lao"]*2)
         self.assertEqual(engine.calls.count("spot"), 1)
         self.assertEqual(engine.calls.count("terminal"), 2)
         self.assertEqual(run.events[-1], ("done", "Enough. 2 jobs done."))
@@ -603,7 +603,7 @@ class LoopTests(unittest.TestCase):
         run.recover()
         self.assertEqual((run.screens, closed), (list(RECRUITED), [1]))
 
-    def test_the_managers_are_opened_and_shut_never_clicked(self):
+    def test_only_the_nearest_manager_is_opened_and_shut_never_clicked(self):
         run = Run(FakeEngine(PEOPLE), self.said())
         clicked, closed = [], []
         run.click_option = lambda point, trial=0.: clicked.append(run.who)
@@ -611,7 +611,8 @@ class LoopTests(unittest.TestCase):
         run.run()
         self.assertNotIn("Faction Supply Manager - Lao", clicked)
         self.assertNotIn("Faction Supply Manager - Yul", clicked)
-        self.assertEqual([who for who in closed if "Manager" in who][:2], ["Faction Supply Manager - Lao", "Faction Supply Manager - Yul"])
+        self.assertEqual(next(who for who in closed if "Manager" in who), "Faction Supply Manager - Lao")
+        self.assertNotIn("Faction Supply Manager - Yul", run.opened)
         self.assertEqual(run.completed, 1)
 
     def test_always_the_first_jobs_recruiter_even_when_another_is_nearer(self):
@@ -705,7 +706,7 @@ class AloneTests(unittest.TestCase):
         steps = []
         run.wait_alone = lambda: steps.append("wait")
         opened = run.open_talk
-        run.open_talk = lambda person: steps.append(person["name"]) or opened(person)
+        run.open_talk = lambda person, reaches=None: steps.append(person["name"]) or opened(person)
         run.run()
         self.assertEqual(steps[:5], ["wait", "wait", "Recruiter - Near", "wait", "Faction Supply Manager - Lao"])
 

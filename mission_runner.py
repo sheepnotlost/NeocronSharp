@@ -80,7 +80,8 @@ LIST_SLOW = 15               # seconds a page of the list may take to download
 ACCEPT_WAIT = 1              # seconds after each Accept: one click a second, not a burst
 AIM_TRIES = len(job_aim.RN_TRIES)    # clicks on an R.N. button before giving up: the usual place twice, then a little to each side
 JOB_TRIES = 6                # tries in a row without a job done before the loop gives up
-MANAGER_LOOK = 1.             # seconds a supply manager's chat stays open before Esc
+MANAGER_LOOK = .3             # seconds a supply manager's chat stays open before Esc: it pays on opening
+MANAGER_REACH = 120          # units: a manager's first right-click from 170 often missed, costing a 2 s wait and a second walk (video, 5 Nov)
 UNPAID_TRIES = 2             # tries with nobody paying before the job counts as lost: it may have paid unread, and the fee for a new one is small
 ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
 KEPT_PICTURES = 20           # of what went wrong, the oldest written over
@@ -742,9 +743,9 @@ class MissionRunner(LootRunner):
         words = self.detector.gray(frame[top:top+round(high*.55), left:left+wide])    # The lower part of the panel stays empty.
         return text_lines(self.reader().read_words(words, up=max(2, round(2*TALK_WIDE/wide))), left, top)
 
-    def open_talk(self, person):
+    def open_talk(self, person, reaches=(TALK_REACH, TALK_CLOSE)):
         """Walk up and right-click until the conversation shows."""
-        for reach in (TALK_REACH, TALK_CLOSE):
+        for reach in reaches:
             if person["distance"] > reach and not self.walk_to(person, reach):
                 continue
             last = self.ended(self.engine.use(person, lambda: None))
@@ -952,16 +953,19 @@ class MissionRunner(LootRunner):
             self.quick_talk(recruiter)
             self.recruited = True
             self.wait(STAGE_REST)
-        # Each manager: open the chat, which pays when it is the one, and Esc it shut. Nothing in it is read or clicked (the user's way, 5 Nov).
-        for manager in self.people("Faction Supply Manager"):
-            self.wait(STAGE_REST)
-            self.wait_alone()
-            self.emit("status", f"Talking to {manager['name']}.")
-            self.hide_pointer()
-            self.open_talk(manager)
-            self.wait(MANAGER_LOOK)
-            self.close_talk()
-        self.emit("log", "Both supply managers seen: back to the terminal.")
+        # The nearest supply manager only: opening the chat pays, and it is Esc'd shut at once. Nothing in it is read or
+        # clicked, and the other manager is never visited (the user's way, 5 Nov).
+        managers = self.people("Faction Supply Manager")
+        if not managers:
+            raise Interrupted("No faction supply manager here.")
+        self.wait(STAGE_REST)
+        self.wait_alone()
+        self.emit("status", f"Talking to {managers[0]['name']}.")
+        self.hide_pointer()
+        self.open_talk(managers[0], reaches=(MANAGER_REACH, TALK_CLOSE))
+        self.wait(MANAGER_LOOK)
+        self.close_talk()
+        self.emit("log", f"{managers[0]['name']} done: back to the terminal.")
         self.job_open = False
 
     def recover(self):
