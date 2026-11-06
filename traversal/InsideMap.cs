@@ -51,6 +51,22 @@ internal static class InsideMap
         return new(nav, marks, island, polys.Count, reached, routes);
     }
 
+    /// <summary>The same as data, for drawing it level by level (tools\inside_levels.py): every floor piece with its
+    /// corners and whether it is reached from the arrival, the marks, and the routes.</summary>
+    public static string Json(Result r)
+    {
+        var polys = r.Nav.Polygons();
+        static float[] V(Vector3 v) => new[] { v.X, v.Y, v.Z };
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            name = r.Nav.World.Summary.Name,
+            world = r.Nav.World.Summary.WorldId,
+            polys = polys.Select(p => new { pts = p.Select(V), on = r.Nav.OnIsland(p.Aggregate(Vector3.Zero, (a, b) => a + b) / p.Length, r.Island, reach: 8) }),
+            marks = r.Marks.Select(m => new { kind = m.Kind, name = m.Name, at = V(m.Position) }),
+            routes = r.Routes.Select(x => new { to = x.Door.Name, complete = x.Complete, pts = x.Route.Select(V) }),
+        });
+    }
+
     /// <summary>Top-down SVG: reachable floor green (lighter is higher), floor you cannot reach from the arrival grey, the marks on top.</summary>
     public static string Svg(Result r)
     {

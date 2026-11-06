@@ -728,6 +728,7 @@ try
             Directory.CreateDirectory(outDir);
             string file = Path.Combine(outDir, $"inside-{world}.svg");
             File.WriteAllText(file, InsideMap.Svg(map));
+            File.WriteAllText(Path.ChangeExtension(file, ".json"), InsideMap.Json(map));
             Console.WriteLine($"Wrote {file}");
             return 0;
         }
