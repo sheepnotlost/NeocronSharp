@@ -338,7 +338,7 @@ class App:
         from target_tab import TargetTab
         self.target=TargetTab(self.target_tab,self.root,autoload=self.tracker is not None,
                               other_live=lambda:self.traversal.process is not None or self.jobs.steering(),loot_runner=self.loot_runner,
-                              hunt_parent=self.hunt_tab)
+                              hunt_parent=self.hunt_tab,dungeon_runner=self.dungeon_runner)
         self.hunt_tab.bind("<Map>",self.target.first_view,add="+")
         self.traversal.other_live=lambda:self.target.steering() or self.jobs.steering()
         from jobs_tab import JobsTab
@@ -970,6 +970,13 @@ class App:
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,names=names,reach=reach)
+
+    def dungeon_runner(self,reach,emit,control):
+        from dungeon_runner import DungeonRunner
+        import clients,os
+        self.ensure_bound()
+        if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)
+        return DungeonRunner(self.profile,self.backend,control,emit,reach=reach)
 
     def job_clients(self):
         """Opening the Job Loop tab lists the open clients for its Client list (two open: pick the one for the jobs)."""

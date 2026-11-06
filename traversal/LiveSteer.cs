@@ -48,6 +48,12 @@ internal sealed class LiveSteer
     /// <summary>Only count down and calibrate, then return with <see cref="Measured"/> set (the follow command steers itself).</summary>
     public bool CalibrateOnly { get; init; }
 
+    /// <summary>Asked on every step of the walk: a reason to stop here and now, or null to walk on (the dungeon sweep's look for an enemy).</summary>
+    public Func<PlayerSample, string?>? StopWhen { get; init; }
+
+    /// <summary>What <see cref="StopWhen"/> stopped the walk for, or null when it ran to the end.</summary>
+    public string? StoppedFor { get; private set; }
+
     private sealed class ZonedOut(string why) : Exception(why);
 
     /// <summary>Stopped by something the navmesh does not know about (a prop), at a place and heading.</summary>
@@ -260,6 +266,13 @@ internal sealed class LiveSteer
             while (true)
             {
                 var s = Guard();
+                if (StopWhen?.Invoke(s) is { } reason)
+                {
+                    input.Walk(false);
+                    StoppedFor = reason;
+                    Record("stop-when", s, new { reason });
+                    return;
+                }
                 float dist = PointNavigation.Distance(s.Position, end);
                 // Exits: start pushing early (the trigger is a volume, and circling a point at
                 // running speed never settles). Walk, don't run, over the last stretch.

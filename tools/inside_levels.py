@@ -150,6 +150,15 @@ def draw(world):
                 poly(np.array([project(a[0], a[2], la), project(mid[0], mid[2], la)], dtype=np.float32), colour, 3, closed=False)
                 poly(np.array([project(mid[0], mid[2], la), project(mid[0], mid[2], lb)], dtype=np.float32), colour, 2, closed=False)
                 poly(np.array([project(mid[0], mid[2], lb), project(b[0], b[2], lb)], dtype=np.float32), colour, 3, closed=False)
+    # The dungeon sweep (traversal.exe sweepplan <world>), when planned: its points in walking order, cyan, each leg on its level.
+    sweep_file = os.path.join(OUT, f"sweep-{world}.json")
+    sweep = None
+    if os.path.exists(sweep_file):
+        with open(sweep_file, encoding="utf-8") as f:
+            sweep = np.array(json.load(f), dtype=float)
+        for a, b in zip(sweep[:-1], sweep[1:]):
+            la, lb = nearest(a[1]), nearest(b[1])
+            poly(np.array([project(a[0], a[2], la), project(b[0], b[2], lb)], dtype=np.float32), (230, 210, 60), 2, closed=False)
     image = Image.fromarray(cv2.cvtColor(cv2.resize(canvas, (width, height), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB))
     pen = ImageDraw.Draw(image)
     big, small, tiny = font(44), font(26), font(22)
@@ -179,6 +188,14 @@ def draw(world):
         label = m["name"] if m["kind"] != "box" else "Supply Boxes"
         dy = -34 if m["kind"] == "arrival" else 4
         pen.text((u+16, v+dy), label, fill=colours[m["kind"]], font=small, stroke_width=4, stroke_fill=(0, 0, 0))
+    if sweep is not None:
+        for i, (x, y, z) in enumerate(sweep):
+            u, v = project(x, z, nearest(y))
+            r = 9 if i == 0 else 5
+            pen.ellipse((u-r, v-r, u+r, v+r), fill=(60, 210, 230), outline=(0, 0, 0), width=2)
+            if i == 0 or (i+1) % 20 == 0 or i == len(sweep)-1:
+                pen.text((u+10, v-14), str(i+1), fill=(60, 210, 230), font=tiny, stroke_width=3, stroke_fill=(0, 0, 0))
+        pen.text((MARGIN, 108), f"cyan: the hunt's sweep, {len(sweep)} points in walking order (every 20th numbered)", fill=(60, 210, 230), font=tiny)
     target = os.path.join(OUT, f"inside-{world}-levels.png")
     image.save(target)
     print(f"{data['name']}: levels at {', '.join(f'{h:.0f}' for h in heights)}. Wrote {target}")

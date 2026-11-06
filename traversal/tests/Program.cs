@@ -93,6 +93,20 @@ else
         Check(exits.All(e => e.Exit.Properties["NextLevelStartIndex"] != "0"), "placeholders (start index 0) are excluded");
     });
 
+    Test("Regant's Legacy sweep: each point a walk on from the last, on several floors, with its way out and back in known", () => {
+        var nav = Bake(1913);
+        var travel = NewTravel(Scratch());
+        var arrival = InsideMap.Build(Install, nav, travel).Marks.First(m => m.Kind == "arrival").Position;
+        var tour = SweepPlan.Order(nav, SweepPlan.Waypoints(nav, arrival), arrival);
+        Check(tour.Count > 100, $"a point per patch of floor (got {tour.Count})");
+        var legs = tour.Select((p, i) => SweepPlan.Walk(nav, i == 0 ? arrival : tour[i - 1], p)).ToList();
+        Check(legs.All(float.IsFinite), $"{legs.Count(l => !float.IsFinite(l))} points with no walk from the one before");
+        Check(tour.Select(p => MathF.Round(p.Y / SweepPlan.Floor)).Distinct().Count() >= 4, "points on several floors");
+        Check(SweepPlan.Nearest(nav, tour, arrival) == 0, "a sweep started at the arrival starts at the first point");
+        Check(travel.Links(1913).Any(l => l.To == 2083), "its exit goes out to E 03 - Swamp");
+        Check(travel.DoorsInto(1913).Contains(2083), "and E 03 has the door back in");
+    });
+
     Test("Plans go street to street: no subway, no interiors on the way", () => {
         var travel = NewTravel(Scratch());
         var path = travel.SectorPath(1, 7);   // Plaza 1 to Pepper Park 3

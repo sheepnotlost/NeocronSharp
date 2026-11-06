@@ -20,7 +20,7 @@ internal static class FollowCommand
 
     public static string Kind(WorldEntity e) => e.Identity.Kind switch { EntityKind.Player => "player", EntityKind.Npc => "npc", _ => "unknown" };
 
-    private static bool Dead(WorldEntity e) => e.Stats?.Dead == true || e.Player?.Dead == true;
+    internal static bool Dead(WorldEntity e) => e.Stats?.Dead == true || e.Player?.Dead == true;
 
     /// <summary>
     /// The client to read: the one NEOCRON_PID names (the suite's client picker, when two are open), else the only
@@ -188,10 +188,10 @@ internal static class FollowCommand
     }
 
     /// <summary>How many things one walk maps and goes round before giving up. The map holds buildings it doesn't know, like K 16's Warp Garage (2 Nov).</summary>
-    private const int GoRoundTries = 5;
+    internal const int GoRoundTries = 5;
 
     /// <summary>The sector's navmesh, with every spot found blocked cut out, so all walks go round them from now on. Kept between a serve's lines.</summary>
-    private static NavWorld Mapped(string install, int sector, string root)
+    internal static NavWorld Mapped(string install, int sector, string root)
     {
         var obstacles = Travel.LoadObstacles(Path.Combine(root, "logs")).GetValueOrDefault(sector);
         var key = (sector, obstacles?.Count ?? 0);
@@ -200,7 +200,7 @@ internal static class FollowCommand
 
     private static readonly Dictionary<(int Sector, int Obstacles), NavWorld> Baked = new();
 
-    private static EnvironmentCatalog Catalog(string install) => _catalog ??= new EnvironmentCatalog(install);
+    internal static EnvironmentCatalog Catalog(string install) => _catalog ??= new EnvironmentCatalog(install);
     private static EnvironmentCatalog? _catalog;
 
     /// <summary>Printed after each line of a serve.</summary>
@@ -243,7 +243,7 @@ internal static class FollowCommand
         return 0;
     }
 
-    private static void MapBlock(string root, int sector, LiveSteer.BlockedAt blocked)
+    internal static void MapBlock(string root, int sector, LiveSteer.BlockedAt blocked)
     {
         var spot = blocked.Position + Vector3.Normalize(new Vector3(blocked.Forward.X, 0, blocked.Forward.Z)) * 48;
         Travel.SaveObstacle(Path.Combine(root, "logs"), sector, spot);

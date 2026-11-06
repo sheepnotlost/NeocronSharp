@@ -189,6 +189,28 @@ class TargetTabTests(unittest.TestCase):
         self.assertEqual(after.call_args.args[2:], (["Copbot"], 300))
         self.tab.loot_event("done", "0 killed.")
 
+    def test_regants_legacy_needs_no_ticks_and_starts_after_the_countdown(self):
+        self.assertEqual(str(self.tab.dungeon_button.cget("state")), "disabled")      # no game bound in a test
+        made = []
+
+        class Runner:
+            def run(self):
+                made.append("ran")
+        self.tab.dungeon_runner = lambda reach, emit, control: made.append(reach) or Runner()
+        self.tab.update_buttons()
+        self.assertEqual(str(self.tab.dungeon_button.cget("state")), "normal")
+        self.tab.start_dungeon()
+        self.assertIsNotNone(self.tab.looting)
+        self.assertEqual(str(self.tab.dungeon_button.cget("state")), "disabled")
+        self.assertIn("Regant's Legacy: every NPC", self.log())
+        self.root.after_cancel(self.tab.loot_start)
+        with patch.object(target_tab.clients, "focus"):
+            self.tab.begin_dungeon(4000)
+        for thread in [t for t in threading.enumerate() if t.name == "dungeon"]:
+            thread.join(5)
+        self.assertEqual(made, [4000, "ran"])
+        self.tab.looting = None
+
     def test_start_hunt_says_why_it_cannot_start(self):
         self.tab.loot_runner = lambda names, reach, emit, control: None
         self.tab.update_buttons()

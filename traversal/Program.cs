@@ -44,6 +44,7 @@ try
         case "spot": return FollowCommand.Spot();
         case "usespot": return FollowCommand.UseSpot(rest, root, pulse);
         case "serve": return FollowCommand.Serve(root);
+        case "sweep": return SweepCommand.Run(rest, root, pulse);
         case "places":
         {
             string exe = FollowCommand.ClientExecutable();
@@ -707,6 +708,28 @@ try
                 doors = map.Portals.Select(p => new { cell = p.Cell, name = p.Name, x = p.Position.X, y = p.Position.Y, z = p.Position.Z, to = p.To, toName = travel.SectorName(p.To) }),
                 outposts = map.Landmarks.Select(l => new { cell = l.Cell, name = l.Name, kind = l.Kind, x = l.Position.X, y = l.Position.Y, z = l.Position.Z }),
             }));
+            return 0;
+        }
+        case "sweepplan":
+        {
+            // sweepplan <world>: offline, the dungeon sweep's points in walking order from the arrival, and how far the whole walk is.
+            // Writes out\sweep-<world>.json for tools\inside_levels.py to draw.
+            int world = int.Parse(rest[0]);
+            string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+            var nav = BakeLogged(DefaultInstall, world);
+            var travel = new Travel(DefaultInstall, id => nav, new Hud(), logs, pulse, run);
+            var arrival = InsideMap.Build(DefaultInstall, nav, travel).Marks.FirstOrDefault(m => m.Kind == "arrival")?.Position
+                ?? throw new InvalidOperationException("No arrival point in that world.");
+            var clock = Stopwatch.StartNew();
+            var tour = SweepPlan.Order(nav, SweepPlan.Waypoints(nav, arrival), arrival);
+            var legs = tour.Select((p, i) => SweepPlan.Walk(nav, i == 0 ? arrival : tour[i - 1], p)).ToList();
+            Console.WriteLine($"{tour.Count} points, planned in {clock.Elapsed.TotalSeconds:F1}s; walk {legs.Where(float.IsFinite).Sum():F0} units, {legs.Count(l => !float.IsFinite(l))} legs with no route");
+            foreach (var (door, to) in travel.Links(world))
+                Console.WriteLine($"  way out: {door.Properties.GetValueOrDefault("Label") ?? door.Name} -> {to} {travel.SectorName(to)}");
+            Directory.CreateDirectory(outDir);
+            string file = Path.Combine(outDir, $"sweep-{world}.json");
+            File.WriteAllText(file, JsonSerializer.Serialize(tour.Select(p => new[] { p.X, p.Y, p.Z })));
+            Console.WriteLine($"Wrote {file}");
             return 0;
         }
         case "insidemap":
