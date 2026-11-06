@@ -84,7 +84,8 @@ UNPAID_TRIES = 2             # tries with nobody paying before the job counts as
 ASK_MOST = 90                # seconds any one engine command may take: the longest walk here is some 15
 KEPT_PICTURES = 20           # of what went wrong, the oldest written over
 RECOVER_WAIT = .6            # seconds for the next screen, when putting things right
-PAID_WORDS = ("payment", "credits", "quality")
+PAID_WORDS = ("payment", "credits", "quality", "datacubes")
+PAID_ALIKE = .75             # how alike a read word and a reward word must be
 SAME_WORDS = .7              # how alike the OCR's line and a known line must be
 SHOP_GOODBYE = "Oh sorry I got the wrong person."    # a supply manager with nothing to pay shows the shop: its first option buys
 GOODBYES = ("goodbye", "forgetit")    # an option that ends the talk: never the one to click, even when the OCR misses the rest (5 Nov)
@@ -344,11 +345,28 @@ def letters(text):
 def options(lines, width):
     """The lines to answer with. The first line is always speech, and speech that wraps starts level with it."""
     return [line for line in lines[1:] if ">" in line["text"][:3] or abs(line["left"]-lines[0]["left"]) > width*SPEECH_INDENT
-            or letters(line["text"]) == "click"]     # "> (click)" read without its ">" on another PC's dim chat (5 Nov)
+            or is_click(line)]     # "> (click)" read without its ">" on another PC's dim chat (5 Nov)
 
 
 def paid_words(text):
-    return any(word in letters(text) for word in PAID_WORDS)
+    """The reward's words, also as the dim chat on another PC reads them, a letter or two wrong ("paymcnt", 5 Nov)."""
+    return any(word in letters(text) or any(difflib.SequenceMatcher(None, letters(said), word).ratio() >= PAID_ALIKE
+                                            for said in text.split()) for word in PAID_WORDS)
+
+
+def is_click(line):
+    return difflib.SequenceMatcher(None, letters(line["text"]), "click").ratio() >= PAID_ALIKE
+
+
+def rewarded(lines, width):
+    """The reward screen: its words, or its one option "> (click)", which the shop never has."""
+    found = options(lines, width)
+    return paid_words(" ".join(line["text"] for line in lines)) or (len(found) == 1 and is_click(found[0]))
+
+
+def shop_goodbye(lines, width):
+    return next((line for line in options(lines, width)
+                 if difflib.SequenceMatcher(None, letters(line["text"]), letters(SHOP_GOODBYE)).ratio() >= SAME_WORDS), None)
 
 
 def answer(lines, width):
@@ -739,13 +757,19 @@ class MissionRunner(LootRunner):
                 return said
             words = " ".join(line["text"] for line in lines)
             said.append(words)
-            line = answer(lines, self.talk_wide)
-            point = line["point"] if line else self.pixel_option()
+            if rewarded(lines, self.talk_wide):
+                self.was_paid = True
+                line = answer(lines, self.talk_wide)
+                point = line["point"] if line else self.pixel_option()
+            else:
+                # Not the reward: the shop. Only its goodbye is ever clicked; its other options open the shop (5 Nov).
+                # Unread, the conversation is closed instead: nothing in it is worth answering.
+                line = shop_goodbye(lines, self.talk_wide)
+                point = line["point"] if line else None
             if point is None:
-                if paid_words(words):       # the payment is given: nothing left to answer, so it is closed
-                    self.close_talk()
-                    return said
-                raise Interrupted(f"{person['name']} gave no options to answer: {words[:200]}")
+                self.emit("log", f"{person['name']}: nothing to answer, closed. They said: {words[:200]}")
+                self.close_talk()
+                return said
             self.click_option(point)
             moved = False
             for attempt in range(40):      # By its words: the pointer now sits on an option and lights it up.
@@ -754,7 +778,7 @@ class MissionRunner(LootRunner):
                 if now is None or not now or now[0]["text"] != lines[0]["text"]:
                     moved = True
                     break
-            if not moved and paid_words(words):
+            if not moved and self.was_paid:
                 # The reward screen stayed after its "> (click)" (on another PC, 5 Nov). The credits are already paid
                 # with these words, so the conversation is closed rather than left open over the next job.
                 self.emit("log", f"{person['name']} paid; the last screen did not move on, so it is closed.")
@@ -904,8 +928,11 @@ class MissionRunner(LootRunner):
             self.wait(STAGE_REST)
             self.wait_alone()
             self.emit("status", f"Talking to {manager['name']}.")
-            said = " ".join(self.talk(manager)).lower()
-            paid = any(word in said for word in PAID_WORDS)
+            self.was_paid = False
+            said = " ".join(self.talk(manager))
+            paid = self.was_paid or paid_words(said)
+            if paid:
+                self.emit("log", f"{manager['name']} paid: back to the terminal.")
             if paid:      # Either may be the one, and it changes from job to job.
                 break
         if not paid:

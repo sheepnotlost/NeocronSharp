@@ -503,7 +503,7 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(run.completed, 1)
 
     def test_the_reward_is_clicked_by_its_pixels_when_its_option_reads_as_speech(self):
-        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Quality. Here is your payment, 15000 credits", "(click)x"]]))
+        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Quality. Here is your payment, 15000 credits"]]))     # its option not read at all
         run.dialog_lines = lambda: None if not run.screens else [line(text) for text in run.screens[0]]
         clicked = []
         run.pixel_option = lambda: clicked.append(1) or (300, 400)
@@ -519,6 +519,29 @@ class LoopTests(unittest.TestCase):
         run.run()
         self.assertEqual(closed[0], 0)      # closed at the manager, before the job counted
         self.assertEqual(run.completed, 1)
+
+    def test_a_misread_reward_still_counts_as_paid_and_the_other_manager_is_left_alone(self):
+        run = Run(FakeEngine(PEOPLE), self.said(lao=[["Good Ouality. Here is your paymcnt, 15000 crcdits", "> (c1ick)"]]))
+        spoken = []
+        talk = run.talk
+        run.talk = lambda person: spoken.append(person["name"]) or talk(person)
+        run.run()
+        self.assertEqual(spoken[:2], ["Recruiter - Near", "Faction Supply Manager - Lao"])
+        self.assertEqual(run.completed, 1)
+
+    def test_the_shop_is_never_answered_but_with_its_goodbye(self):
+        lines = [{"text": t, "left": SPEECH if i == 0 else OPTION, "point": (0, i)} for i, t in enumerate(["Hello and welcome.", "> Buy something", "> 0h s0rry I g0t the wrong person."])]
+        self.assertFalse(mission_runner.rewarded(lines, WIDTH))
+        self.assertEqual(mission_runner.shop_goodbye(lines, WIDTH)["point"], (0, 2))
+
+    def test_an_unread_shop_is_closed_never_clicked(self):
+        run = Run(FakeEngine(PEOPLE), {"Faction Supply Manager - Lao": [["Hel1o and we1come.", "> Bvy", "> zzz"]]})
+        clicked, closed = [], []
+        run.click_option = lambda point, trial=0.: clicked.append(point)
+        run.close_talk = lambda: closed.append(1)
+        run.pixel_option = lambda: (1, 1)
+        run.talk(actor("Faction Supply Manager - Lao"))
+        self.assertEqual((clicked, closed), ([], [1]))
 
     def test_a_dim_click_option_read_without_its_mark_is_still_an_option(self):
         lines = [line("Here is your payment"), line("(click)")]
@@ -654,7 +677,8 @@ class LoopTests(unittest.TestCase):
         now = iter(range(1000))
         run.clock = lambda: next(now)
         run.run()
-        self.assertIn("gave no options to answer: Where are my blueprints?", run.events[-1][1])
+        self.assertIn(("log", "Faction Supply Manager - Yul: nothing to answer, closed. They said: Where are my blueprints?"), run.events)
+        self.assertIn("Neither faction supply manager paid", run.events[-1][1])
 
     def test_will_not_start_away_from_the_headquarters(self):
         engine = FakeEngine([actor("Security - Bob")])
