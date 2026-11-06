@@ -105,13 +105,20 @@ class PointerTests(unittest.TestCase):
             self.land(game, target, run)
         self.assertEqual(game.nudges, 0)
 
-    def test_on_a_green_button_it_finds_the_pointer_once_then_trusts_the_plain_move(self):
+    def test_on_a_green_terminal_button_it_snaps_there_and_clicks_with_no_hovering(self):
         game = Game(green=(1100, 690, 1300, 712))           # a tab bar, the arrow lost in it
         run = runner(game)
         self.land(game, (1200, 700), run)
-        nudged = game.nudges
         self.land(game, (1250, 700), run)
-        self.assertEqual(game.nudges, nudged, "once the plain move is proven, no more nudges")
+        self.assertEqual(game.nudges, 0, "no looking around for the pointer (the user's word, 5 Nov)")
+
+    def test_in_a_conversation_where_the_pointer_went_it_never_looks_again(self):
+        game = Game(talk=True)
+        run = runner(game)
+        for target in ((600, 500), (900, 520)):
+            self.land(game, target, run)
+        self.assertEqual(game.nudges, 0)
+        self.assertTrue(run.tracks)
 
     def test_the_far_off_pointer_of_the_other_pc_is_steered_on_every_click(self):
         game = Game(mode="raw", speed=1.3, talk=True)
@@ -120,13 +127,13 @@ class PointerTests(unittest.TestCase):
             self.land(game, target, run)
         self.assertTrue(run.steering)
 
-    def test_a_pointer_scaled_from_windows_cursor_lands(self):
-        self.land(Game(scale=1.25))
-        self.land(Game(scale=.8))
+    def test_a_pointer_scaled_from_windows_cursor_lands_in_a_conversation(self):
+        self.land(Game(scale=1.25, talk=True), (600, 500))
+        self.land(Game(scale=.8, talk=True), (600, 500))
 
-    def test_a_pointer_only_mouse_motion_moves_lands(self):
-        self.land(Game(mode="raw", speed=1.6))
-        self.land(Game(mode="raw", speed=.5))
+    def test_a_pointer_only_mouse_motion_moves_lands_in_a_conversation(self):
+        self.land(Game(mode="raw", speed=1.6, talk=True), (600, 500))
+        self.land(Game(mode="raw", speed=.5, talk=True), (600, 500))
 
     def test_arrows_painted_on_the_screen_are_not_the_pointer(self):
         self.land(Game(decoys=[(1190, 690), (1215, 705), (320, 300)]))
@@ -134,8 +141,7 @@ class PointerTests(unittest.TestCase):
     def test_with_no_pointer_showing_the_camera_ends_where_it_was(self):
         game = Game(hidden=True)
         runner(game).aim_click((1200, 700))         # outside a conversation: it clicks as it always did
-        self.assertEqual(game.turned, 0)            # each nudge that found no pointer was undone by the next
-        self.assertLessEqual(game.swept, 8*mission_runner.PROBE)
+        self.assertEqual(game.swept, 0)             # and never nudges the camera round
         self.assertNotIn("esc", game.keys)
 
     def test_a_conversation_in_mouse_look_gets_one_tab_and_then_the_click(self):

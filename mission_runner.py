@@ -469,7 +469,6 @@ class MissionRunner(LootRunner):
         self.tip, self.gain = None, 1.   # where the game's pointer was last seen, and how far it goes per pixel sent
         self.steering = False        # True once the game's pointer was seen not to follow Windows' cursor: steered by sight
         self.tracks = False          # True once the plain move was seen to put the game's pointer on its target
-        self.blind_rn = False        # True once a nudge could not find the pointer on the terminal: it clicks as it always did
         if kwargs["engine"] is None:
             self.engine = Engine(lambda text: self.emit("log", text), self.control)
         self.talk_wide = TALK_WIDE   # the open conversation's width
@@ -595,13 +594,13 @@ class MissionRunner(LootRunner):
             self.backend.button("left", False)
 
     def aim_click(self, point):
-        """Move there and click, checking by sight that the game's own pointer went there.
+        """Straight there and click, as it ran 90 jobs on this PC: no looking around for the pointer (the user's word, 5 Nov:
+        it hovered, nudging for an arrow it could not see on the terminal's green buttons).
 
-        The plain move first: it ran 90 jobs on this PC. Then a look. On the target: the plain move works, and the run trusts
-        it. Seen elsewhere, or not seen while the plain move is still unproven: a nudge finds the pointer, and it is steered on
-        by mouse motion; far off, every later click in the run is steered (on another PC the game's pointer did not follow
-        Windows' cursor, 5 Nov). Not seen once the plain move is proven: it is on a green button, where the arrow can't be told
-        apart, and it clicks as it always did. Without a real mouse (the tests), the plain move and click."""
+        Only a look after the move, which costs no motion. In a conversation, whose dark panel always shows the arrow, the
+        first click of a run makes sure the pointer went there: not seen, one nudge finds it, or one Tab frees it from
+        mouse-look; seen far off (on another PC it did not follow Windows' cursor), every click after that in the run is
+        steered by sight. Without a real mouse (the tests), the plain move and click."""
         if not self.sees_pointer():
             self.move(point)
             self.wait(SETTLE)
@@ -615,29 +614,20 @@ class MissionRunner(LootRunner):
             self.wait(STEER_LOOK)
             seen = self.find_after_move(before, self.frame(), point)
             in_talk = dialog_open(self.last_frame)
-            if seen is None and not self.tracks and (in_talk or not self.blind_rn):
+            if seen is not None and math.hypot(seen[0]-point[0], seen[1]-point[1]) <= 4*PROBE:
+                self.tracks = True          # it went where it was sent: never look again this run
+            elif in_talk and not self.tracks:
                 found = self.probe(near=point)
-                if found is not None and found[1] is None:
-                    # It was on the target all along, lost in a green button, and showed once nudged off it: the plain move
-                    # works. Back onto the target the same way.
-                    self.tracks = True
+                if found is None:
+                    found = self.free_pointer()     # nothing moved: hidden, in mouse-look
+                tip, gain = found
+                if gain is None or math.hypot(tip[0]-point[0], tip[1]-point[1]) <= 4*PROBE:
+                    self.tracks = True      # it was there all along: back the same way
                     self.move(point)
-                    found = None
-                elif found is None and in_talk:
-                    found = self.free_pointer()        # a conversation is dark: no arrow there means it is hidden
-                elif found is None:
-                    self.blind_rn = True               # all green here: no more nudges on the terminal this run
-                if found is not None:
-                    seen, self.gain = found
-            if seen is not None:
-                off = math.hypot(seen[0]-point[0], seen[1]-point[1])
-                if off > 4*PROBE:
-                    self.emit("log", f"The game's pointer is at {seen[0]},{seen[1]}, not {point[0]},{point[1]}: steering it by sight from now on.")
-                    self.steering, self.tracks = True, False
-                elif not self.steering:
-                    self.tracks = True          # the plain move put it there, give or take a nudge
-                if off > STEER_CLOSE:
-                    self.steer(seen, point)
+                else:
+                    self.emit("log", f"The game's pointer is at {tip[0]},{tip[1]}, not {point[0]},{point[1]}: steering it by sight from now on.")
+                    self.steering, self.gain = True, gain
+                    self.steer(tip, point)
         self.wait(SETTLE)
         self.click_here()
 
