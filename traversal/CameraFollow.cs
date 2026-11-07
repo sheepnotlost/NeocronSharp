@@ -65,7 +65,8 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 /// <summary>What a camera run does besides watching. The loot sequence runs one after another, so it skips the
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
-    bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null, bool Use = false);
+    bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null, bool Use = false,
+    bool Pin = false, bool Pushers = false, IReadOnlyCollection<string>? Avoid = null, bool Kite = false);
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -86,7 +87,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
     private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120,
-        MarkEveryMs = 60;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
+        MarkEveryMs = 60, PushEveryMs = 250;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;
@@ -260,6 +261,12 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             int marksLogged = 0;
             var sight = new SightWatch();
             var screen = new ScreenAim();
+            var track = new TrackAim();
+            using var pin = plan.Pin && plan.Sight ? CameraWriter.Open(reader.Process.Id) : null;
+            if (plan.Pin && plan.Sight) Console.WriteLine(pin == null ? "Could not open the game to pin the camera: the mouse aims." : "Pinning the camera.");
+            bool pinned = pin != null;
+            long pushAt = 0;
+            var kite = new Kite();
             var backOff = new BackOff(plan.BackTo);
             double aimedAt = -1, clearAt = -1, stepFrom = -1;
             float stepSide = 0;
@@ -290,8 +297,38 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     }
                 }
                 var (yawError, pitchError) = plan.Sight ? screen.Error(now, yawToMemory, pitchToMemory, away) : (yawToMemory, pitchToMemory);
-                int x = CameraAim.Pixels(CameraAim.Turn(yawError, away), yawGain), y = CameraAim.Pixels(CameraAim.Turn(pitchError, away), pitchGain);
-                input.LookPulse(x, y);
+                int x = 0, y = 0;
+                if (!plan.Sight)
+                {
+                    x = CameraAim.Pixels(CameraAim.Turn(yawError, away), yawGain); y = CameraAim.Pixels(CameraAim.Turn(pitchError, away), pitchGain);
+                    input.LookPulse(x, y);
+                }
+                else if (pinned && !pin!.Turn(s.Player, yawError, pitchError) && !pin.Works)
+                {
+                    pinned = false;
+                    Record("pin-refused", s, new { yawError, pitchError });
+                    Console.WriteLine("The game put its own camera back: the mouse aims instead.");
+                }
+                else if (!pinned)
+                {
+                    var want = track.Want(now, yawError, pitchError, away);
+                    x = Math.Clamp((int)MathF.Round(want.Yaw / yawGain), -4 * input.Pulse, 4 * input.Pulse);
+                    y = Math.Clamp((int)MathF.Round(want.Pitch / pitchGain), -4 * input.Pulse, 4 * input.Pulse);
+                    input.LookSteps(x, y);
+                    track.Sent(now, x * yawGain, y * pitchGain);
+                }
+                if (plan.Pushers && clock.ElapsedMilliseconds >= pushAt)
+                {
+                    pushAt = clock.ElapsedMilliseconds + PushEveryMs;
+                    if (Pushers.OnYou(s.Position, FollowCommand.ReadSnapshot(reader).Entities, target, away, plan.Avoid) is { } pusher)
+                    {
+                        input.HoldLeft(false);
+                        string other = $"Switching to {FollowCommand.Id(pusher)} {pusher.Name}: it is on you.";
+                        Record("switch", s, new { to = pusher.Name, id = FollowCommand.Id(pusher), away });
+                        hud.Post(Hud.Amber, title, other);
+                        return other;
+                    }
+                }
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
                 if (watch.Health < health) lastHurt = clock.ElapsedMilliseconds;
                 health = watch.Health;
@@ -315,7 +352,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
                         Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
                     if (input.LeftHeld && (!screen.Locked(now) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
-                    if (blocker == null) { input.Strafe(0); stepFrom = -1; }
+                    var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, away, s.Position) : (Back: false, Side: 0);
+                    if (keep.Back) input.Back(true);
+                    if (blocker == null) { input.Strafe(keep.Side); stepFrom = -1; }
                     else
                     {
                         clearAt = now;

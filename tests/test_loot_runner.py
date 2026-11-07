@@ -347,6 +347,35 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(seen.count(("flee",)), 1)
         self.assertIn("lost focus", events[-1][1])
 
+    def test_a_mob_on_you_is_fought_first_then_the_target_again(self):
+        engine = Engine(["Switching to Spider Spider: it is on you.", True, True], [])
+        engine.pushers = True
+        flags = []
+        real = Engine.fight
+
+        def noted(e, target, tick, back=False):
+            flags.append(e.pushers)
+            return real(e, target, tick, back)
+        self.addCleanup(setattr, Engine, "fight", real)
+        Engine.fight = noted
+        runner = LootRunner(default_profile(), Backend(), Control(), engine=engine, detector=Detect())
+        self.assertTrue(runner.attack(actor("Rat")))
+        self.assertEqual([s[1] for s in engine.seen if s[0] == "fight"], ["Rat", "Spider", "Rat"])
+        self.assertEqual(flags, [True, False, True], "the one on you is fought without switching again")
+        self.assertEqual(runner.kills, 1)
+        self.assertTrue(engine.pushers)
+
+    def test_the_fight_asks_the_engine_for_pin_pushers_and_kite(self):
+        engine = loot_runner.Engine(None, None)
+        sent = []
+        engine.run = lambda args, tick: sent.append(args) or "Rat died."
+        engine.fight(actor("Rat"), None)
+        self.assertNotIn("--pin", sent[0])
+        engine.pin, engine.pushers, engine.kite, engine.avoid = True, True, True, ["slugger"]
+        engine.fight(actor("Rat"), None)
+        self.assertTrue({"--pin", "--pushers", "--kite"} <= set(sent[1]))
+        self.assertEqual(sent[1][sent[1].index("--avoid")+1], "slugger")
+
     def test_stops_on_low_health(self):
         profile = default_profile()
         profile["client_size"] = [2000, 1125]

@@ -53,3 +53,4 @@ traversal/logs/*
 !traversal/logs/arrows-*.json
 traversal/fighter.txt
 traversal/avoid.txt
+traversal/pin.txt

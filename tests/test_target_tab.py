@@ -22,6 +22,9 @@ class TargetTabTests(unittest.TestCase):
         kept = patch.object(target_tab, "AVOID_FILE", Path(tempfile.mkdtemp()) / "avoid.txt")
         kept.start()
         self.addCleanup(kept.stop)
+        pin = patch.object(target_tab, "PIN_FILE", Path(tempfile.mkdtemp()) / "pin.txt")
+        pin.start()
+        self.addCleanup(pin.stop)
         with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
             self.tab = target_tab.TargetTab(self.frame, self.root, autoload=False, other_live=lambda: self.walking)
         self.tab.show_nearby(("ok", NEARBY))
@@ -215,6 +218,14 @@ class TargetTabTests(unittest.TestCase):
         for thread in [t for t in threading.enumerate() if t.name == "dungeon"]:
             thread.join(5)
         self.assertEqual(made, [(4000, ["parasite"]), "ran"])
+
+    def test_pin_camera_is_handed_to_the_runner_and_kept(self):
+        class Runner:
+            engine = type("E", (), {"pin": False})()
+        self.assertFalse(self.tab.pinned(Runner()).engine.pin)
+        self.tab.pin.set(True)
+        self.assertTrue(self.tab.pinned(Runner()).engine.pin)
+        self.assertEqual(target_tab.PIN_FILE.read_text(encoding="utf-8"), "1")
         self.tab.looting = None
 
     def test_start_hunt_says_why_it_cannot_start(self):
@@ -367,6 +378,9 @@ class SpareTests(unittest.TestCase):
         kept = patch.object(target_tab, "AVOID_FILE", Path(tempfile.mkdtemp()) / "avoid.txt")
         kept.start()
         self.addCleanup(kept.stop)
+        pin = patch.object(target_tab, "PIN_FILE", Path(tempfile.mkdtemp()) / "pin.txt")
+        pin.start()
+        self.addCleanup(pin.stop)
 
     def test_nothing_ticked_starts_the_hunt_and_regants_legacy_starts_the_sweep(self):
         root = tk.Tk(); root.withdraw()

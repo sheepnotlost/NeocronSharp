@@ -93,6 +93,45 @@ internal static class FollowTests
             Check(aim.Mark is { Right: 50, Bottom: 50 }, $"half the size at twice the range: {aim.Mark}");
         });
 
+        test("Track aim: the game easing a turn in, a shove is caught up in a few ticks and not swung past", () =>
+        {
+            // The view shows each turn spread over 350 ms; the error is the target's angle less what the view shows.
+            var aim = new TrackAim();
+            var sent = new List<(double At, float Yaw)>();
+            float target = .2f, worst = 0;
+            double settled = -1;
+            for (int tick = 0; tick < 60; tick++)
+            {
+                double now = tick * .016;
+                float shown = sent.Sum(s => s.Yaw * (float)Math.Clamp((now - s.At) / TrackAim.EaseSeconds, 0, 1));
+                float error = target - shown;
+                if (shown > target) worst = MathF.Max(worst, shown - target);
+                if (settled < 0 && MathF.Abs(error) < .01f) settled = now;
+                var want = aim.Want(now, error, 0, 500);
+                aim.Sent(now, want.Yaw, want.Pitch);
+                sent.Add((now, want.Yaw));
+            }
+            Check(settled >= 0 && settled < .5, $"on it within half a second, not {settled:F2} s");
+            Check(worst < .03f, $"no swing past it: {worst:F3} rad over");
+        });
+
+        test("Camera pin: the angles as the game keeps them", () =>
+        {
+            var (pitch, yaw) = CameraWriter.Angles(10, 100, .1f, .05f);
+            Check(MathF.Abs(yaw - (100 - .1f * 180 / MathF.PI)) < 1e-3, "yaw the other way round, in degrees");
+            Check(MathF.Abs(pitch - (10 + 2 * .05f * 180 / MathF.PI)) < 1e-3, "pitch doubled, in degrees");
+            Check(CameraWriter.Angles(80, 0, 0, .5f).Pitch == 86, "never past the 43 degrees the view stops at");
+        });
+
+        test("Kite: backs away from a mob too close to see, steps aside when a wall stops it", () =>
+        {
+            var kite = new Kite();
+            Check(kite.Step(0, 300, Vector3.Zero) == (false, 0), "far enough: stays");
+            Check(kite.Step(1, 100, Vector3.Zero) == (true, 0), "too close: backs away");
+            Check(kite.Step(1.7, 120, new Vector3(2, 0, 0)).Side != 0, "not moving: a step sideways");
+            Check(kite.Step(3, 230, new Vector3(50, 0, 0)) == (false, 0), "room again: stops");
+        });
+
         test("Camera angles: the short way round", () =>
         {
             Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");

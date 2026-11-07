@@ -100,6 +100,25 @@ internal sealed class SteerInput : IDisposable
             throw new InvalidOperationException("Windows rejected steering input.");
     }
 
+    /// <summary>A turn this tick, at once, as packets no bigger than the gains were measured at (Windows' acceleration sends a
+    /// big one further); at most four pulses' worth.</summary>
+    public void LookSteps(int x, int y)
+    {
+        x = Math.Clamp(x, -4 * Pulse, 4 * Pulse); y = Math.Clamp(y, -4 * Pulse, 4 * Pulse);
+        if (x == 0 && y == 0) return;
+        _reader.RequireForeground();
+        int steps = Math.Max(1, (Math.Max(Math.Abs(x), Math.Abs(y)) + BurstStep - 1) / BurstStep), sentX = 0, sentY = 0;
+        var packets = new Native.Input[steps];
+        for (int i = 0; i < steps; i++)
+        {
+            int toX = x * (i + 1) / steps, toY = y * (i + 1) / steps;
+            packets[i] = new Native.Input { Type = 0, Data = new Native.InputUnion { Mouse = new Native.MouseInput { X = toX - sentX, Y = toY - sentY, Flags = 0x0001 } } };
+            sentX = toX; sentY = toY;
+        }
+        if (Native.SendInput((uint)steps, packets, Marshal.SizeOf<Native.Input>()) != steps)
+            throw new InvalidOperationException("Windows rejected steering input.");
+    }
+
     /// <summary>A whole turn in one call, as many small packets: Windows' acceleration sends a big one twice as far, and the game
     /// adds these up. Sent over up to <see cref="GlideMostMs"/>, slow at the start and the end, so the view sweeps round.</summary>
     public void LookBurst(int x, int y)

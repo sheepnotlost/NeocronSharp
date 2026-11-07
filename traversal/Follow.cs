@@ -410,7 +410,10 @@ internal static class FollowCommand
             int i = rest.IndexOf(name); if (i < 0 || i + 1 >= rest.Count) return null;
             string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
         }
-        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), use = rest.Remove("--use"), sight = rest.Remove("--sight");
+        bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), use = rest.Remove("--use"), sight = rest.Remove("--sight"),
+            pin = rest.Remove("--pin"), pushers = rest.Remove("--pushers"), kite = rest.Remove("--kite");
+        var avoid = (Option("--avoid") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(n => string.Join(' ', n.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))).Where(n => n.Length > 0).ToList();
         float backTo = float.Parse(Option("--back-off") ?? "0", CultureInfo.InvariantCulture);
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
@@ -422,7 +425,8 @@ internal static class FollowCommand
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
-        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+        Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use,
+            Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

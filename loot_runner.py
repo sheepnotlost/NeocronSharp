@@ -34,7 +34,9 @@ START_TRIES = 3              # readings of your health before the hunt refuses t
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
 ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
               "Nobody with id", " is dead", " is still alive", "The door did not open", "Kept leaving the route", "Could not face the route",
-              "Could not reach the body", "Could not aim at the body", "No line of sight")
+              "Could not reach the body", "Could not aim at the body", "No line of sight", "Switching to ")
+SWITCH = re.compile(r"^Switching to (\S+) (.+): it is on you\.$")
+MOST_SWITCHES = 8            # mobs on you fought first, per target, before it stops turning to them
 MOST = 99                    # typed into the amount box: the game keeps it to the size of the stack
 AWAY = (24, 80)              # where the pointer waits, off every window
 
@@ -68,6 +70,10 @@ class Engine:
         self.gains = None
         self.calibration = None
         self.limit = None
+        self.pin = False             # set the camera's angles in the game's memory instead of moving the mouse
+        self.pushers = False         # a mob on you is fought first
+        self.kite = False            # walk backwards from a mob too close to see
+        self.avoid = ()              # names, or parts of names, never to fight
 
     def tool(self, args):
         return tt.run_tool(args)
@@ -137,7 +143,10 @@ class Engine:
 
     def fight(self, actor, tick, back=False):
         """Only shoots with a clear line to it, and first backs away from it when asked."""
-        text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off", str(SAFE)] if back else [])], tick)
+        extra = (["--pin"] if self.pin else []) + (["--pushers"] if self.pushers else []) + (["--kite"] if self.kite else [])
+        if self.pushers and self.avoid:
+            extra += ["--avoid", ",".join(name.replace(",", " ") for name in self.avoid)]
+        text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off", str(SAFE)] if back else []), *extra], tick)
         found = re.search(r"^Target limit (\d+) units", text, re.M)
         if found:
             self.limit = int(found.group(1))
@@ -216,11 +225,12 @@ class LootRunner(VisualRunner):
             self.reach = min(self.reach, max(CLOSE, self.engine.limit-TARGET_MARGIN))
         return last
 
-    def attack(self, actor):
-        """True when it died. No clear shot, or hurting nothing, means going closer and trying again, as far as CLOSE,
+    def attack(self, actor, depth=0):
+        """True when it died. A mob that gets on you meanwhile is fought first, then this one again. No clear shot, or hurting nothing, means going closer and trying again, as far as CLOSE,
         instead of leaving for the next enemy. A weapon shorter than the target limit shows by hurting nothing: the range
         that worked then is kept for the rest of the hunt, and it stops backing away."""
-        reach, close, closer, unhurt = self.reach, min(CLOSE, self.reach), False, False
+        reach, close, closer, unhurt, switches = self.reach, min(CLOSE, self.reach), False, False, 0
+        pushers = getattr(self.engine, "pushers", False)
         while True:
             here = next((a for a in self.engine.nearby() if a["id"] == actor["id"]), None)
             if here is None:
@@ -229,7 +239,20 @@ class LootRunner(VisualRunner):
                 return True
             if (closer or here["distance"] > reach) and not self.walk_to(here, reach):
                 return False
-            last = self.fight(here, self.back and not closer)
+            self.engine.pushers = pushers and depth == 0 and switches < MOST_SWITCHES
+            try:
+                last = self.fight(here, self.back and not closer)
+            finally:
+                self.engine.pushers = pushers
+            found = SWITCH.search(last)
+            if found:
+                switches += 1
+                other = {"id": found.group(1), "name": found.group(2), "kind": "npc", "distance": 0., "dead": False}
+                self.emit("log", f"{other['name']} is on you: fighting it first.")
+                if self.attack(other, depth+1):
+                    self.kills += 1
+                    self.emit("log", f"{other['name']} killed ({self.kills} so far).")
+                continue
             if " died." in last:
                 if unhurt:
                     self.reach, self.back = reach, False

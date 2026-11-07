@@ -28,6 +28,7 @@ from macro_core import Control
 
 FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next time
+PIN_FILE = tt.PROJECT / "pin.txt"          # the Pin camera tick, kept for next time
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
@@ -174,6 +175,13 @@ class TargetTab:
                 button = ttk.Button(hunt_buttons, text=text, command=command)
                 button.pack(side="left", padx=(0, 6))
                 kept.append(button)
+        try:
+            pinned = PIN_FILE.read_text(encoding="utf-8").strip() == "1"
+        except OSError:
+            pinned = False
+        self.pin = tk.BooleanVar(value=pinned)
+        self.pin.trace_add("write", lambda *_: self.keep_pin())
+        ttk.Checkbutton(hunt_buttons, text="Pin camera (writes game memory)", variable=self.pin).pack(side="right", padx=(12, 0))
         self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
@@ -443,6 +451,19 @@ class TargetTab:
             self.queue.put(("done", None))
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
 
+    def keep_pin(self):
+        try:
+            PIN_FILE.write_text("1" if self.pin.get() else "0", encoding="utf-8")
+        except OSError:
+            pass
+
+    def pinned(self, runner):
+        """The Pin camera tick, handed to a runner's engine."""
+        engine = getattr(runner, "engine", None)
+        if engine is not None:
+            engine.pin = bool(self.pin.get())
+        return runner
+
     def avoid_names(self):
         """Names ticked in the list and names, or parts of names, typed in Don't attack; the box is kept for next time."""
         typed = typed_names(self.avoid.get())
@@ -485,7 +506,7 @@ class TargetTab:
         self.loot_start = None
         try:
             clients.focus()         # no need to have clicked into the game in time
-            runner = self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
+            runner = self.pinned(self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting))
             threading.Thread(target=runner.run, daemon=True, name="hunt").start()
         except Exception as exc:
             self.loot_event("done", f"Hunt could not start: {exc}")
@@ -509,7 +530,7 @@ class TargetTab:
         self.loot_start = None
         try:
             clients.focus()
-            runner = self.dungeon_runner(reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting, avoid)
+            runner = self.pinned(self.dungeon_runner(reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting, avoid))
             threading.Thread(target=runner.run, daemon=True, name="dungeon").start()
         except Exception as exc:
             self.loot_event("done", f"The Regant's Legacy hunt could not start: {exc}")

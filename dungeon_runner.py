@@ -23,8 +23,6 @@ ENEMY = re.compile(r"^enemy (\S+) (\d+) (.+)$", re.M)
 
 
 class DungeonEngine(Engine):
-    avoid = ()                   # names, or parts of names, never to stop for
-
     def where(self):
         """The sector you are in, read from the game."""
         data = self.tool(["nearby"])
@@ -54,6 +52,8 @@ class DungeonRunner(LootRunner):
         super().__init__(*args, **kwargs)
         self.engine = engine or DungeonEngine(lambda text: self.emit("log", text), self.control)
         self.engine.avoid = [name.replace(",", " ") for name in self.spare]
+        self.engine.pushers = True   # parasites shove you about: whatever is on you dies first
+        self.engine.kite = True      # and a small one up close is backed away from, out of the blind spot under the view
         self.wait_outside = wait_outside
         self.back = False            # indoors, backing away walks into the next room's mobs
         self.reach = min(self.reach, CLOSE_IN)
