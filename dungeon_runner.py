@@ -15,6 +15,7 @@ INSIDE = 1913                # MAIN DETENTION AREA, where the entrance leads
 OUTSIDE = 2083               # E 03 - SWAMP, where the exit comes out and the entrance stands
 PLACE = "Regant's Legacy"
 TARGETS = ("Genotoxic Parasite", "Genotoxic Slugger", "Genotoxic Crawler")   # all it kills here, by exact name
+CLOSE_IN = 500               # units: indoors it walks this close before the first shot; from 1,000 down a corridor it shot the wall (7 Nov)
 ENGAGE = 1500                # units' walk: an NPC this near stops the sweep to be fought
 RESPAWN_WAIT = 300           # seconds outside between sweeps, for the place to fill up again
 SHOW_WAIT_EVERY = 30         # seconds between "back in ..." lines while waiting
@@ -51,6 +52,7 @@ class DungeonRunner(LootRunner):
         self.engine = engine or DungeonEngine(lambda text: self.emit("log", text), self.control)
         self.wait_outside = wait_outside
         self.back = False            # indoors, backing away walks into the next room's mobs
+        self.reach = min(self.reach, CLOSE_IN)
         self.phase = "sweep"
         self.at = None               # (point, points left) of the sweep under way
         self.skip = set()            # NPCs this sweep could not reach or hurt

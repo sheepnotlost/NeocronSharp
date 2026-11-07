@@ -42,9 +42,10 @@ def swept(points=3):
 
 
 class DungeonTests(unittest.TestCase):
-    def run_hunt(self, sweeps, fights=(), where=INSIDE, travels=None):
+    def run_hunt(self, sweeps, fights=(), where=INSIDE, travels=None, distance=50.):
         seen, events, clock = [], [], {"now": 0.}
         engine = FakeEngine(fights, seen, sweeps, where, travels)
+        engine.distance = distance
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
         runner = Sequence(profile, Backend(), Control(), lambda kind, text: events.append((kind, text)), engine=engine, detector=Detect(),
@@ -61,6 +62,10 @@ class DungeonTests(unittest.TestCase):
         self.assertEqual(self.engine.backs, [False])          # never backs away indoors
         self.assertIn("1 killed", events[-1][1])
         self.assertIn("Stop pressed", events[-1][1])
+
+    def test_it_walks_up_close_before_the_first_shot(self):
+        seen, _ = self.run_hunt(["sweep next 4 left 10 of 12" + chr(10) + "enemy Rat 1400 Rat"], fights=[True], distance=1400.)
+        self.assertEqual(seen[1:3], [("walk", "Rat", dungeon_runner.CLOSE_IN), ("fight", "Rat")])
 
     def test_one_it_cannot_hurt_is_left_alone_for_the_rest_of_the_sweep(self):
         seen, _ = self.run_hunt(["sweep next 2 left 5 of 9\nenemy Rat 300 Rat"], fights=["No damage to Rat in 20 s."]*2)
