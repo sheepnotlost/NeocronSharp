@@ -90,7 +90,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120,
         MarkEveryMs = 60, PushEveryMs = 250, BodyFrom = 80;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
-    private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for the search round the mob, and more
+    private const double BlindSeconds = 5, StepAsideSeconds = 6;
+    /// <summary>--stay: seconds a target already shot at may be out of view before it is let go for another.</summary>
+    public const double LostSeconds = 8;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;
 
     public string Run()
@@ -278,6 +280,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             // --stay (Stand and hunt): once shots have gone at it, it is fought until it dies: never dropped for another (7 Nov:
             // four mobs on you, none dead). Out of sight or behind something, the fire is held and the aim kept for it.
             bool engaged = false, hurt = false;
+            // ... unless it stays out of view: a hurt Launcher Cyclops went behind a ridge and the hunt aimed at the hill for 50 s (7 Nov).
+            double clearSince = -1;
             int marksLogged = 0;
             var sight = new SightWatch();
             var learned = plan.Sight ? HuntNotes.Recall(logs, target.Name) : null;
@@ -434,6 +438,16 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                             input.Strafe((int)stepSide);
                         }
                     }
+                    if (plan.Stay && engaged)
+                    {
+                        if (sight.Seen(now) && blocker == null) clearSince = now;
+                        if (now - clearSince > LostSeconds)
+                        {
+                            string lost = $"No line of sight to {target.Name} for {LostSeconds:F0} s: it went out of view. Camera follow stopped.";
+                            Record("lost-view", s, new { away });
+                            return Done(lost);
+                        }
+                    }
                     if (!(plan.Stay && engaged) && aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(Math.Max(aimedAt, sight.SeenAt), clearAt) > BlindSeconds)
                     {
                         string blocked = $"No line of sight to {target.Name}. Camera follow stopped.";
@@ -450,6 +464,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Firing(now, away) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
+                    if (!engaged) clearSince = clock.Elapsed.TotalSeconds;
                     engaged = true;
                     if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;
                     Record("hold", s, new { yawError, pitchError, away });

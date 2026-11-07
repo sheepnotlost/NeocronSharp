@@ -79,6 +79,14 @@ class StandTests(unittest.TestCase):
         self.assertEqual(seen, [("fight", "Rat"), ("fight", "Rat")])
         self.assertGreaterEqual(self.clock["now"], stand_runner.UNHURT_AGAIN)
 
+    def test_one_that_went_out_of_view_is_let_go_for_the_next_and_tried_again_later(self):
+        rat, spider = actor("Rat", distance=300.), actor("Spider", distance=600.)
+        looks = [[rat, spider], [rat, spider], [rat, spider]] + [[rat]]*(stand_runner.LOST_AGAIN+2)
+        seen, events = self.run_hunt(looks, fights=["No line of sight to Rat for 8 s: it went out of view. Camera follow stopped.", True, True])
+        self.assertEqual(seen, [("fight", "Rat"), ("fight", "Spider"), ("fight", "Rat")])
+        self.assertTrue(any("Rat went out of view: on to the nearest in view. Looking at it again in 15 s." in text for _, text in events))
+        self.assertGreaterEqual(self.clock["now"], stand_runner.LOST_AGAIN)
+
     def test_it_never_switches_to_one_that_gets_on_you(self):
         self.run_hunt([[]])
         self.assertFalse(self.runner.engine.pushers)

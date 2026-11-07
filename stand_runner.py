@@ -3,7 +3,8 @@ until it dies; then the next nearest, over and over until Stop or F8. Never a hu
 Don't attack.
 
 It never takes a step and never drops a mob for another (traversal.exe's camera run with --stay): once it has shot at
-one, it keeps the aim on it until it dies, holding fire while it is out of sight or behind something. Dropping them
+one, it keeps the aim on it until it dies, holding fire while it is out of sight or behind something; only after 8 s
+out of view is it let go for the nearest one in view, and looked at again later. Dropping them
 for the next left four mobs on you with none dead (7 Nov). One behind something before the first shot isn't started on:
 it is looked at again in a few seconds, as mobs move. Badly hurt, it runs to cover as the other hunts do, and hunts on
 from there once healed.
@@ -11,6 +12,7 @@ from there once healed.
 from loot_runner import LootRunner, LowHealth, pick_target
 
 BLOCKED_AGAIN = 5            # seconds before a mob behind something is looked at again
+LOST_AGAIN = 15              # seconds before one that went out of view mid-fight is looked at again
 UNHURT_AGAIN = 30            # seconds before one that took no damage (out of the weapon's reach) is tried again
 LOOK_EVERY = 1               # seconds between looks round while nothing is in range
 SHOW_IDLE_EVERY = 30         # seconds between "nothing in range" lines
@@ -58,9 +60,13 @@ class StandRunner(LootRunner):
                 if " died." in last:
                     self.killed(target)
                 elif self.alive(target):
-                    wait = UNHURT_AGAIN if "No damage to" in last else BLOCKED_AGAIN
-                    why = "it takes no damage from here" if wait == UNHURT_AGAIN else "no clear shot from here"
-                    self.emit("log", f"Not starting on {target['name']}: {why}. Looking again in {wait} s.")
+                    if "went out of view" in last:
+                        wait, text = LOST_AGAIN, f"{target['name']} went out of view: on to the nearest in view"
+                    elif "No damage to" in last:
+                        wait, text = UNHURT_AGAIN, f"Not starting on {target['name']}: it takes no damage from here"
+                    else:
+                        wait, text = BLOCKED_AGAIN, f"Not starting on {target['name']}: no clear shot from here"
+                    self.emit("log", f"{text}. Looking at it again in {wait} s.")
                     self.later[target["id"]] = self.clock()+wait
             except LowHealth as low:
                 self.retreat(str(low))
