@@ -388,6 +388,9 @@ internal sealed class CastCycle
         public bool OnFighter { get; } = onFighter;
         public double Every { get; } = every;
         public double Next { get; set; }
+        /// <summary>Team mode: who the cast is for ("" the healer), and the spell it restarts.</summary>
+        public string? Who { get; init; }
+        public TeamRounds.Spell? Spell { get; init; }
     }
 
     private readonly Cast[] _casts =

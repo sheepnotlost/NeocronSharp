@@ -117,6 +117,9 @@ internal static class FollowCommand
             rest.RemoveRange(i, 2);
             return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
         }
+        string? teamArg = null;
+        int t = rest.IndexOf("--team");
+        if (t >= 0 && t + 1 < rest.Count) { teamArg = rest[t + 1]; rest.RemoveRange(t, 2); }
         LiveSteer.Calibration? known = Pair("--calibration") is { } c ? new(c.Item1, c.Item2) : null;
         (float Yaw, float Pitch)? aim = heal ? Pair("--gains") : null;
         float distance = FollowBand.DefaultDistance;
@@ -136,6 +139,13 @@ internal static class FollowCommand
         if (heal && !CameraAim.IsFighter(File.Exists(fighterFile) ? File.ReadAllText(fighterFile) : null, target.Name, target.Identity.Kind))
             throw new InvalidOperationException($"{target.Name} is not the fighter named on the tab. Follow and heal only works on your own fighter.");
         if (arrive && !CameraAim.MayHold(target.Identity.Kind)) throw new InvalidOperationException($"{target.Name} is not an NPC: the hunt walks to NPCs only.");
+        TeamHeal? team = null;
+        if (teamArg != null)
+        {
+            if (!heal) throw new InvalidOperationException("--team goes with --heal.");
+            team = new TeamHeal(new[] { target.Name }.Concat(teamArg.Split(',')), reader.Window, new TeamPanel());
+            Console.WriteLine($"Team: {string.Join(", ", team.Names)}.");
+        }
         var band = new FollowBand(distance);
         Console.WriteLine($"Following {target.Name} ({Kind(target)}) at {band.Distance:F0} units{(band.Distance != distance ? $" (asked {distance:F0}; allowed {FollowBand.MinDistance:F0}-{FollowBand.MaxDistance:F0})" : "")}.");
 
@@ -177,7 +187,7 @@ internal static class FollowCommand
             try
             {
                 Console.WriteLine(new FollowWalk(reader, nav, sector, target, band, calibration, pulse, run, hud,
-                    Path.Combine(logs, $"follow-{stamp}-{tried}.jsonl"), exits, Name, aim, arrive).Run());
+                    Path.Combine(logs, $"follow-{stamp}-{tried}.jsonl"), exits, Name, aim, arrive, team).Run());
                 return 0;
             }
             catch (LiveSteer.BlockedAt blocked) when (tried < GoRoundTries)
@@ -434,7 +444,7 @@ internal static class FollowCommand
 /// <summary>The live follow loop. Ends by returning why it stopped, or by throwing (F8, focus, zone change, stuck).</summary>
 internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, WorldEntity target, FollowBand band,
     LiveSteer.Calibration calibration, int pulse, bool run, Hud hud, string logPath,
-    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName, (float Yaw, float Pitch)? heal = null, bool arrive = false)
+    IReadOnlyList<(Vector3 Position, int To)> exits, Func<int, string> sectorName, (float Yaw, float Pitch)? heal = null, bool arrive = false, TeamHeal? team = null)
 {
     private const int Tick = 33, PulseGap = 16, ReadEveryMs = 150;
     private const double UnreachableSeconds = 15, StallSeconds = 2.5;
@@ -514,7 +524,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         Plan? plan = null, doorPlan = null;
         double unreachableSince = -1, retryAt = 0;
         // A healer walks to its place beside or behind the fighter (HealerPlace); everyone else to the target itself.
-        var place = heal != null ? new HealerPlace() : null;
+        var place = heal != null && team == null ? new HealerPlace() : null;
         Vector3 goal = target.Position;
         long mobsAt = 0;
         Vector3? mob = null;
@@ -552,6 +562,9 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             var cycle = new CastCycle();
             CastCycle.Cast? casting = null;
             int? inHand = null;
+            Vector3 teamGoal = watch.SeenAt;
+            float teamStop = 40;
+            bool teamMove = false;
 
             while (true)
             {
@@ -561,7 +574,11 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 {
                     input.HoldLeft(false);
                     castEnds = -1; castFrom = now + CastCycle.BetweenCasts;
-                    if (casting != null) cycle.Done(casting, now);
+                    if (casting != null)
+                    {
+                        if (team != null && casting.Spell != null) team.Cast(casting.Who!, casting.Spell, now);
+                        else cycle.Done(casting, now);
+                    }
                     casting = null;
                 }
                 if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
@@ -578,6 +595,23 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     }
                     place.Observe(now, watch.SeenAt, mob);
                     goal = place.Station(s.Position, watch.SeenAt, band.Distance * .85f);
+                }
+                TeamHeal.Move? teamPlan = null;
+                if (team != null)
+                {
+                    if (clock.ElapsedMilliseconds >= mobsAt)
+                    {
+                        mobsAt = clock.ElapsedMilliseconds + 500;
+                        var around = FollowCommand.ReadSnapshot(reader).Entities;
+                        team.Observe(around);
+                        var centre = team.Positions.Count == 0 ? watch.SeenAt : team.Positions.Aggregate(Vector3.Zero, (a, b) => a + b) / team.Positions.Count;
+                        mob = around.Where(e => SweepTargets.Hunted(e) && !FollowCommand.Dead(e)).Select(e => e.Position)
+                            .OrderBy(p => PointNavigation.Distance(p, centre)).Cast<Vector3?>().FirstOrDefault();
+                    }
+                    team.ReadPanel(now, wasMoving ? 5 : 1.5);
+                    teamPlan = casting != null ? new TeamHeal.Move(null, null, null, 0) : team.Decide(now, s.Position, mob, band.Distance);
+                    if (teamPlan.Goal is { } g) { teamGoal = g; teamStop = teamPlan.Stop; }
+                    goal = teamGoal;
                 }
                 float straight = FollowLogic.Straight(s.Position, goal);
                 float off = plan?.Route.Update(s.Position) ?? 0;
@@ -616,7 +650,13 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     Record("arrived", s, new { gap, straight });
                     return $"Reached {target.Name}, {straight:F0} units away.";
                 }
-                bool moving = arrive || (place != null ? place.Update(s.Position, watch.SeenAt, band.Distance, band.Resume) : band.Update(gap));
+                bool moving;
+                if (team != null)
+                {
+                    teamMove = teamPlan!.Goal != null && (teamMove ? straight > teamStop : straight > teamStop + 50);
+                    moving = teamMove;
+                }
+                else moving = arrive || (place != null ? place.Update(s.Position, watch.SeenAt, band.Distance, band.Resume) : band.Update(gap));
                 // A blocking step ahead (a lift, a door) must not start with the cast's button down.
                 if (moving && castEnds >= 0) { input.HoldLeft(false); castEnds = -1; casting = null; }
                 if (moving != wasMoving)
@@ -642,7 +682,11 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     // A camera reading that fails for a moment waits for the next tick: on a slow machine it ended the follow.
                     if (!moving && heal is { } gains && reader.ReadCamera(s) is { } view)
                     {
-                        var cast = casting ?? (now >= castFrom ? cycle.Due(now) : null);
+                        CastCycle.Cast? cast = casting;
+                        if (cast == null && now >= castFrom)
+                            cast = team == null ? cycle.Due(now)
+                                : teamPlan?.Due is { } d && teamPlan.Goal == null ? new CastCycle.Cast(d.Spell.Slot, d.Who != TeamRounds.Self, d.Spell.Every) { Who = d.Who, Spell = d.Spell } : null;
+                        Vector3 aimAt = team != null && cast?.Who is { Length: > 0 } ally && team.Position(ally) is { } allyAt ? allyAt : watch.SeenAt;
                         if (cast != null && castEnds < 0 && inHand != cast.Slot && now >= castFrom)
                         {
                             inHand = CastCycle.KeyFor(cast.Slot, inHand);
@@ -650,8 +694,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                             castFrom = now + CastCycle.SlotWait;
                             Record("slot", s, new { slot = inHand });
                         }
-                        float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                        float pitch = cast is { OnFighter: false } ? CastCycle.SkyPitch : CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.BodyMiddle, 0));
+                        float yawError = PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), aimAt - s.Position);
+                        float pitch = cast is { OnFighter: false } ? CastCycle.SkyPitch : CameraAim.PitchTo(s.Position, aimAt + new Vector3(0, CameraAim.BodyMiddle, 0));
                         float pitchError = pitch - view.Pitch;
                         input.LookPulse((int)MathF.Round(CameraAim.Turn(yawError) / gains.Yaw), (int)MathF.Round(CameraAim.Turn(pitchError) / gains.Pitch));
                         if (cast != null && castEnds < 0 && inHand == cast.Slot && now >= castFrom && CameraAim.OnTarget(yawError, pitchError))
@@ -660,7 +704,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                             casting = cast;
                             castEnds = now + CameraAim.CastHoldSeconds;
                             Record("cast", s, new { cast.Slot, cast.OnFighter, yawError, pitchError, gap });
-                            Console.WriteLine($"Slot {cast.Slot} on {(cast.OnFighter ? target.Name : "yourself")}.");
+                            Console.WriteLine($"Slot {cast.Slot} on {(cast.Who is { Length: > 0 } w ? w : cast.OnFighter ? target.Name : "yourself")}.");
                         }
                     }
                     continue;

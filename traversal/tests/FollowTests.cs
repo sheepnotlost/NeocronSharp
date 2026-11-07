@@ -32,6 +32,36 @@ internal static class FollowTests
             Check(!(team.Next(31) is { Who: "Cy", Spell.Slot: 1 }), "a bar showing time left puts the clock right");
         });
 
+        test("Team heal: casts where it stands when the ally is in reach, walks to one out of reach, trusts the panel", () =>
+        {
+            var team = new TeamHeal(["Ann", "Bob"]);
+            team.Observe([Actor("ann", new Vector3(100, 0, 0)), Actor("Bob", new Vector3(900, 0, 0))]);
+            var self = Vector3.Zero;
+            for (var d = team.Rounds.Next(0); d != null && d.Who != "Ann"; d = team.Rounds.Next(0)) team.Rounds.Cast(d.Who, d.Spell, 0);
+            var first = team.Decide(0, self, null, 150);
+            Check(first.Who == "Ann" && first.Goal == null, "Ann is in reach: cast without moving");
+            foreach (var spell in TeamHeal.Spells) team.Cast("Ann", spell, 0);
+            var next = team.Decide(0, self, null, 150);
+            Check(next.Who == "Bob" && next.Goal is { } to && to.X > 800 && next.Stop < 150, "Bob is out of reach: walk to him, stopping inside reach");
+            foreach (var spell in TeamHeal.Spells) { team.Cast("Bob", spell, 0); team.Cast(TeamRounds.Self, spell, 0); }
+            var idle = team.Decide(5, self, new Vector3(-1000, 0, 0), 150);
+            Check(idle.Due == null && idle.Goal is { } spot && spot.X > 100, "nothing due: at the station behind the group");
+            // The panel: a heal timer read puts the clock right; a buff missing right after a cast is not believed, later it is.
+            team.Apply([new PanelMember("BOB", 90, 0, new Dictionary<int, int?> { [1] = 25 })], 10);
+            Check(team.Rounds.Next(10) is not { Who: "Bob", Spell.Slot: 1 }, "the heal shows 25 s left");
+            Check(team.Rounds.Next(10) is { Who: "Bob" } d2 && d2.Spell.Slot != 1, "slots 2 to 5 missing in the panel, cast long ago: due");
+        });
+
+        test("Team heal: a buff just cast that is not in the panel yet stays running", () =>
+        {
+            var team = new TeamHeal(["Ann"]);
+            foreach (var spell in TeamHeal.Spells) { team.Cast("Ann", spell, 100); team.Cast(TeamRounds.Self, spell, 100); }
+            team.Apply([new PanelMember("Ann", 100, 0, new Dictionary<int, int?>())], 101);
+            Check(team.Rounds.Next(101) == null, "within a moment of the cast the panel's gap is not believed");
+            team.Apply([new PanelMember("Ann", 100, 0, new Dictionary<int, int?>())], 110);
+            Check(team.Rounds.Next(110) is { Who: "Ann" }, "later a missing buff is due again");
+        });
+
         test("Team station: behind the group away from the mobs, close, never crowding an ally", () =>
         {
             var allies = new List<Vector3> { new(0, 0, 0), new(100, 0, 0), new(0, 0, 100) };

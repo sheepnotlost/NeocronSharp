@@ -172,6 +172,9 @@ class TargetTab:
         self.fighter = tk.StringVar(value=saved)
         self.fighter.trace_add("write", lambda *_: self.update_buttons())
         ttk.Entry(buttons, textvariable=self.fighter, width=16).pack(side="left", padx=6)
+        ttk.Label(buttons, text="Team:").pack(side="left", padx=(6, 0))
+        self.team = tk.StringVar(value="")
+        ttk.Entry(buttons, textvariable=self.team, width=26).pack(side="left", padx=6)
         hunt_buttons = buttons
         if hunt_host is not None:
             hunt_buttons = ttk.Frame(hunt_host)
@@ -390,7 +393,10 @@ class TargetTab:
         if self.other_live():
             self.append(OTHER_LIVE)
             return
-        self.append(f"Tracking {actor['name']} and following. Slot 1 every 30 s, slots 2 and 3 every 120 s, on both of you.")
+        if self.team.get().strip():
+            self.append(f"Tracking {actor['name']} and the team ({self.team.get().strip()}). Alt+T team panel must be on: slot 1 every 30 s, slots 2 to 4 every 180 s, slot 5 every 600 s, on each of them and you.")
+        else:
+            self.append(f"Tracking {actor['name']} and following. Slot 1 every 30 s, slots 2 and 3 every 120 s, on both of you.")
         try:
             FIGHTER_FILE.write_text(actor["name"], encoding="utf-8")
             self.append("Starting in 5 s: Neocron must stay the focused window here.")
@@ -404,7 +410,9 @@ class TargetTab:
         self.update_buttons()
 
     def start_alone(self, fighter_id):
+        team = ",".join(n.strip() for n in self.team.get().split(",") if n.strip())
         self.start_live(["follow", fighter_id, "--heal", "--distance", str(HEAL_DISTANCE), "--pulse", "24", "--run",
+                          *(["--team", team] if team else []),
                           *[word for pair in self.measured.items() for word in pair]])
 
     def remember(self, line):
