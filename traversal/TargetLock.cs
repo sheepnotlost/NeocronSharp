@@ -91,16 +91,23 @@ internal static class TargetLock
             }
             int x0 = group.Min(p => p.X), x1 = group.Max(p => p.X), y0 = group.Min(p => p.Y), y1 = group.Max(p => p.Y);
             if (group.Count < 12 * s * s || x1 - x0 > .06f * clientHeight || y1 - y0 > .02f * clientHeight || y1 - y0 < .004f * clientHeight) continue;
-            int boxed = 0;   // the red box behind the text, left of its first letter
+            // The red box behind the text: its health fill left of the first letter, or, low on health, only the fill's stub and
+            // the outline further left. At 11% a dark gap of 8 px lay between them, the label went unseen, and a mob all but
+            // dead was let go as out of view (7 Nov).
+            int reach = (int)(.03f * clientHeight), boxed = 0;
+            bool Edge(int x, int y) => BoxRed(x, y) || Red(x, y);
             for (int y = y0; y <= y1; y++)
-                for (int x = Math.Max(0, x0 - (int)(3 * s)); x < x0; x++)
-                    if (BoxRed(x, y)) boxed++;
+                for (int x = x0 - 1; x >= Math.Max(0, x0 - reach); x--)
+                    if (Edge(x, y)) { boxed++; break; }
             if (boxed < (y1 - y0) * .5f) continue;
-            // The box's own edges: left along the text's middle row, bottom below its first letter. The brackets start at
-            // the box's left, a few pixels below it (6 at 1080 high, 9 at 1440).
+            // The box's own edges: left along the text's middle row, bottom down its left side. The brackets start at the
+            // box's left, a few pixels below it (6 at 1080 high, 9 at 1440).
             int middle = (y0 + y1) / 2, boxLeft = x0, boxBottom = y1;
-            while (boxLeft > 0 && x0 - boxLeft < .03f * clientHeight && (BoxRed(boxLeft - 1, middle) || Pink(boxLeft - 1, middle))) boxLeft--;
-            while (boxBottom + 1 < size && boxBottom - y1 < .01f * clientHeight && BoxRed(x0 - 1 >= 0 ? x0 - 1 : x0, boxBottom + 1)) boxBottom++;
+            for (int x = Math.Max(0, x0 - reach); x < x0; x++)
+                if (Edge(x, middle)) { boxLeft = x; break; }
+            while (boxLeft > 0 && x0 - boxLeft < reach + 4 && Edge(boxLeft - 1, middle)) boxLeft--;
+            int side = Math.Min(boxLeft + 1, x0 - 1 >= 0 ? x0 - 1 : x0);
+            while (boxBottom + 1 < size && boxBottom - y1 < .01f * clientHeight && Edge(side, boxBottom + 1)) boxBottom++;
             float left = boxLeft, top = boxBottom + 6.5f * s;
             int l = (int)MathF.Round(left), t = (int)MathF.Round(top);
             var box = Brackets(l, t, clientHeight, size, ThinAcross, ThinDown);

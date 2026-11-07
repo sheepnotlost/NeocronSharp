@@ -24,7 +24,7 @@ from tkinter import ttk
 import clients
 import traversal_tab as tt
 from dungeon_runner import INSIDE, OUTSIDE
-from loot_runner import REACH, REACH_MOST, hunted
+from loot_runner import REACH_MOST, hunted
 from macro_core import Control
 
 
@@ -196,7 +196,7 @@ class TargetTab:
         self.stand_button = ttk.Button(hunt_buttons, text="Stand and hunt", command=self.start_stand)
         self.stand_button.pack(side="right", padx=(0, 6))
         ttk.Label(hunt_buttons, text="units").pack(side="right", padx=(0, 8))
-        self.reach = tk.StringVar(value=str(REACH))
+        self.reach = tk.StringVar(value=str(REACH_MOST))   # 6,000: as far as the game lets you target (asked for, 7 Nov)
         self.reach.trace_add("write", lambda *_: self.update_buttons())
         ttk.Entry(hunt_buttons, textvariable=self.reach, width=6).pack(side="right", padx=4)
         ttk.Label(hunt_buttons, text="Attack from").pack(side="right")

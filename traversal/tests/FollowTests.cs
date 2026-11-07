@@ -95,6 +95,33 @@ internal static class FollowTests
             Check(!tiled.Measured && MathF.Abs(tiled.Right - tiled.Left - TargetLock.SmallWidth * high) < .01f, $"on the tiles, a small mob's size: {tiled}");
         });
 
+        test("Target marks: a label low on health, its red fill a stub with a dark gap before the text, still counts", () =>
+        {
+            const int size = 648, high = 1080;
+            var picture = new byte[size * size * 4];
+            void Paint(int x0, int y0, int x1, int y1, byte r, byte g, byte b)
+            {
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++) { int i = (y * size + x) * 4; picture[i] = b; picture[i + 1] = g; picture[i + 2] = r; picture[i + 3] = 255; }
+            }
+            Paint(0, 0, size - 1, size - 1, 25, 22, 21);
+            // "11%" as filmed on 7 Nov: a red outline, a fill 4 px wide, 8 px of dark, then the text.
+            Paint(300, 280, 340, 280, 160, 40, 30); Paint(300, 292, 340, 292, 160, 40, 30);
+            Paint(300, 280, 300, 292, 160, 40, 30); Paint(340, 280, 340, 292, 160, 40, 30);
+            Paint(301, 281, 304, 291, 176, 38, 24);
+            Paint(313, 282, 330, 290, 219, 216, 216);
+            byte r = 150, g = 40, b = 35;
+            Paint(300, 298, 306, 298, r, g, b); Paint(300, 298, 300, 304, r, g, b);
+            Paint(394, 298, 400, 298, r, g, b); Paint(400, 298, 400, 304, r, g, b);
+            Paint(300, 360, 306, 360, r, g, b); Paint(300, 354, 300, 360, r, g, b);
+            Paint(394, 360, 400, 360, r, g, b); Paint(400, 354, 400, 360, r, g, b);
+            var marks = TargetLock.Find(picture, size, high);
+            Check(marks.Count == 1, $"one label, found {marks.Count}");
+            var body = marks[0];
+            Check(body.Measured && body.Left == 300 - 324 && body.Top == 298.5f - 324 && body.Right == 400 - 324 && body.Bottom == 360 - 324,
+                $"the brackets' box, from the crosshair: {body}");
+        });
+
         test("Screen aim: a mob measured once keeps its size when its corners are lost", () =>
         {
             var aim = new ScreenAim();
