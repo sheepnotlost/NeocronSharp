@@ -13,23 +13,28 @@ from vision import Detector
 FIXTURE = Path(__file__).parent / "fixtures" / "loot_window_2000.png"
 
 
-def actor(name, kind="npc", distance=50., dead=False, id=None):
-    return {"id": id or name, "name": name, "kind": kind, "distance": distance, "dead": dead}
+def actor(name, kind="npc", distance=50., dead=False, id=None, faction=17):
+    return {"id": id or name, "name": name, "kind": kind, "distance": distance, "dead": dead, "faction": faction}
 
 
 class PickTests(unittest.TestCase):
-    def test_nearest_ticked_living_npc_in_range(self):
-        actors = [actor("Rat", distance=90), actor("Rat", distance=30, id="near"), actor("Copbot", distance=5),
+    def test_nearest_living_creature_in_range_not_spared(self):
+        actors = [actor("Rat", distance=90), actor("Rat", distance=30, id="near"), actor("Spider", distance=5),
                   actor("Rat", distance=1, dead=True, id="body"), actor("Rat", distance=900, id="far")]
-        self.assertEqual(pick_target(actors, ["rat"], 400)["id"], "near")
-        self.assertEqual(pick_target(actors, ["Rat"], 400, skip={"near"})["distance"], 90)
-        self.assertIsNone(pick_target(actors, ["Spider"], 400))
+        self.assertEqual(pick_target(actors, ["spider"], 400)["id"], "near")
+        self.assertEqual(pick_target(actors, ["Spider"], 400, skip={"near"})["distance"], 90)
+        self.assertIsNone(pick_target(actors, ["Spider", "Rat"], 400))
+        self.assertEqual(pick_target(actors)["name"], "Spider")         # nothing ticked: everything
 
-    def test_never_a_player_even_when_named(self):
-        self.assertIsNone(pick_target([actor("Rat", kind="player", distance=1)], ["Rat"], 400))
+    def test_never_a_player_or_a_human(self):
+        self.assertIsNone(pick_target([actor("Rat", kind="player", distance=1, faction=None)]))
+        for faction in (None, 0, 1, 11, 19, 20):
+            self.assertIsNone(pick_target([actor("Corporal Lines / CityMercs", faction=faction)]))
+        for faction in (16, 17, 18):
+            self.assertIsNotNone(pick_target([actor("Genotoxic Parasite", faction=faction)]))
 
     def test_anywhere_in_the_zone_unless_limited(self):
-        self.assertEqual(pick_target([actor("Rat", distance=30000)], ["Rat"])["distance"], 30000)
+        self.assertEqual(pick_target([actor("Rat", distance=30000)])["distance"], 30000)
 
 
 class WalkTests(unittest.TestCase):
@@ -191,7 +196,8 @@ class SequenceTests(unittest.TestCase):
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
         control = Control()
-        runner = Sequence(profile, Backend(), control, lambda kind, text: events.append((kind, text)), names=names,
+        runner = Sequence(profile, Backend(), control, lambda kind, text: events.append((kind, text)),
+                          spare=[n for n in ("Rat", "Spider") if n not in names],
                           engine=engine, detector=detect,
                           clock=lambda: clock["now"], sleep=lambda s: clock.__setitem__("now", clock["now"]+s))
         runner.health_readings = [(900, 900), *health]
@@ -247,7 +253,7 @@ class SequenceTests(unittest.TestCase):
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
         clock = {"now": 0.}
-        runner = Sequence(profile, Backend(), Control(), lambda kind, text: events.append((kind, text)), names=["Rat"],
+        runner = Sequence(profile, Backend(), Control(), lambda kind, text: events.append((kind, text)), spare=["Spider"],
                           engine=Engine([], []), detector=Detect(), clock=lambda: clock["now"],
                           sleep=lambda s: clock.__setitem__("now", clock["now"]+s))
         runner.my_health = lambda: None
@@ -338,7 +344,7 @@ class SequenceTests(unittest.TestCase):
     def test_stops_on_low_health(self):
         profile = default_profile()
         profile["client_size"] = [2000, 1125]
-        runner = LootRunner(profile, Backend(), Control(), names=["Rat"], engine=Engine([], []), detector=Detect())
+        runner = LootRunner(profile, Backend(), Control(), spare=["Spider"], engine=Engine([], []), detector=Detect())
         runner.frame = lambda: None
         runner.reader = lambda: None
         runner.health = lambda reader, frame: (300, 900)

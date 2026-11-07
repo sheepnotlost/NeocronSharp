@@ -14,6 +14,7 @@ from macro_core import Interrupted
 INSIDE = 1913                # MAIN DETENTION AREA, where the entrance leads
 OUTSIDE = 2083               # E 03 - SWAMP, where the exit comes out and the entrance stands
 PLACE = "Regant's Legacy"
+TARGETS = ("Genotoxic Parasite", "Genotoxic Slugger", "Genotoxic Crawler")   # all it kills here, by exact name
 ENGAGE = 1500                # units' walk: an NPC this near stops the sweep to be fought
 RESPAWN_WAIT = 300           # seconds outside between sweeps, for the place to fill up again
 SHOW_WAIT_EVERY = 30         # seconds between "back in ..." lines while waiting
@@ -31,7 +32,7 @@ class DungeonEngine(Engine):
 
     def sweep(self, at, skip, tick):
         """Walk on from point at = (point, points left), or from the nearest point; skip: NPCs it can't kill."""
-        args = ["sweep", "--world", str(INSIDE), "--engage", str(ENGAGE), "--pulse", self.pulse]
+        args = ["sweep", "--world", str(INSIDE), "--names", ",".join(TARGETS), "--engage", str(ENGAGE), "--pulse", self.pulse]
         if at is not None:
             args += ["--from", str(at[0]), "--left", str(at[1])]
         if skip:

@@ -99,7 +99,8 @@ class EngineTests(unittest.TestCase):
         sent = []
         engine.live = lambda args, tick: sent.append(args) or ""
         engine.sweep(None, set(), None)
-        self.assertEqual(sent[0][:6], ["sweep", "--world", str(INSIDE), "--engage", str(dungeon_runner.ENGAGE), "--pulse"])
+        self.assertEqual(sent[0][:5], ["sweep", "--world", str(INSIDE), "--names", "Genotoxic Parasite,Genotoxic Slugger,Genotoxic Crawler"])
+        self.assertEqual(sent[0][sent[0].index("--engage")+1], str(dungeon_runner.ENGAGE))
         self.assertNotIn("--from", sent[0])
         engine.calibration = "190,0.0024"
         engine.sweep((7, 3), {"b2", "a1"}, None)

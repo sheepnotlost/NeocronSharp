@@ -43,11 +43,18 @@ class LowHealth(Interrupted):
     """Time to run. Still an Interrupted, so it ends a hunt that has not begun."""
 
 
-def pick_target(actors, names, within=float("inf"), skip=()):
-    """The nearest living NPC with a ticked name, anywhere in the zone unless limited. Never a player."""
-    wanted = {name.lower() for name in names}
-    found = [a for a in actors if a["kind"] == "npc" and not a["dead"] and a["name"].lower() in wanted
-             and a["distance"] <= within and a["id"] not in skip]
+PREY = {16, 17, 18}          # pak_factions: Robot, Mutant, Wildlife. Every other faction is human, and never hunted.
+
+
+def hunted(actor, spare=()):
+    """A robot, mutant or animal not named in spare. Never a player, never a human NPC (City Mercs, LowSL, ...)."""
+    return (actor["kind"] == "npc" and actor.get("faction") in PREY
+            and actor["name"].lower() not in {name.lower() for name in spare})
+
+
+def pick_target(actors, spare=(), within=float("inf"), skip=()):
+    """The nearest living robot, mutant or animal not spared, anywhere in the zone unless limited."""
+    found = [a for a in actors if hunted(a, spare) and not a["dead"] and a["distance"] <= within and a["id"] not in skip]
     return min(found, key=lambda a: a["distance"], default=None)
 
 
@@ -68,7 +75,7 @@ class Engine:
         if not data.get("live"):
             raise Interrupted(f"Cannot read the game: {data.get('why')}")
         return [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
-                 "dead": bool(e.get("dead"))} for e in data.get("entities", [])]
+                 "dead": bool(e.get("dead")), "faction": e.get("factionId")} for e in data.get("entities", [])]
 
     def live(self, args, tick):
         """Run one live command to its end and return what it printed. tick() runs while it does, and may raise."""
@@ -149,9 +156,9 @@ class LootRunner(VisualRunner):
     menu_words, ui_visible, set_ui, press, health = (NavRayRunner.menu_words, NavRayRunner.ui_visible, NavRayRunner.set_ui,
                                                      NavRayRunner.press, NavRayRunner.health)
 
-    def __init__(self, *args, names=(), reach=REACH, engine=None, **kwargs):
+    def __init__(self, *args, spare=(), reach=REACH, engine=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.names = list(names)
+        self.spare = list(spare)       # names ticked "leave alone"
         self.reach = reach
         self.engine = engine or Engine(lambda text: self.emit("log", text), self.control)
         self.next_health = 0.
@@ -376,13 +383,13 @@ class LootRunner(VisualRunner):
             try:
                 self.checkpoint()
                 self.hide_pointer()
-                target = pick_target(self.engine.nearby(), self.names, skip=skip)
+                target = pick_target(self.engine.nearby(), self.spare, skip=skip)
                 if target is None:
                     waiting = self.clock() if waiting is None else waiting
                     if self.clock()-waiting >= IDLE_LIMIT:
                         self.emit("done", f"Nothing left to hunt: {len(skip)} left alone. {self.kills} killed.")
                         return
-                    self.emit("status", "No ticked NPC to fight here: waiting for one to appear.")
+                    self.emit("status", "No robot, mutant or animal to fight here: waiting for one to appear.")
                     self.my_health()
                     self.wait(3)
                     continue

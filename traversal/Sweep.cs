@@ -109,15 +109,22 @@ internal static class SweepPlan
     private sealed record Saved(float Cell, float[][] Points);
 }
 
-/// <summary>Who the sweep stops for: the living NPC nearest by walking, no further than a set walk, on the floor it stands on.</summary>
+/// <summary>Who the sweep stops for: the living creature nearest by walking, no further than a set walk, on the floor it stands on.</summary>
 internal static class SweepTargets
 {
-    public static (WorldEntity Npc, float Walk)? Next(NavWorld nav, Vector3 me, IEnumerable<WorldEntity> actors, IReadOnlySet<string> skip, float engage)
+    /// <summary>pak_factions: 16 Robot, 17 Mutant, 18 Wildlife. Never a human: no City Mercs, no LowSL, no faction left unread.</summary>
+    public static readonly IReadOnlySet<int> Prey = new HashSet<int> { 16, 17, 18 };
+
+    public static bool Hunted(WorldEntity e) => e.Identity.Kind == EntityKind.Npc && e.Stats?.FactionId is { } faction && Prey.Contains(faction);
+
+    /// <param name="names">Lower-case NPC names to hunt, exactly; empty means every robot, mutant and animal.</param>
+    public static (WorldEntity Npc, float Walk)? Next(NavWorld nav, Vector3 me, IEnumerable<WorldEntity> actors, IReadOnlySet<string> skip, float engage, IReadOnlySet<string>? names = null)
     {
         (WorldEntity Npc, float Walk)? best = null;
         foreach (var e in actors)
         {
-            if (e.Identity.Kind != EntityKind.Npc || FollowCommand.Dead(e) || skip.Contains(FollowCommand.Id(e))) continue;
+            bool wanted = names is { Count: > 0 } ? e.Identity.Kind == EntityKind.Npc && names.Contains(e.Name.Trim().ToLowerInvariant()) : Hunted(e);
+            if (!wanted || FollowCommand.Dead(e) || skip.Contains(FollowCommand.Id(e))) continue;
             if (Vector3.Distance(me, e.Position) > engage) continue;         // no walk is shorter than the straight line
             var route = nav.RouteNear(me, e.Position, out bool complete);
             if (route.Count < 2 || !complete || MathF.Abs(route[^1].Y - e.Position.Y) > 150) continue;
@@ -129,8 +136,8 @@ internal static class SweepTargets
 }
 
 /// <summary>
-/// sweep [--world N] [--from K --left C] [--skip id,id] [--engage 1500] [--calibration speed,gain] [--pulse N]: live. Walks the
-/// sector's sweep plan point by point, without running, and stops the moment a living NPC is within the engage walk, printing
+/// sweep [--world N] [--from K --left C] [--skip id,id] [--names a,b] [--engage 1500] [--calibration speed,gain] [--pulse N]: live. Walks the
+/// sector's sweep plan point by point, without running, and stops the moment a living robot, mutant or animal (never a human) is within the engage walk, printing
 /// "enemy &lt;id&gt; &lt;distance&gt; &lt;name&gt;". The hunt fights it and starts the sweep again from the point it was walking to.
 /// Prints "sweep next K left C of N" before each point and "swept" once every point is walked. A point that can't be walked
 /// to is skipped. Ends on F8, Stop, focus loss, or a zone change like every live walk.
@@ -157,6 +164,7 @@ internal static class SweepCommand
         int? world = Number("--world"), from = Number("--from"), left = Number("--left");
         float engage = Option("--engage") is { } e ? float.Parse(e, CultureInfo.InvariantCulture) : DefaultEngage;
         var skip = (Option("--skip") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var names = (Option("--names") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(n => n.ToLowerInvariant()).ToHashSet();
         LiveSteer.Calibration known = FollowWalk.Typical;
         if (Option("--calibration") is { } c)
         {
@@ -195,7 +203,7 @@ internal static class SweepCommand
                 {
                     if (clock.ElapsedMilliseconds < lookAt) return null;
                     lookAt = clock.ElapsedMilliseconds + LookEveryMs;
-                    found = SweepTargets.Next(nav, s.Position, FollowCommand.ReadSnapshot(reader).Entities, skip, engage);
+                    found = SweepTargets.Next(nav, s.Position, FollowCommand.ReadSnapshot(reader).Entities, skip, engage, names);
                     return found is { } f ? $"{f.Npc.Name} is {f.Walk:F0} units' walk away." : null;
                 },
             };

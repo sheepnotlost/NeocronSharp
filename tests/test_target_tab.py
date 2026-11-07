@@ -168,9 +168,12 @@ class TargetTabTests(unittest.TestCase):
                 self.tab.poll()
         self.assertIn("boom", self.tab.status.get())
 
-    def test_enemy_list_groups_living_npcs_and_never_lists_players(self):
-        actors = [{"name": "Rat", "kind": "npc", "distance": 900., "dead": False}, {"name": "rat", "kind": "npc", "distance": 40., "dead": False},
-                  {"name": "Rat", "kind": "npc", "distance": 1., "dead": True}, {"name": "Spider", "kind": "npc", "distance": 10., "dead": False},
+    def test_enemy_list_groups_living_creatures_and_never_lists_players_or_humans(self):
+        actors = [{"name": "Rat", "kind": "npc", "distance": 900., "dead": False, "faction": 18},
+                  {"name": "rat", "kind": "npc", "distance": 40., "dead": False, "faction": 18},
+                  {"name": "Rat", "kind": "npc", "distance": 1., "dead": True, "faction": 18},
+                  {"name": "Spider", "kind": "npc", "distance": 10., "dead": False, "faction": 17},
+                  {"name": "Corporal Lines / CityMercs", "kind": "npc", "distance": 3., "dead": False, "faction": 11},
                   {"name": "Buddy", "kind": "player", "distance": 5., "dead": False}]
         self.assertEqual([(r["name"], r["alive"], r["nearest"]) for r in target_tab.enemy_rows(actors, ["Ghoul"])],
                          [("Spider", 1, 10.), ("Rat", 2, 40.), ("Ghoul", 0, None)])
@@ -202,7 +205,7 @@ class TargetTabTests(unittest.TestCase):
         self.tab.start_dungeon()
         self.assertIsNotNone(self.tab.looting)
         self.assertEqual(str(self.tab.dungeon_button.cget("state")), "disabled")
-        self.assertIn("Regant's Legacy: every NPC", self.log())
+        self.assertIn("Regant's Legacy: every Genotoxic Parasite, Slugger and Crawler", self.log())
         self.root.after_cancel(self.tab.loot_start)
         with patch.object(target_tab.clients, "focus"):
             self.tab.begin_dungeon(4000)
@@ -216,9 +219,6 @@ class TargetTabTests(unittest.TestCase):
         self.tab.update_buttons()
         self.assertEqual(str(self.tab.hunt_button.cget("state")), "normal")
         with patch.object(self.tab.root, "after") as after:
-            self.tab.start_hunt()
-            self.assertIn("Tick an enemy", self.tab.status.get())
-            self.tab.tick_enemy("Copbot")
             self.tab.reach.set("nope")
             self.tab.start_hunt()
             self.assertIn("40 to 6000", self.tab.status.get())
@@ -357,3 +357,25 @@ class AppTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpareTests(unittest.TestCase):
+    def test_nothing_ticked_starts_the_hunt_and_regants_legacy_starts_the_sweep(self):
+        root = tk.Tk(); root.withdraw()
+        frame = tk.Frame(root); frame.pack()
+        with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
+            tab = target_tab.TargetTab(frame, root, autoload=False, loot_runner=lambda *a: None, dungeon_runner=lambda *a: None)
+        try:
+            tab.show_nearby(("ok", NEARBY))
+            with patch.object(root, "after") as after:
+                tab.start_hunt()
+            self.assertIn("every robot, mutant and animal here; never humans or players", tab.log.get("1.0", "end"))
+            after.assert_called_once()
+            tab.looting = None
+            tab.show_nearby(("ok", {**NEARBY, "sector": target_tab.INSIDE}))
+            with patch.object(root, "after"):
+                tab.start_hunt()
+            self.assertIn("Regant's Legacy: every Genotoxic", tab.log.get("1.0", "end"))
+            tab.looting = None
+        finally:
+            tab.close(); root.destroy()

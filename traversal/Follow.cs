@@ -90,6 +90,7 @@ internal static class FollowCommand
                 entities = rows.Select(n => new
                 {
                     id = Id(n.Entity), name = n.Entity.Name, kind = Kind(n.Entity), distance = Round(n.GroundDistance), dead = Dead(n.Entity),
+                    faction = n.Entity.ReferenceData?.FactionName, factionId = n.Entity.Stats?.FactionId,
                     x = Round(n.Entity.Position.X), y = Round(n.Entity.Position.Y), z = Round(n.Entity.Position.Z),
                 }).ToList(),
             };

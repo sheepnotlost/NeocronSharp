@@ -3,7 +3,8 @@
 Follow's target list without the walk: the work is done by traversal.exe's "camera" command,
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
-The hunt (loot_runner.py) repeats walk, fight, run and loot on the NPC names ticked in the enemy list, anywhere in the zone.
+The hunt (loot_runner.py) repeats walk, fight, run and loot on every robot, mutant and animal in the zone, except names ticked
+"leave alone" in the enemy list; never a human NPC or a player. In Regant's Legacy Start hunt is the dungeon sweep instead.
 Hunt Regant's Legacy (dungeon_runner.py) walks that dungeon's main area a room at a time, kills every NPC as it comes near,
 then goes out, waits for the place to fill up again, and goes back in.
 Follow and heal runs on the healer's own PC (or VM), one Neocron client there, with the fighter played on another computer:
@@ -20,7 +21,8 @@ from tkinter import ttk
 
 import clients
 import traversal_tab as tt
-from loot_runner import REACH, REACH_MOST
+from dungeon_runner import INSIDE, OUTSIDE
+from loot_runner import REACH, REACH_MOST, hunted
 from macro_core import Control
 
 
@@ -35,10 +37,10 @@ log_box = tt.log_box
 
 
 def enemy_rows(actors, ticked=()):
-    """One row per NPC name, living ones only, nearest first, then any ticked name with none alive here now."""
+    """One row per name the hunt would fight (no humans), living ones only, nearest first, then any ticked name with none alive here now."""
     rows = {}
     for actor in actors:
-        if actor["kind"] == "npc" and not actor["dead"]:
+        if hunted(actor) and not actor["dead"]:
             row = rows.setdefault(actor["name"].lower(), {"name": actor["name"], "alive": 0, "nearest": actor["distance"]})
             row["alive"] += 1
             row["nearest"] = min(row["nearest"], actor["distance"])
@@ -54,7 +56,8 @@ class TargetTab:
         self.other_live = other_live        # a walk, follow or job loop is steering the same mouse
         self.loot_runner = loot_runner      # makes a LootRunner(names, reach, emit, control) bound to the game
         self.dungeon_runner = dungeon_runner    # makes a DungeonRunner(reach, emit, control) bound to the game
-        self.hunted = {}                    # ticked enemies: lower-case name -> name
+        self.hunted = {}                    # names ticked "leave alone": lower-case name -> name (kept name for old callers)
+        self.sector = None                  # the zone the last Refresh read
         self.heal_name = None               # the fighter a healer alone keeps going back to
         self.heal_retry = None              # its next look
         self.last_line = ""                 # the engine's latest words
@@ -116,9 +119,9 @@ class TargetTab:
             hunting.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
         hunting.columnconfigure(0, weight=1)
         hunting.rowconfigure(1, weight=1)
-        ttk.Label(hunting, text="Enemies in this zone: click to tick who to hunt").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        ttk.Label(hunting, text="Enemies here (no humans): tick any to leave alone").grid(row=0, column=0, sticky="w", pady=(0, 4))
         self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
-        for column, text, width, anchor in (("hunt", "Hunt", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
+        for column, text, width, anchor in (("hunt", "Spare", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
                                             ("nearest", "Nearest", 70, "e")):
             self.enemies.heading(column, text=text, anchor=anchor)
             self.enemies.column(column, width=width, anchor=anchor, stretch=column == "name")
@@ -270,8 +273,9 @@ class TargetTab:
             self.actors = []
             self.status.set(f"Cannot read the game: {data.get('why')}")
         else:
+            self.sector = data.get("sector")
             self.actors = [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
-                            "dead": bool(e.get("dead"))} for e in data.get("entities", [])]
+                            "dead": bool(e.get("dead")), "faction": e.get("factionId")} for e in data.get("entities", [])]
             players = sum(1 for a in self.actors if a["kind"] == "player")
             self.status.set(f"{data.get('sectorName') or 'This zone'}  ·  {tt.plural(players, 'player')} and "
                             f"{tt.plural(len(self.actors) - players, 'NPC')} around you")
@@ -421,14 +425,17 @@ class TargetTab:
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
 
     def start_hunt(self):
+        if self.sector in (INSIDE, OUTSIDE) and self.dungeon_runner:
+            return self.start_dungeon()         # Regant's Legacy: the sweep through it, not the zone hunt
         names, reach = list(self.hunted.values()), self.reach_units()
-        problem = self.hunt_problem(names, reach)
+        problem = self.hunt_problem(None, reach)
         if problem:
             self.status.set(problem)
             self.append(problem)
             return
         self.looting = Control()
-        self.append(f"Hunt: {', '.join(names)}. Click into Neocron now. Starting in 5 s...")
+        spared = f", leaving {', '.join(names)} alone" if names else ""
+        self.append(f"Hunt: every robot, mutant and animal here{spared}; never humans or players. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
         self.loot_start = self.root.after(5000, self.begin_hunt, names, reach)
 
@@ -463,7 +470,7 @@ class TargetTab:
             self.append(problem)
             return
         self.looting = Control()
-        self.append("Regant's Legacy: every NPC in the main area, one at a time, then out for 5 min and back in. "
+        self.append("Regant's Legacy: every Genotoxic Parasite, Slugger and Crawler in the main area, one at a time, then out for 5 min and back in. "
                     "Start inside it or outside its door. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
         self.loot_start = self.root.after(5000, self.begin_dungeon, reach)
