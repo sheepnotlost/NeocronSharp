@@ -185,6 +185,7 @@ class ConstructionRunner(VisualRunner):
         except Exception:pass
 
     TOOLTIP_WAIT=.9  # s a hovered stack gets to show its tooltip; the game takes about .3 s (7 Nov)
+    HOVER_LIMIT=3.   # s the fast search stays on a stack whose tooltip hasn't been read yet (lag: 7 Nov)
 
     def locate_blueprint(self):
         self.emit("status", f"{self.name}: {'fast datacube search' if self.search_mode=='fast' else 'thorough every-cell search'}.")
@@ -238,18 +239,28 @@ class ConstructionRunner(VisualRunner):
                 self.move(candidate["point"])
                 identity=None
                 arrived,attempt=self.clock(),-1
+                last=None;rehovered=False
                 while True:
                     attempt+=1
-                    # Fast: keep looking until the game has had time to show the tooltip (~.3 s live);
-                    # a few quick reads can all come before it (7 Nov). Thorough: four reads as before.
-                    if attempt>=4 and (self.search_mode!="fast" or self.clock()-arrived>=self.TOOLTIP_WAIT):break
+                    if self.search_mode=="fast":
+                        # Stay on the stack until its tooltip has been read: a lagging game shows it late
+                        # (7 Nov: the right cube was hovered and left unread). Two reads in a row must agree;
+                        # one that stays unreadable gets the pointer off and back once, then up to HOVER_LIMIT.
+                        if identity not in (None,"unknown") and identity==last:break
+                        last=identity
+                        if self.clock()-arrived>=self.HOVER_LIMIT:
+                            if identity is None or rehovered:break
+                            rehovered=True
+                            self.step_aside();self.wait(.3);self.move(candidate["point"])
+                            arrived,last=self.clock(),None
+                    elif attempt>=4:break
                     self.wait((.10 if self.search_mode=="fast" else .035) if attempt==0 else .05 if attempt==1 else .035)
                     hover=self.inventory_frame(inventory,candidate["point"])
                     if not self.same_window(self.detector.current_inventory(hover,inventory,checkpoint=self.guard),inventory):
                         relocated=True
                         break
                     identity=self.detector.tooltip_recipe(hover,candidate["point"],inventory.scale)
-                    if identity not in (None,"unknown"):
+                    if identity not in (None,"unknown") and self.search_mode!="fast":
                         break
                     if self.search_mode!="fast" and identity is None and attempt==0 and current_snapshot is not None:
                         # All cells receive a hover. Only extra delayed-read
@@ -279,7 +290,7 @@ class ConstructionRunner(VisualRunner):
                     arrived,attempt=self.clock(),-1
                     while True:
                         attempt+=1
-                        if attempt>=6 and self.clock()-arrived>=self.TOOLTIP_WAIT:break
+                        if attempt>=6 and self.clock()-arrived>=self.HOVER_LIMIT:break
                         self.wait(.065 if attempt==0 else .035)
                         hover=self.frame()
                         if not self.same_window(self.detector.current_inventory(hover,inventory,checkpoint=self.guard),inventory):
