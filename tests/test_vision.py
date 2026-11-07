@@ -284,47 +284,55 @@ class DetectionTests(unittest.TestCase):
                 self.assertEqual(len(found[name]), 1, (scale, name, found))
 
 
-class WordsReader:
-    """Stands in for Windows text recognition: the words it would read, in frame pixels."""
-    def __init__(self, words):
-        self.words = words
-
-    def read_words(self, gray, up=3):
-        return list(self.words)
-
-
-class ProcessorByWordsTests(unittest.TestCase):
-    """The VM's game draws PROCESSOR and START in blocky capitals the pictures don't match (7 Nov)."""
-    def frame(self):
-        frame = np.full((768, 1024, 3), 60, dtype=np.uint8)
-        frame[300:308, 100:160] = np.random.default_rng(1).integers(0, 255, (8, 60, 1), dtype=np.uint8)
+class ProcessorOutlineTests(unittest.TestCase):
+    """The VM's game draws PROCESSOR and START in blocky capitals the pictures don't match (7 Nov):
+    its outline still finds it."""
+    def frame(self, at=(40, 250), scale=.78, words=False):
+        image = read_image("processor_idle")
+        if not words:          # another font: the title and Start pictures no longer match
+            for x1, y1, x2, y2 in ((40, 2, 160, 22), (405, 160, 490, 200)):
+                image[y1:y2, x1:x2] = cv2.GaussianBlur(image[y1:y2, x1:x2], (0, 0), 4)
+        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        frame = np.zeros((768, 1024, 3), dtype=np.uint8)
+        frame[:] = (65, 70, 60)
+        x, y = at
+        frame[y:y+image.shape[0], x:x+image.shape[1]] = image
         return frame
 
-    def detector(self, words):
+    def test_another_font_is_found_by_its_outline_and_held_until_it_moves(self):
         detector = Detector()
-        detector.reader = WordsReader(words)
-        return detector
-
-    def test_title_and_start_place_the_window_and_the_menu_bar_word_is_ignored(self):
-        detector = self.detector([("PROCESSOR", 600, 5, 60, 8), ("PROCESSOR", 100, 300, 60, 8), ("START", 385, 424, 34, 8)])
         frame = self.frame()
+        with self.assertRaises(NotFound):
+            detector.processor_by_pictures(frame)
         anchor = detector.processor(frame)
-        self.assertAlmostEqual(anchor.scale, .749, places=2)
-        self.assertEqual((anchor.x, anchor.y), (87, 298))
-        self.assertEqual(anchor.start_point(), [402, 428])
-        detector.reader = WordsReader([])
-        self.assertEqual(detector.processor(frame), anchor)          # held while its title is there
-        frame[300:308, 100:160] = 0
-        with self.assertRaises(NotFound):
-            detector.processor(frame)
+        self.assertAlmostEqual(anchor.scale, .78, delta=.02)
+        self.assertAlmostEqual(anchor.x, 40+26*.78, delta=2)
+        self.assertAlmostEqual(anchor.y, 250, delta=2)
+        start = anchor.start_point()
+        self.assertAlmostEqual(start[0], 40+448*.78, delta=1)        # Start's own border places the click
+        self.assertAlmostEqual(start[1], 250+174*.78, delta=1)
+        self.assertEqual(detector.processor(frame), anchor)          # held: no new search
+        moved = detector.processor(self.frame(at=(300, 100)))
+        self.assertAlmostEqual(moved.x, 300+26*.78, delta=2)
 
-    def test_stop_alone_still_gives_start_above_it(self):
-        anchor = self.detector([("PROCESSOR", 100, 300, 60, 8), ("STOP", 385, 436, 34, 8)]).processor_by_words(self.frame())
-        self.assertEqual(anchor.start_point(), [402, 428])
-
-    def test_a_title_with_no_button_where_the_window_puts_it_is_not_the_processor(self):
+    def test_a_covered_start_button_is_not_clicked(self):
+        frame = self.frame()
+        frame[250+120:250+163, 40+300:40+403] = (30, 35, 30)
         with self.assertRaises(NotFound):
-            self.detector([("PROCESSOR", 600, 5, 60, 8), ("START", 385, 600, 34, 8)]).processor_by_words(self.frame())
+            Detector().processor(frame)
+
+    def test_no_processor_is_not_found(self):
+        frame = np.zeros((768, 1024, 3), dtype=np.uint8)
+        frame[:] = (65, 70, 60)
+        frame[100:140, 100:600] = (40, 200, 60)                    # a green bar is not the window
+        with self.assertRaises(NotFound):
+            Detector().processor(frame)
+
+    def test_two_windows_are_not_guessed_between(self):
+        frame = self.frame()
+        frame[500:500+163, 500:500+403] = self.frame()[250:250+163, 40:40+403]
+        with self.assertRaises(Ambiguous):
+            Detector().processor_by_outline(frame)
 
 
 if __name__ == "__main__":

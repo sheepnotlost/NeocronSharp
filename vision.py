@@ -85,7 +85,7 @@ class Detector:
         self.tooltip_text_scale = None
         self.last_tooltip_raw = ""
         self.last_start_score = 0.
-        self.text_processor = None
+        self.outline_processor = None
         self.recipes=RECIPES
         self.reader=None
         self.last_tooltip_text=""
@@ -168,7 +168,7 @@ class Detector:
         return frame[y1:y2, x1:x2]
 
     def processor(self, frame, checkpoint=lambda: None):
-        """The Processor by its pictures; failing that, by its words on screen (any font)."""
+        """The Processor by its title and Start pictures; failing that, by its outline (any font)."""
         held = self.processor_held(frame)
         if held is not None:
             return held
@@ -176,76 +176,141 @@ class Detector:
             return self.processor_by_pictures(frame, checkpoint)
         except NotFound as missed:
             try:
-                return self.processor_by_words(frame, checkpoint)
+                return self.processor_by_outline(frame, checkpoint)
             except NotFound:
                 raise missed from None
 
-    # Where "PROCESSOR" starts and where the Start button's middle is, in window units:
-    # the same in every font (the VM's game draws them in blocky capitals, 7 Nov).
-    TITLE_AT, START_AT, STOP_BELOW = (18, 3), (421, 174), 16
+    # The VM's game draws PROCESSOR and START in blocky capitals that the title and
+    # Start pictures never match, and Windows text recognition can't read them (7 Nov).
+    # The window's outline is the same in every font: its bright green lines, leaving
+    # out the words, the slots, the progress bar and the buttons. Real windows score
+    # .67 or more (.70 on a blurred VM screenshot), game views without one .45 or less.
+    OUTLINE_LEFT = 26                    # processor_frame.png starts this far left of the anchor
+    OUTLINE_HIDDEN = ((30, 0, 175, 24), (450, 5, 510, 32), (40, 55, 390, 155), (40, 160, 390, 200), (400, 150, 500, 205))
+    OUTLINE_SCORE = .58
+    # Start and Stop's own borders, without their words: a covered Start is never clicked
+    # (seen .73 to 1 with the VM's and the main PC's, busy or not; .2 or less covered).
+    BUTTONS, BUTTON_WORDS, BUTTON_SCORE = (398, 155, 500, 206), (418, 164, 484, 200), .5
+
+    @staticmethod
+    def greenness(rgb):
+        r, g, b = (rgb[:, :, i].astype(np.float32) for i in range(3))
+        return np.clip(g - np.maximum(r, b), 0, 255)
+
+    def outline(self, scale):
+        key = ("processor_outline", scale)
+        if key not in self.scaled:
+            if "processor_frame" not in self.templates:
+                data = cv2.imread(str(ROOT / "assets" / "processor_frame.png"))
+                if data is None:
+                    raise RuntimeError("Missing visual template: processor_frame.")
+                self.templates["processor_frame"] = cv2.cvtColor(data, cv2.COLOR_BGR2RGB)
+            green = self.greenness(self.templates["processor_frame"])
+            mask = (green > 60).astype(np.uint8)
+            for x1, y1, x2, y2 in self.OUTLINE_HIDDEN:
+                mask[y1:y2, x1:x2] = 0
+            w, h = max(1, round(green.shape[1]*scale)), max(1, round(green.shape[0]*scale))
+            self.scaled[key] = (cv2.resize(green, (w, h), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR),
+                                cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST))
+        return self.scaled[key]
+
+    START_IN_OUTLINE = (448, 174)        # Start's middle in processor_frame.png
+
+    def start_button(self, green, anchor):
+        """Start's middle, found by Start and Stop's own borders near where the outline puts them; None if they aren't there."""
+        key = ("processor_buttons", anchor.scale)
+        if key not in self.scaled:
+            self.outline(1)
+            whole = self.greenness(self.templates["processor_frame"])
+            x1, y1, x2, y2 = self.BUTTONS
+            picture = whole[y1:y2, x1:x2]
+            mask = (picture > 60).astype(np.uint8)
+            a1, b1, a2, b2 = self.BUTTON_WORDS
+            mask[b1-y1:b2-y1, a1-x1:a2-x1] = 0
+            w, h = round(picture.shape[1]*anchor.scale), round(picture.shape[0]*anchor.scale)
+            self.scaled[key] = (cv2.resize(picture, (w, h), interpolation=cv2.INTER_AREA if anchor.scale < 1 else cv2.INTER_LINEAR),
+                                cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST))
+        picture, mask = self.scaled[key]
+        h, w = picture.shape
+        x = round(anchor.x + (self.BUTTONS[0]-self.OUTLINE_LEFT)*anchor.scale)
+        y = round(anchor.y + self.BUTTONS[1]*anchor.scale)
+        patch = green[max(0, y-4):y+h+4, max(0, x-4):x+w+4]
+        if patch.shape[0] < h or patch.shape[1] < w or not mask.any():
+            return False
+        scores = cv2.matchTemplate(patch, picture, cv2.TM_CCOEFF_NORMED, mask=mask)
+        scores[~np.isfinite(scores)] = -1
+        _, score, _, (bx, by) = cv2.minMaxLoc(scores)
+        if score < self.BUTTON_SCORE:
+            return None
+        left, top = max(0, x-4)+bx, max(0, y-4)+by
+        return (math.floor(left + (self.START_IN_OUTLINE[0]-self.BUTTONS[0])*anchor.scale + .5),
+                math.floor(top + (self.START_IN_OUTLINE[1]-self.BUTTONS[1])*anchor.scale + .5))
+
+    def outline_score(self, green, scale, box=None):
+        """Best outline score and where its picture's top left is, within box (x1, y1, x2, y2) or anywhere."""
+        picture, mask = self.outline(scale)
+        h, w = picture.shape
+        x0 = y0 = 0
+        if box is not None:
+            x0, y0 = max(0, box[0]), max(0, box[1])
+            green = green[y0:min(green.shape[0], box[3]+h), x0:min(green.shape[1], box[2]+w)]
+        if green.shape[0] < h or green.shape[1] < w or not mask.any():
+            return -1., (0, 0), None
+        scores = cv2.matchTemplate(green, picture, cv2.TM_CCOEFF_NORMED, mask=mask)
+        scores[~np.isfinite(scores)] = -1
+        _, score, _, (x, y) = cv2.minMaxLoc(scores)
+        return float(score), (x0+x, y0+y), scores
 
     def processor_held(self, frame):
-        """The window found by its words last time, while its title is still there."""
-        if self.text_processor is None:
+        """The window found by its outline last time, while its outline is still there."""
+        if self.outline_processor is None:
             return None
-        anchor, (x, y), title = self.text_processor
-        h, w = title.shape
-        gray = self.gray(frame)
-        patch = gray[max(0, y-3):y+h+3, max(0, x-3):x+w+3]
-        if patch.shape[0] < h or patch.shape[1] < w or                 float(cv2.matchTemplate(patch, title, cv2.TM_CCOEFF_NORMED).max()) < .80:
-            self.text_processor = None
+        anchor, (x, y), found = self.outline_processor
+        green = self.greenness(frame)
+        score, _, _ = self.outline_score(green, anchor.scale, (x-3, y-3, x+3, y+3))
+        start = self.start_button(green, anchor) if score >= max(self.OUTLINE_SCORE, found-.12) else None
+        if start is None:
+            self.outline_processor = None
             return None
-        return anchor
+        return Anchor(anchor.x, anchor.y, anchor.scale, anchor.score, start)
 
-    def processor_by_words(self, frame, checkpoint=lambda: None):
-        """Read "PROCESSOR" and "START" (or "STOP") on screen and place the window from them.
-
-        The menu bar has a PROCESSOR too; only a title with its Start button where the
-        window puts it counts."""
-        gray = self.gray(frame)
-        try:
-            reader = self.text_reader()
-            # The VM's title is dark on green but START and STOP light on dark, so both
-            # readings count; small blocky letters may need the larger zoom.
-            words = []
-            for up in (2, 3):
-                for image in (gray, 255-gray):
-                    checkpoint()
-                    words += reader.read_words(image, up=up)
-                if any(w[0].upper().startswith("PROCESSOR") for w in words) and any(w[0].upper().strip(".:") in ("START", "STOP") for w in words):
-                    break
-        except (ImportError, OSError, RuntimeError) as error:
-            raise NotFound(f"Processor words could not be read: {error}") from None
-        titles = [w for w in words if w[0].upper().startswith("PROCESSOR")]
-        buttons = [w for w in words if w[0].upper().strip(".:") in ("START", "STOP")]
-        tx_at, ty_at = self.START_AT[0]-self.TITLE_AT[0], self.START_AT[1]-self.TITLE_AT[1]
-        found = []
-        for _, x, y, w, h in titles:
-            for text, bx, by, bw, bh in buttons:
-                cx, cy = bx + bw/2, by + bh/2
-                across, down = (cx-x)/tx_at, (cy-y)/ty_at
-                if text.upper().strip(".:") == "STOP":
-                    down = (cy-y)/(ty_at+self.STOP_BELOW)
-                if not (.5 <= across <= 2.2) or abs(down-across) > .12*across:
-                    continue
-                scale = round(across, 3)
-                start = (math.floor(cx+.5), math.floor(cy - (self.STOP_BELOW*scale if text.upper().strip(".:") == "STOP" else 0)+.5))
-                anchor = Anchor(math.floor(x-self.TITLE_AT[0]*scale+.5), math.floor(y-self.TITLE_AT[1]*scale+.5),
-                                scale, 1., start)
-                try:
-                    self.region(frame, anchor, (-26, 0, 490, 208))
-                except NotFound:
-                    continue
-                found.append((anchor, (x, y, w, h)))
+    def processor_by_outline(self, frame, checkpoint=lambda: None):
+        """Find the window by its outline: a half-size look over every size, then full size where it looked best."""
+        green = self.greenness(frame)
+        small = cv2.resize(green, None, fx=.5, fy=.5, interpolation=cv2.INTER_AREA)
+        guesses = []
+        for scale in self.DENSE_SCALES:
+            checkpoint()
+            if scale > 1.4:
                 break
-        # Each reading finds the same window again; only one apart from the first is a second window.
-        if any(abs(a.x-found[0][0].x) > 20*a.scale or abs(a.y-found[0][0].y) > 20*a.scale for a, _ in found[1:]):
+            score, (x, y), _ = self.outline_score(small, round(scale*.5, 4))
+            guesses.append((score, scale, x*2, y*2))
+        guesses.sort(reverse=True)
+        best = None
+        for _, scale, x, y in guesses[:3]:
+            for factor in (.98, 1, 1.02):
+                checkpoint()
+                size = round(scale*factor, 3)
+                score, at, _ = self.outline_score(green, size, (x-6, y-6, x+6, y+6))
+                if best is None or score > best[0]:
+                    best = (score, size, at)
+        if best is None or best[0] < self.OUTLINE_SCORE:
+            raise NotFound("Processor outline not found either.")
+        score, scale, (x, y) = best
+        # A second window as good somewhere else: don't guess which.
+        _, _, scores = self.outline_score(green, scale)
+        h, w = self.outline(scale)[0].shape
+        scores[max(0, y-h//2):y+h//2, max(0, x-w//2):x+w//2] = -1
+        if scores.max() >= max(self.OUTLINE_SCORE, score-.1):
             raise Ambiguous("Multiple possible Processor windows found; no position selected.")
-        if not found:
-            raise NotFound("Processor window not found: its title and Start button could not be read either.")
-        anchor, (x, y, w, h) = found[0]
-        self.text_processor = (anchor, (x, y), gray[y:y+h, x:x+w].copy())
-        self.last_scale = anchor.scale
+        anchor = Anchor(math.floor(x+self.OUTLINE_LEFT*scale+.5), y, scale, score)
+        self.region(frame, anchor, (-26, 0, 490, 208))
+        start = self.start_button(green, anchor)
+        if start is None:
+            raise NotFound("Processor Start control is hidden or unrecognized.")
+        anchor = Anchor(anchor.x, anchor.y, scale, score, start)
+        self.outline_processor = (anchor, (x, y), score)
+        self.last_scale = scale
         return anchor
 
     def processor_by_pictures(self, frame, checkpoint=lambda: None):
