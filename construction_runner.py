@@ -169,6 +169,8 @@ class ConstructionRunner(VisualRunner):
                     self.emit("status",f"{self.name}: Inventory did not scroll to the top; searching down from here.")
         self.step_aside()
 
+    TOOLTIP_WAIT=.9  # s a hovered stack gets to show its tooltip; the game takes about .3 s (7 Nov)
+
     def locate_blueprint(self):
         self.emit("status", f"{self.name}: {'fast datacube search' if self.search_mode=='fast' else 'thorough every-cell search'}.")
         relocations=0
@@ -215,7 +217,12 @@ class ConstructionRunner(VisualRunner):
                     self.step_aside();self.wait(.02)
                 self.move(candidate["point"])
                 identity=None
-                for attempt in range(4):
+                arrived,attempt=self.clock(),-1
+                while True:
+                    attempt+=1
+                    # Fast: keep looking until the game has had time to show the tooltip (~.3 s live);
+                    # a few quick reads can all come before it (7 Nov). Thorough: four reads as before.
+                    if attempt>=4 and (self.search_mode!="fast" or self.clock()-arrived>=self.TOOLTIP_WAIT):break
                     self.wait((.10 if self.search_mode=="fast" else .035) if attempt==0 else .05 if attempt==1 else .035)
                     hover=self.inventory_frame(inventory,candidate["point"])
                     if not self.same_window(self.detector.current_inventory(hover,inventory,checkpoint=self.guard),inventory):
@@ -237,17 +244,21 @@ class ConstructionRunner(VisualRunner):
                     # disappearance outside Inventory before confirming this
                     # exact cell again from a newly displayed tooltip.
                     self.step_aside()
-                    for _ in range(8):
+                    until=self.clock()+self.TOOLTIP_WAIT
+                    while True:
                         self.wait(.025)
                         cleared=self.frame()
                         if self.detector.tooltip_recipe(cleared,candidate["point"],inventory.scale) is None:break
-                    else:
-                        raise Interrupted("Previous blueprint tooltip did not clear. No transfer was attempted.")
+                        if self.clock()>=until:
+                            raise Interrupted("Previous blueprint tooltip did not clear. No transfer was attempted.")
                     current=self.detector.current_inventory(cleared,inventory,checkpoint=self.guard)
                     if not self.same_window(current,inventory):
                         relocated=True;break
                     self.move(candidate["point"])
-                    for attempt in range(6):
+                    arrived,attempt=self.clock(),-1
+                    while True:
+                        attempt+=1
+                        if attempt>=6 and self.clock()-arrived>=self.TOOLTIP_WAIT:break
                         self.wait(.065 if attempt==0 else .035)
                         hover=self.frame()
                         if not self.same_window(self.detector.current_inventory(hover,inventory,checkpoint=self.guard),inventory):

@@ -785,6 +785,13 @@ class Detector:
             end=next((i for i in range(20,len(bright)) if not bright[i]),len(bright))
             ends.append((end,row))
         end,bottom=max(ends)
+        # The bottom border can run on into bright item art beside the tooltip (7 Nov: a tooltip under
+        # Inventory's top row read "Weaponpart 91", the "1" being its right border). The right border is a
+        # line down the panel's whole height, top margin to bottom border, which no letter is; stop there.
+        if bottom>py+2:
+            inside=patch[py:bottom,px:px+end]>=70
+            edge=next((c for c in range(100,inside.shape[1]) if inside[:,c].all()),None)
+            if edge is not None and end-edge>4:end=edge+2      # only a run well past the edge; else as before
         import re
         if fallback not in self.recipes:fallback="unknown"
         if end<100:

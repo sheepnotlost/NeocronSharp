@@ -195,5 +195,21 @@ class UniformIntermediateScaleTests(unittest.TestCase):
                     self.assertEqual((state["busy"],state["result"]),expected,name)
 
 
+class TooltipBesideItemArtTests(unittest.TestCase):
+    def test_a_tooltip_under_the_top_row_is_not_read_past_its_own_panel(self):
+        # Recorded 7 Nov (video frame, Inventory at .94): the WP9 blueprint stack in the top row,
+        # its tooltip drawn below it, ending right beside a bright item icon. The border run went on
+        # into the icon and the right border read as a "1": "Weaponpart 91", so the 15 blueprints
+        # just brought from GoGuardian were never used. Replay, not live.
+        import numpy as np
+        from recipes import catalog
+        crop=cv2.cvtColor(cv2.imread(str(Path(__file__).parent/"fixtures"/"tooltip_below_top_row_wp9.png")),cv2.COLOR_BGR2RGB)
+        frame=np.zeros((1080,1920,3),np.uint8);frame[230:620,600:1400]=crop
+        detector=Detector();detector.recipes=catalog({})
+        inventory=detector.inventory(frame)
+        point=inventory.point(39+3*44.6+22.3,63+22.75)
+        self.assertEqual(detector.tooltip_recipe(frame,point,inventory.scale),"weaponpart_9",detector.last_tooltip_raw)
+
+
 if __name__=="__main__":
     unittest.main()
