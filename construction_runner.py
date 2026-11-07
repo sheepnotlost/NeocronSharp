@@ -444,16 +444,33 @@ class ConstructionRunner(VisualRunner):
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("A quantity dialog would not close.")
 
-    def transfer(self,label,source,destination,amount):
+    def transfer(self,label,source,destination,amount,have=None):
         """Drag source to destination() and enter amount in the dialog, tried again when the game lags. A dialog
-        that opened late belongs to the last drag: it is filled in, not dragged a second time."""
+        that opened late belongs to the last drag: it is filled in, not dragged a second time. With `have` (the
+        stack's count now), every try moves only what is still missing, so a transfer that already landed is never
+        repeated (7 Nov: stacks of 23, 24 and 29)."""
         def step(attempt):
-            if attempt>1 and self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
-                return self.enter_quantity(amount)
+            need=amount if have is None else amount-have()
+            dialog=attempt>1 and self.detector.quantity(self.frame(),checkpoint=self.guard) is not None
+            if need<=0:
+                if dialog:self.close_dialog(self.detector.quantity(self.frame(),checkpoint=self.guard))
+                return
+            if dialog:
+                return self.enter_quantity(need)
             where=destination()
             self.drag(source,where);self.step_aside()
-            self.enter_quantity(amount)
+            self.enter_quantity(need)
         self.retrying(label,step)
+
+    def have(self,code):
+        """The count of the Inventory stack labelled `code`: 0 with no such stack or no readable count."""
+        frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        reader=self.detector.text_reader()
+        for (col,row),(mask,words) in gogo.inventory_labels(reader,frame,inventory).items():
+            if any(gogo._close(word,code) for word in words):
+                below=gogo.inventory_cell(frame,inventory,col,row+1) if row+1<gogo.INVENTORY_ROWS else None
+                return gogo.read_count(reader,[gogo.inventory_cell(frame,inventory,col,row),below]) or 0
+        return 0
 
     def learn_gogo_labels(self,reader,window,cells,missing):
         """{ingredient: label} found by hovering GoGuardian stacks and reading the tooltip name."""
@@ -509,8 +526,15 @@ class ConstructionRunner(VisualRunner):
                 if where is None:
                     raise Interrupted("No free Inventory slot for the GoGuardian materials. Make room and restart.")
                 return where
+            # Never above a full stack of 15 (grease may be); a stack already part full only gets the rest.
+            grease="grease" in name.lower()
+            held=0 if grease else self.have(code)
+            amount=amount if grease else min(amount,gogo.BATCH-held)
+            if amount<=0:
+                self.emit("status",f"GoGuardian: {name} already at {held}; none moved.")
+                continue
             self.emit("status",f"GoGuardian: moving {amount} {name} to Inventory.")
-            self.transfer(f"GoGuardian {name}",point,destination,amount)
+            self.transfer(f"GoGuardian {name}",point,destination,amount+held,None if grease else (lambda code=code:self.have(code)))
         return len(plan)
 
     STASH_AT=gogo.BATCH  # finished parts go into GoGuardian once their Inventory stack holds 15 (the user's ask, 7 Nov)

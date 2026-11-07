@@ -190,6 +190,48 @@ class RefillSequenceTests(unittest.TestCase):
             runner.refill_from_gogo()
         self.assertFalse([e for e in events if e[0] == "drag"])
 
+    def counted(self, runner, held):
+        """Make Inventory's stacks hold `held[code]` (default 0), going up by what is typed into the dialog."""
+        runner.have = lambda code: held.get(code, 0)
+        return held
+
+    def test_a_stack_part_full_only_gets_the_rest(self):
+        runner, events, _ = self.runner()
+        self.counted(runner, {"GAM": 10})
+        runner.refill_from_gogo()
+        typed = [e[1] for e in events if e[0] == "type"]
+        self.assertIn(5, typed)                                  # Gamonin: 15 - 10
+        self.assertTrue(all(n <= gogo.BATCH for n in typed))
+
+    def test_a_full_stack_gets_nothing(self):
+        runner, events, _ = self.runner()
+        self.counted(runner, {"GAM": 15, "MET": 15, "SOL": 15, "STS": 15, "TIB": 15})
+        self.assertEqual(runner.refill_from_gogo(), 5)
+        self.assertFalse([e for e in events if e[0] in ("drag", "type")])
+
+    def test_a_retry_after_a_transfer_that_landed_does_not_drag_again(self):
+        runner, events, _ = self.runner()
+        held = {"GAM": 0}
+        runner.have = lambda code: held.get(code, 0)
+        drags = []
+        def drag(a, b):
+            drags.append(1)
+            held["GAM"] = 15                                     # it landed, though the dialog never showed
+        runner.drag = drag
+        runner.detector.quantity = lambda f, checkpoint=None, expected=False: None
+        runner.transfer("x", (1, 1), lambda: (2, 2), 15, lambda: held["GAM"])
+        self.assertEqual(len(drags), 1)
+
+    def test_grease_is_not_capped(self):
+        runner, events, _ = self.runner()
+        moved = []
+        runner.transfer = lambda label, source, destination, amount, have=None: moved.append((amount, have))
+        from unittest import mock
+        with mock.patch.object(gogo, "plan_refill", return_value=[("Construction Grease", "CGR", (5, 5), 40)]):
+            runner.have = lambda code: 99
+            runner.refill_from_gogo()
+        self.assertEqual(moved, [(40, None)])
+
     def retries(self, events):
         return [e[1] for e in events if e[0] == "status" and "Trying again" in e[1]]
 
