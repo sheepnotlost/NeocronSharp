@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import random
 
-from macro_core import Interrupted, ResearchRunner, STACKS, version
+from macro_core import Interrupted, ResearchRunner, STACKS, aside_spot, version
 from vision import Ambiguous, Detector, NotFound, cv2
 
 
@@ -22,7 +22,24 @@ class VisualRunner(ResearchRunner):
         frame = self.backend.capture()
         self.guard()
         self.last_frame = frame
+        shape = getattr(frame, "shape", None)
+        if shape is not None:
+            self.view = (shape[1], shape[0])     # whole game view; a hover's partial capture never sets this
         return frame
+
+    REST = (24, 80)      # the old resting spot, only for before any window has been found
+
+    def step_aside(self):
+        """Take the pointer a short way off what it just touched, to the nearest open spot beside the windows
+        the macro has found, so it hovers no item and covers nothing read next. Stays put when already clear."""
+        boxes = list((getattr(self.detector, "seen", None) or {}).values())
+        here = self.pointer_at()
+        size = getattr(self, "view", None)
+        spot = aside_spot(here, boxes, size) if boxes and here is not None and size else None
+        if spot is None:
+            self.move(self.REST)
+        elif tuple(spot) != tuple(here):
+            self.move(spot)
 
     def save_failure(self, error):
         # This is the last frame captured from the bound, focused game client.
@@ -95,7 +112,7 @@ class VisualRunner(ResearchRunner):
         source, destination = self.find_cycle(name)
         self.emit("status", f"{name}: Processor located; transferring one part.")
         self.drag(source, destination)
-        self.move((24, 80))
+        self.step_aside()
         elapsed = 0.0
         dialog = None
         while elapsed < self.settings["dialog_timeout"]:
@@ -109,7 +126,7 @@ class VisualRunner(ResearchRunner):
             if not dialog.get("one"):
                 self.click(dialog["field"])
                 self.type_one()
-                self.move((24, 80))
+                self.step_aside()
                 self.wait(self.settings["settle_seconds"])
             dialog = self.detector.quantity(self.frame(), checkpoint=self.guard)
             if dialog is None:
@@ -117,7 +134,7 @@ class VisualRunner(ResearchRunner):
             if not dialog.get("one"):
                 raise Interrupted("Could not verify quantity 1. The dialog was left open; no research was started.")
             self.click(dialog["ok"])
-            self.move((24, 80))
+            self.step_aside()
             self.wait(self.settings["settle_seconds"])
             if self.detector.quantity(self.frame(), checkpoint=self.guard) is not None:
                 raise Interrupted("Quantity dialog did not close. No research was started.")
@@ -128,7 +145,7 @@ class VisualRunner(ResearchRunner):
         if not self.detector.occupied(frame, processor, self.input_index):
             raise Interrupted("No part recognized in the input slot. No research was started.")
         self.click(processor.start_point())
-        self.move((24, 80))
+        self.step_aside()
 
     def await_visual(self, name):
         empty_samples = 0
@@ -209,7 +226,7 @@ class BlueprintRunner(VisualRunner):
                     again = True
                     self.emit("status", f"Blueprint: no progress {START_AGAIN} s after Start; clicking Start once more.")
                     self.click(processor.start_point())
-                    self.move((24, 80))
+                    self.step_aside()
                 elif self.clock() - told >= NO_PROGRESS_EVERY:
                     told = self.clock()
                     percent, filled = getattr(self.detector, "last_progress", (0., 0.))
@@ -237,7 +254,7 @@ class BlueprintRunner(VisualRunner):
                 # Completion already has three idle observations. Re-verify the
                 # current location once before clicking, without an extra idle wait.
                 self.click(processor.start_point())
-                self.move((24, 80))
+                self.step_aside()
                 clicked = self.clock()
                 self.emit("status", "Blueprint: Start clicked; waiting for progress and a new blueprint result.")
                 made = self.await_blueprint(clicked=clicked)

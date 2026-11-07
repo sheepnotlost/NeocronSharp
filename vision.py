@@ -54,6 +54,10 @@ class Anchor:
         return list(self.start) if self.start is not None else self.point(421, 174)
 
 
+# Each window's outline around its anchor, in its own units: the pointer rests outside these (7 Nov).
+WINDOW_BOXES = {"processor": (-30, -8, 494, 212), "inventory": (-28, -8, 485, 360), "quantity": (-16, -14, 334, 56)}
+
+
 class Detector:
     def __init__(self):
         self.templates = {}
@@ -86,6 +90,7 @@ class Detector:
         self.last_tooltip_raw = ""
         self.last_start_score = 0.
         self.outline_processor = None
+        self.seen = {}               # window name -> (left, top, right, bottom) where it was last found
         self.recipes=RECIPES
         self.reader=None
         self.last_tooltip_text=""
@@ -167,7 +172,16 @@ class Detector:
             raise NotFound("Window controls extend beyond the visible game client.")
         return frame[y1:y2, x1:x2]
 
+    def saw(self, name, anchor):
+        """Remember where a window was found (game-view pixels), so the pointer can rest clear of it."""
+        box = WINDOW_BOXES[name]
+        self.seen[name] = tuple(anchor.point(box[0], box[1]) + anchor.point(box[2], box[3]))
+        return anchor
+
     def processor(self, frame, checkpoint=lambda: None):
+        return self.saw("processor", self.processor_found(frame, checkpoint))
+
+    def processor_found(self, frame, checkpoint=lambda: None):
         """The Processor by its title and Start pictures; failing that, by its outline (any font)."""
         held = self.processor_held(frame)
         if held is not None:
@@ -640,6 +654,9 @@ class Detector:
         return inventory,candidates
 
     def current_inventory(self, frame, inventory, checkpoint=lambda: None):
+        return self.saw("inventory", self.current_inventory_found(frame, inventory, checkpoint))
+
+    def current_inventory_found(self, frame, inventory, checkpoint=lambda: None):
         # Verify the current title/load labels in small fresh crops instead of
         # doing a whole-screen template search for every rapid hover. A failed
         # local check triggers full localization; the old anchor is never used
@@ -1047,6 +1064,9 @@ class Detector:
         return candidates[0][1] if candidates else None
 
     def inventory(self, frame, checkpoint=lambda: None):
+        return self.saw("inventory", self.inventory_found(frame, checkpoint))
+
+    def inventory_found(self, frame, checkpoint=lambda: None):
         gray = self.gray(frame)
         # Text is opaque; window trim includes the changing 3D scene behind it.
         # Verify the load labels before accepting a title, because the game's
@@ -1315,6 +1335,14 @@ class Detector:
         return None
 
     def quantity(self, frame, checkpoint=lambda: None, expected=False):
+        dialog = self.quantity_found(frame, checkpoint, expected)
+        if dialog is None:
+            self.seen.pop("quantity", None)
+        else:
+            self.seen["quantity"] = dialog["box"]
+        return dialog
+
+    def quantity_found(self, frame, checkpoint=lambda: None, expected=False):
         # Inventory already establishes the UI scale during construction.
         # Keep exact title verification, avoiding seven full-size scale scans
         # when no dialog is open; retain the raster-jitter fallback.
@@ -1364,7 +1392,9 @@ class Detector:
                 union = np.logical_or(glyph, self.quantity_one).sum()
                 confirmations+=np.logical_and(glyph, self.quantity_one).sum()/max(1,union)>=.65
         is_one=not multiple and confirmations>=2
-        return {"field": anchor.point(177, 25), "ok": anchor.point(286, 25), "one": bool(is_one), "scale": anchor.scale}
+        box = WINDOW_BOXES["quantity"]
+        return {"field": anchor.point(177, 25), "ok": anchor.point(286, 25), "one": bool(is_one), "scale": anchor.scale,
+                "box": tuple(anchor.point(box[0], box[1]) + anchor.point(box[2], box[3]))}
 
     QUANTITY_HALF_X = 214      # Half's left edge right of the title, at one scale for words and buttons
 

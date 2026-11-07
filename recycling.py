@@ -59,7 +59,7 @@ class RecyclingRunner(VisualRunner):
         seen_busy=seen_busy or self.detector.progress_busy(frame,processor)
         if not seen_busy:
             self.click(processor.start_point())
-            self.move((24,80))
+            self.step_aside()
         self.emit("status","Recycling prepared inputs; monitoring Processor progress.")
         idle=0
         while True:
@@ -80,7 +80,7 @@ class RecyclingRunner(VisualRunner):
             details=self.detector.result_details(frame,point,current.scale)
             if details is not None and details["recipe"]==self.recipe["id"]:
                 self.completed=1
-                self.move((24,80))
+                self.step_aside()
                 self.emit("done",f"Recycled {self.recipe['name']}. Result remains in the Processor. Prepare inputs before another run.")
                 return
         raise Interrupted("Recycling ended but the selected result name could not be verified. Check the Processor.")

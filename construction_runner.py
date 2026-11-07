@@ -74,7 +74,7 @@ class ConstructionRunner(VisualRunner):
     def scroll_inventory_down(self, known=None):
         # Clear hover text before measuring the scrollbar, then reacquire the
         # window immediately before directing a single wheel notch into it.
-        self.move((24,80))
+        self.step_aside()
         self.wait(.04)
         frame=self.frame()
         # A known window needs only the cheap header check; failure relocates fully.
@@ -128,7 +128,7 @@ class ConstructionRunner(VisualRunner):
 
     def scroll_inventory_to_top(self):
         """Wheel Inventory up until it stops moving, so a queued job searches all of it (search runs downward)."""
-        self.move((24,80))
+        self.step_aside()
         self.wait(.04)
         frame=self.frame()
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
@@ -151,7 +151,7 @@ class ConstructionRunner(VisualRunner):
             if not moved:break
         # At the top, or the game ignores the wheel: drag a thumb that is not at the top of its rail up to it.
         if hasattr(self.detector,"inventory_scrollbar"):
-            self.move((24,80));self.wait(.04)
+            self.step_aside();self.wait(.04)
             frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
             bar=self.detector.inventory_scrollbar(frame,inventory)
             # The thumb rests a little inside its rail (2 px at scale 1, 3-5 px at 1.3-1.8).
@@ -162,12 +162,12 @@ class ConstructionRunner(VisualRunner):
                 try:
                     self.wait(.04);self.move(end);self.wait(.08)
                 finally:self.backend.button("left",False)
-                self.move((24,80));self.wait(.06)
+                self.step_aside();self.wait(.06)
                 frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
                 bar=self.detector.inventory_scrollbar(frame,inventory)
                 if bar["thumb_top"]>bar["top"]+inset:
                     self.emit("status",f"{self.name}: Inventory did not scroll to the top; searching down from here.")
-        self.move((24,80))
+        self.step_aside()
 
     def locate_blueprint(self):
         self.emit("status", f"{self.name}: {'fast datacube search' if self.search_mode=='fast' else 'thorough every-cell search'}.")
@@ -212,7 +212,7 @@ class ConstructionRunner(VisualRunner):
                 # a cell deserves a tooltip check. A match is cleared/re-hovered
                 # below, so a delayed tooltip cannot authorize the wrong cell.
                 if clear_hover:
-                    self.move((24,80));self.wait(.02)
+                    self.step_aside();self.wait(.02)
                 self.move(candidate["point"])
                 identity=None
                 for attempt in range(4):
@@ -236,7 +236,7 @@ class ConstructionRunner(VisualRunner):
                     # Do not inherit a previous cell's tooltip. Observe its
                     # disappearance outside Inventory before confirming this
                     # exact cell again from a newly displayed tooltip.
-                    self.move((24,80))
+                    self.step_aside()
                     for _ in range(8):
                         self.wait(.025)
                         cleared=self.frame()
@@ -273,7 +273,7 @@ class ConstructionRunner(VisualRunner):
             if match is None:
                 # Snapshot after clearing hover so tooltip/cursor pixels do not
                 # masquerade as changed item content in the overlapping rows.
-                self.move((24,80));self.wait(.02)
+                self.step_aside();self.wait(.02)
                 clean=self.inventory_frame(inventory)
                 current=self.detector.current_inventory(clean,inventory,checkpoint=self.guard)
                 if not self.same_window(current,inventory):
@@ -292,7 +292,7 @@ class ConstructionRunner(VisualRunner):
                         raise Interrupted(f"{exc} {unreadable} unreadable blueprint observations were skipped; none authorized a transfer.") from exc
                     raise
                 continue
-            self.move((24,80))
+            self.step_aside()
             frame=self.frame()
             current=self.detector.current_inventory(frame,inventory,checkpoint=self.guard)
             if not self.same_window(current,inventory):
@@ -332,19 +332,24 @@ class ConstructionRunner(VisualRunner):
         if not dialog.get("one"):
             self.click(dialog["field"])
             self.type_one()
-            self.move((24,80))
+            self.step_aside()
             self.wait(self.settings["settle_seconds"])
         dialog=self.detector.quantity(self.frame(),checkpoint=self.guard)
         if dialog is None or not dialog.get("one"):
             raise Interrupted("Could not verify blueprint quantity 1. No construction was started.")
         self.click(dialog["ok"])
-        self.move((24,80))
+        self.step_aside()
         self.wait(self.settings["settle_seconds"])
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Blueprint quantity dialog did not close. No construction was started.")
 
     def gogo_enabled(self):
         return bool(self.profile["construction"].get("gogo_refill"))
+
+    def note_gogo(self, window):
+        """Remember the GoGuardian window, so the pointer never rests on its stacks (their tooltips)."""
+        seen=getattr(self.detector,"seen",None)
+        if seen is not None and window is not None:seen["gogo"]=window.box()
 
     def inventory_destination(self, frame, inventory, code):
         """Point to drop an ingredient: its existing stack (merges) or the first empty cell."""
@@ -386,7 +391,7 @@ class ConstructionRunner(VisualRunner):
         if field_number(self.frame(),dialog)!=amount:
             for attempt in range(2):
                 self.click(dialog["field"]);self.type_number(amount)
-                self.move((24,80));self.wait(self.settings["settle_seconds"])
+                self.step_aside();self.wait(self.settings["settle_seconds"])
                 frame=self.frame()
                 dialog=self.detector.quantity(frame,checkpoint=self.guard)
                 if dialog is None:raise Interrupted("Quantity dialog disappeared before confirmation.")
@@ -397,7 +402,7 @@ class ConstructionRunner(VisualRunner):
                 if shown is not None and shown>amount:
                     raise Interrupted(f"Could not verify quantity {amount}. The dialog was left open; nothing was confirmed.")
                 if shown is None or shown>1 or amount==1:break
-        self.click(dialog["ok"]);self.move((24,80));self.wait(self.settings["settle_seconds"])
+        self.click(dialog["ok"]);self.step_aside();self.wait(self.settings["settle_seconds"])
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
 
@@ -407,7 +412,7 @@ class ConstructionRunner(VisualRunner):
         for _,info in gogo.hover_order(cells,todo)[:gogo.MAX_HOVERS]:
             if not todo:break
             # The game hides a tooltip when the cursor leaves, so a stale one is never read.
-            self.move((24,80));self.wait(.1)
+            self.step_aside();self.wait(.1)
             self.move(info["point"])
             last=None
             for attempt in range(4):
@@ -420,7 +425,7 @@ class ConstructionRunner(VisualRunner):
                     break
                 if texts and texts==last:break
                 last=texts
-        self.move((24,80))
+        self.step_aside()
         return learned
 
     def refill_from_gogo(self):
@@ -429,6 +434,7 @@ class ConstructionRunner(VisualRunner):
         frame=self.frame();gray=self.detector.gray(frame)
         reader=self.detector.text_reader()
         window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
+        self.note_gogo(window)
         if window is None:
             raise Interrupted("GoGuardian window not found. Open it with its Take All / Sort / Stack buttons visible, or turn off More Materials in GoGo.")
         codes=gogo.ingredients_for(self.recipe,self.profile)
@@ -453,9 +459,149 @@ class ConstructionRunner(VisualRunner):
             if destination is None:
                 raise Interrupted("No free Inventory slot for the GoGuardian materials. Make room and restart.")
             self.emit("status",f"GoGuardian: moving {amount} {name} to Inventory.")
-            self.drag(point,destination);self.move((24,80))
+            self.drag(point,destination);self.step_aside()
             self.enter_quantity(amount)
         return len(plan)
+
+    STASH_AT=gogo.BATCH  # finished parts go into GoGuardian once their Inventory stack holds 15 (the user's ask, 7 Nov)
+    MAX_PRODUCT_HOVERS=12
+
+    def product_cell(self,frame,inventory):
+        """Inventory cell (col,row) of the finished parts' stack, or None.
+
+        Their label (W9) is too short for the text reader, so stacks whose label isn't another code are hovered
+        and their tooltip's name read, as the Processor's result is. The cell and its label picture are
+        remembered, and so are cells that hold something else, so later checks hover nothing new."""
+        reader=self.detector.text_reader()
+        code=gogo.default_code(self.name)
+        labels=gogo.inventory_labels(reader,frame,inventory)
+        known=getattr(self,"product",None)
+        if known is not None and known[0] in labels and gogo.same_label(labels[known[0]][0],known[1]):return known[0]
+        self.product=None
+        others=self.__dict__.setdefault("not_product",{})
+        hovers=0
+        for key,(mask,words) in sorted(labels.items(),key=lambda item:(item[0][1],item[0][0])):
+            # Another three-letter code (TIB, MET) rules a stack out; a short word may be a misread W9.
+            if any(len(word)>=3 and word.isalpha() and word.upper()!=code for word in words):continue
+            if gogo.same_label(mask,others.get(key)):continue
+            hovers+=1
+            if hovers>self.MAX_PRODUCT_HOVERS:break
+            point=gogo.inventory_point(inventory,*key)
+            self.step_aside();self.wait(.1)          # the last tooltip goes before this one is read
+            self.move(point)
+            details=None
+            for attempt in range(3):
+                self.wait(.3 if attempt==0 else .15)
+                details=self.detector.result_details(self.frame(),point,inventory.scale)
+                if details is not None:break
+            if (details is not None and details["recipe"]==self.recipe
+                    and "blueprint" not in details.get("text","").lower()):
+                self.product=(key,mask)
+                self.step_aside()
+                return key
+            if details is not None:others[key]=mask     # unread tooltips are tried again next time
+        if hovers:self.step_aside()
+        return None
+
+    def stash_product(self):
+        """Move the finished parts' Inventory stack (W9 for Weaponpart 9) into GoGuardian once it holds STASH_AT:
+        onto the stack put there last time, else the first empty cell. Left alone, with a status line, when
+        GoGuardian has no window or room. True when moved."""
+        frame=self.frame()
+        inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        cell=self.product_cell(frame,inventory)
+        if cell is None:return False
+        frame=self.frame()
+        col,row=cell
+        below=gogo.inventory_cell(frame,inventory,col,row+1) if row+1<gogo.INVENTORY_ROWS else None
+        count=gogo.read_count(self.detector.text_reader(),[gogo.inventory_cell(frame,inventory,col,row),below])
+        if count is None or count<self.STASH_AT:return False
+        code=gogo.default_code(self.name)
+        reader=self.detector.text_reader();gray=self.detector.gray(frame)
+        window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
+        self.note_gogo(window)
+        if window is None:
+            self.emit("status",f"{self.name}: {count} {code} in Inventory, but no GoGuardian window to put them in; left there.")
+            return False
+        destination=self.stash_destination(window,gray,code)
+        if destination is None:
+            self.emit("status",f"{self.name}: GoGuardian has no free cell for {code}; {count} left in Inventory.")
+            return False
+        self.emit("status",f"GoGuardian: moving {count} {code} into it.")
+        self.drag(gogo.inventory_point(inventory,col,row),destination);self.step_aside()
+        self.enter_quantity(count)
+        self.product=None
+        self.stash_cell=(round((destination[0]-window.cell_origin(0,0)[0])//(gogo.CELL_W*window.scale)),
+                         round((destination[1]-window.cell_origin(0,0)[1])//(gogo.CELL_H*window.scale)))
+        return True
+
+    def stash_destination(self,window,gray,code):
+        """The GoGuardian cell used last time while it still holds these parts (a hover tells), else drop_cell."""
+        last=getattr(self,"stash_cell",None)
+        if last is not None:
+            point=window.cell_center(*last)
+            self.move(point)
+            details=None
+            for attempt in range(3):
+                self.wait(.3 if attempt==0 else .15)
+                details=self.detector.result_details(self.frame(),point,window.scale)
+                if details is not None:break
+            self.step_aside()
+            if details is not None and details["recipe"]==self.recipe and "blueprint" not in details.get("text","").lower():
+                return point
+        return gogo.drop_cell(self.detector.text_reader(),gray,window,code)
+
+    def gogo_blueprint_cell(self,frame,gray,reader,window):
+        """GoGuardian cell (col,row) holding this recipe's blueprints, found by hovering stacks and reading their
+        tooltip (BLUEPRINT ... Tangent Weaponpart 9), as the Inventory search does. The cell is tried first next
+        time; stacks shown to be something else are not hovered again this run. None when none is."""
+        codes=set((gogo.ingredients_for(self.recipe,self.profile) or {}).values())|{gogo.default_code(self.name)}
+        labelled={key:info["code"] for key,info in gogo.read_cells(reader,gray,window).items()}
+        others=self.__dict__.setdefault("gogo_not_blueprint",set())
+        last=getattr(self,"gogo_blueprint",None)
+        cells=[key for key in gogo.occupied_cells(gray,window) if labelled.get(key) not in codes and key not in others]
+        cells.sort(key=lambda key:(key!=last,key in labelled))          # last time's cell, then unlabelled stacks
+        for key in cells[:gogo.MAX_HOVERS]:
+            point=window.cell_center(*key)
+            self.step_aside();self.wait(.1)          # the last tooltip goes before this one is read
+            self.move(point)
+            identity=None
+            for attempt in range(4):
+                self.wait(.3 if attempt==0 else .15)
+                identity=self.detector.tooltip_recipe(self.frame(),point,window.scale)
+                if identity not in (None,"unknown"):break
+            if identity==self.recipe:
+                self.gogo_blueprint=key
+                self.step_aside()
+                return key
+            if identity not in (None,"unknown"):others.add(key)
+        self.step_aside()
+        return None
+
+    def refill_blueprints_from_gogo(self):
+        """Out of blueprints in Inventory: pull up to BATCH more from GoGuardian into a free Inventory cell (the
+        user's ask, 7 Nov). True when moved; False, with a status line, with no window or none there."""
+        frame=self.frame();gray=self.detector.gray(frame)
+        reader=self.detector.text_reader()
+        window=gogo.find_gogo(reader,gray,checkpoint=self.guard)
+        self.note_gogo(window)
+        if window is None:
+            self.emit("status",f"{self.name}: out of blueprints, and no GoGuardian window to take more from.")
+            return False
+        cell=self.gogo_blueprint_cell(frame,gray,reader,window)
+        if cell is None:
+            self.emit("status",f"{self.name}: out of blueprints, and none found in GoGuardian.")
+            return False
+        frame=self.frame()
+        inventory=self.detector.inventory(frame,checkpoint=self.guard)
+        destination=self.inventory_destination(frame,inventory,None)
+        if destination is None:
+            raise Interrupted(f"No free Inventory cell for the {self.name} blueprints from GoGuardian. Make room and restart.")
+        self.emit("status",f"GoGuardian: moving {gogo.BATCH} {self.name} blueprints to Inventory.")
+        self.drag(window.cell_center(*cell),destination);self.step_aside()
+        self.enter_quantity(gogo.BATCH)
+        self.source_cell=None                        # the blueprints are in a new cell now
+        return True
 
     def await_construction(self):
         self.output_details=None
@@ -509,14 +655,14 @@ class ConstructionRunner(VisualRunner):
             if not self.same_window(current,processor):continue
             details=self.detector.result_details(frame,point,current.scale)
             if details is not None and details["recipe"]==self.recipe:
-                self.move((24,80))
+                self.step_aside()
                 return details
-        self.move((24,80))
+        self.step_aside()
         return None
 
     def return_blueprint(self):
         """Drag a blueprint whose Start was refused back to a free Inventory cell, so the next job can load its own."""
-        self.move((24,80))
+        self.step_aside()
         frame,processor=self.processor_state()
         if not self.detector.has_loaded_blueprint(frame,processor):return
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
@@ -525,7 +671,7 @@ class ConstructionRunner(VisualRunner):
             raise Interrupted(f"No free Inventory cell for the unbuilt {self.name} blueprint. Make room and restart.")
         self.emit("status",f"{self.name}: taking the unbuilt blueprint back to Inventory.")
         self.drag(self.detector.input_point(processor,self.loaded_index),destination)
-        self.move((24,80))
+        self.step_aside()
         frame,processor=self.processor_state()
         if self.detector.quantity(frame,checkpoint=self.guard) is not None or self.detector.has_loaded_blueprint(frame,processor):
             raise Interrupted(f"The unbuilt {self.name} blueprint could not be taken back from the Processor. Check it before restarting.")
@@ -544,14 +690,18 @@ class ConstructionRunner(VisualRunner):
         for _ in range(target):
             try:source,destination=self.locate_blueprint()
             except Interrupted as exc:
+                if not str(exc).startswith("No verified"):raise
+                # More from GoGuardian when it's ticked (15 at a time), then the search again.
+                if self.gogo_enabled() and self.refill_blueprints_from_gogo():
+                    source,destination=self.locate_blueprint()
                 # With no stack size entered, running out of blueprints is how a batch ends.
                 # A queued job that runs out is reported and the queue goes on.
-                if str(exc).startswith("No verified") and (self.queue or stack_unknown and self.job_built>0):
+                elif self.queue or stack_unknown and self.job_built>0:
                     return self.job_built,"out_of_blueprints"
-                raise
+                else:raise
             self.emit("status", f"{self.name}: transferring one blueprint; ingredients stay untouched.")
             self.drag(source,destination)
-            self.move((24,80))
+            self.step_aside()
             self.confirm_one(None if stack_unknown else config["available"])
             frame,processor=self.processor_state()
             if self.detector.quantity(frame,checkpoint=self.guard) is not None:
@@ -559,7 +709,7 @@ class ConstructionRunner(VisualRunner):
             if not self.detector.has_loaded_blueprint(frame,processor):
                 raise Interrupted("No loaded blueprint was recognized. No construction was started.")
             self.click(processor.start_point())
-            self.move((24,80))
+            self.step_aside()
             self.emit("status", f"{self.name}: building; following Processor progress.")
             refills=0
             while self.await_construction()=="refused":
@@ -570,7 +720,7 @@ class ConstructionRunner(VisualRunner):
                     raise OutOfMaterials("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
                 self.refill_from_gogo()
                 frame,processor=self.processor_state()
-                self.click(processor.start_point());self.move((24,80))
+                self.click(processor.start_point());self.step_aside()
                 self.emit("status", f"{self.name}: building; following Processor progress.")
             self.completed+=1
             self.job_built+=1
@@ -587,6 +737,7 @@ class ConstructionRunner(VisualRunner):
                 else:self.slot_unread+=1
                 event.update(slot_counts=self.slot_counts.copy(),slot_unread=self.slot_unread,slot_na=self.slot_na)
             self.emit("construction_cycle", event)
+            if self.gogo_enabled():self.stash_product()
             if self.job_label and self.job_target:
                 self.emit("queue_update",{"index":self.job_row,"count":target-self.job_built or None})
             if self.stop_at_slots is not None and slots is not None and slots>=self.stop_at_slots:
@@ -645,6 +796,9 @@ class ConstructionRunner(VisualRunner):
         if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
             raise Interrupted("Processor is already working. Finish the current job before starting construction.")
         self.detector.construction_input(frame,processor)
+        if self.gogo_enabled() and hasattr(self.detector,"text_reader"):
+            try:self.note_gogo(gogo.find_gogo(self.detector.text_reader(),self.detector.gray(frame),checkpoint=self.guard))
+            except (RuntimeError,OSError):pass      # no window yet is fine; a refill looks again
         if self.queue:return self.run_queue()
         built,reason=self.build_job(config["count"] or config["available"],config["available"]>=10000)
         if reason=="out_of_blueprints":

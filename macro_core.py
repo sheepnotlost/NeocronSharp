@@ -50,6 +50,47 @@ def hand_path(start, end, rng=random, speed=600., shortest=.1, longest=.8, step=
     return path
 
 
+def aside_spot(here, boxes, size, rng=random, clear=(44, 44, 16, 16), edge=12, top=70, cursor=32):
+    """Where to rest the pointer: the nearest spot to `here` clear of every box (left, top, right, bottom).
+
+    `here` itself when it is already clear, None when no spot in view is. The pointer's picture hangs down and
+    to the right of its tip, so a spot left of or above a box keeps a wider gap (clear: left, top, right,
+    bottom). The top `top` px (the game's menu bar) are left alone. A little further out and along the edge
+    each time, as a hand would. This replaces a trip to the top-left corner after each action (the user's
+    ask, 7 Nov)."""
+    width, height = size
+    grown = [(l-clear[0], t-clear[1], r+clear[2], b+clear[3]) for l, t, r, b in boxes]
+
+    def inside(x, y):
+        return [box for box in grown if box[0] < x < box[2] and box[1] < y < box[3]]
+
+    def open_at(x, y):
+        return edge <= x <= width-edge-cursor and top <= y <= height-edge-cursor and not inside(x, y)
+
+    x0, y0 = here
+    if open_at(x0, y0):
+        return (x0, y0)
+    best, frontier = None, [(x0, y0)]
+    for _ in range(3):                          # out of one box, maybe into the next: three steps at most
+        further = []
+        for x, y in frontier:
+            for l, t, r, b in inside(x, y):
+                for spot, push in (((l-1, y), (-1, 0)), ((r+1, y), (1, 0)), ((x, t-1), (0, -1)), ((x, b+1), (0, 1))):
+                    if open_at(*spot):
+                        distance = math.hypot(spot[0]-x0, spot[1]-y0)
+                        if best is None or distance < best[0]:
+                            best = (distance, spot, push)
+                    elif inside(*spot):
+                        further.append(spot)
+        frontier = further[:64]
+    if best is None:
+        return None
+    _, (x, y), (px, py) = best
+    out, along = rng.uniform(4, 18), rng.uniform(-25, 25)
+    nudged = (round(x + px*out + py*along), round(y + py*out + px*along))
+    return nudged if open_at(*nudged) else (x, y)
+
+
 def version():
     """The commit this copy was made from: VERSION in a VM copy, else git; "unknown" without either."""
     here = Path(__file__).resolve().parent
@@ -378,12 +419,23 @@ class ResearchRunner:
                 start = where()
             except RuntimeError:
                 start = None
+        self.pointer = tuple(point)
         if start is None:
             self.backend.move(point)
             return
         for pause, spot in hand_path(start, point):
             self.wait(pause)
             self.backend.move(spot)
+
+    def pointer_at(self):
+        """Where the pointer is: asked of the backend when it can say, else where the macro last put it."""
+        where = getattr(getattr(self, "backend", None), "cursor_client", None)
+        if where is not None:
+            try:
+                return tuple(where())
+            except RuntimeError:
+                pass
+        return getattr(self, "pointer", None)
 
     # Rest on the spot, then hold: a game running slowly in a VM can miss a press that comes with
     # the move, or one shorter than its frame (7 Nov: Start went unnoticed there).
@@ -416,6 +468,7 @@ class ResearchRunner:
                 self.wait(self.settings["drag_seconds"] / 16)
         finally:
             self.backend.release_all()
+        self.pointer = tuple(destination)
         self.wait(self.settings["settle_seconds"])
 
     def type_one(self):

@@ -271,6 +271,259 @@ class RefusedStartTests(unittest.TestCase):
         self.assertNotEqual(runner.await_construction(), "refused")
 
 
+class InventoryStackReadingTests(unittest.TestCase):
+    """Finished parts go into GoGuardian 15 at a time (7 Nov). Real 2560x1440 Inventory: W9 x2, x15, x14 stacks."""
+    @classmethod
+    def setUpClass(cls):
+        from vision import Anchor
+        cls.reader = TextReader()
+        cls.frame = cv2.cvtColor(cv2.imread(str(FIXTURES / "inventory_1440_w9_stack.png")), cv2.COLOR_BGR2RGB)
+        cls.inventory = Anchor(37, 17, 1.255, 1.)
+
+    def count(self, col, row):
+        below = gogo.inventory_cell(self.frame, self.inventory, col, row+1)
+        return gogo.read_count(self.reader, [gogo.inventory_cell(self.frame, self.inventory, col, row), below])
+
+    def test_counts_of_ten_and_up_read_and_short_ones_never_read_high(self):
+        self.assertEqual(self.count(3, 0), 15)
+        self.assertEqual(self.count(2, 2), 14)
+        self.assertEqual(self.count(0, 2), 247)
+        self.assertIn(self.count(3, 1), (None, 2))                         # W9 x2: unread is fine, it's under 15
+
+    def test_labels_are_found_even_when_too_short_to_read(self):
+        labels = gogo.inventory_labels(self.reader, self.frame, self.inventory)
+        self.assertIn((3, 1), labels)                                       # W9
+        self.assertNotIn((4, 1), labels)                                    # the W9 box's second cell has no label
+        self.assertIn("TIB", labels[(3, 2)][1])
+        self.assertNotIn((0, 4), labels)                                    # empty
+        self.assertTrue(gogo.same_label(labels[(3, 1)][0], labels[(3, 1)][0].copy()))
+        self.assertFalse(gogo.same_label(labels[(3, 1)][0], labels[(3, 2)][0]))
+
+    def test_an_empty_gogo_cell_is_chosen_never_a_full_one(self):
+        gray = gray_frame("gogo_reference.png")
+        window = gogo.find_gogo(self.reader, gray)
+        point = gogo.drop_cell(self.reader, gray, window, "W9")
+        self.assertIsNotNone(point)
+        col = int((point[0] - window.cell_origin(0, 0)[0]) // (gogo.CELL_W*window.scale))
+        row = int((point[1] - window.cell_origin(0, 0)[1]) // (gogo.CELL_H*window.scale))
+        x, y = window.cell_origin(col, row)
+        s = window.scale
+        crop = gray[int(y+7*s):int(y+(gogo.CELL_H-7)*s), int(x+7*s):int(x+(gogo.CELL_W-7)*s)]
+        self.assertLess(float(crop.std()), gogo.EMPTY_CONTRAST)
+
+
+class StashSequenceTests(unittest.TestCase):
+    """The runner side, with the readers stood in for."""
+    PRODUCT, OTHER, BLUEPRINT = (3, 1), (1, 0), (0, 0)
+
+    def runner(self, count=15, gogo_window=True, labels=None):
+        from unittest import mock
+        events = []
+
+        class Inventory:
+            scale = 1.
+
+            def point(self, x, y):
+                return [int(x), int(y)]
+
+        class Window:
+            scale = 1.
+
+            def cell_origin(self, col, row):
+                return (100 + col*10, 100 + row*10)
+
+            def cell_center(self, col, row):
+                return (105 + col*10, 105 + row*10)
+
+            def box(self):
+                return (90, 90, 200, 200)
+
+        outer = self
+        mask = lambda n: np.full((4, 4), n, np.uint8)
+        names = {tuple(gogo.inventory_point(Inventory(), *self.PRODUCT)): ("weaponpart_9", "Tangent Weaponpart 9"),
+                 tuple(gogo.inventory_point(Inventory(), *self.OTHER)): ("weaponpart_7", "Tangent Weaponpart 7"),
+                 tuple(gogo.inventory_point(Inventory(), *self.BLUEPRINT)): ("weaponpart_9", "BLUEPRINT: Tangent Weaponpart 9"),
+                 (105, 115): ("weaponpart_9", "Tangent Weaponpart 9")}
+        hovered = []
+
+        class Detector:
+            seen = {}
+
+            def inventory(self, f, checkpoint=None):
+                return Inventory()
+
+            def text_reader(self):
+                return None
+
+            def gray(self, f):
+                return np.zeros((10, 10), np.uint8)
+
+            def result_details(self, f, point, scale):
+                hovered.append(tuple(point))
+                found = names.get(tuple(point))
+                return {"recipe": found[0], "slots": None, "text": found[1]} if found else None
+
+        r = ConstructionRunner.__new__(ConstructionRunner)
+        r.detector = Detector();r.recipe = "weaponpart_9";r.name = "Tangent Weaponpart 9";r.profile = {}
+        r.frame = lambda: np.zeros((10, 10, 3), np.uint8)
+        r.guard = lambda: None
+        r.wait = lambda seconds, safe_pause=False: None
+        r.move = lambda point: None
+        r.step_aside = lambda: None
+        r.emit = lambda kind, payload=None: events.append((kind, payload))
+        r.drag = lambda a, b: events.append(("drag", tuple(a), tuple(b)))
+        r.enter_quantity = lambda amount: events.append(("quantity", amount))
+        counts = {"value": count}
+        all_labels = labels if labels is not None else {
+            self.BLUEPRINT: (mask(1), []), self.OTHER: (mask(2), []), self.PRODUCT: (mask(3), []), (5, 0): (mask(4), ["TIB"])}
+        patches = [mock.patch.object(gogo, "inventory_labels", lambda reader, f, inv: all_labels),
+                   mock.patch.object(gogo, "read_count", lambda reader, cells: counts["value"]),
+                   mock.patch.object(gogo, "inventory_cell", lambda f, inv, c, rw: np.zeros((2, 2, 3), np.uint8)),
+                   mock.patch.object(gogo, "find_gogo", lambda reader, gray, checkpoint=None: Window() if gogo_window else None),
+                   mock.patch.object(gogo, "drop_cell", lambda reader, gray, window, code: (125, 135))]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        return r, events, hovered, counts
+
+    def test_at_fifteen_the_stack_found_by_its_tooltip_goes_to_an_empty_gogo_cell(self):
+        runner, events, hovered, _ = self.runner(count=15)
+        self.assertTrue(runner.stash_product())
+        product = tuple(gogo.inventory_point(runner.detector.inventory(None), *self.PRODUCT))
+        self.assertIn(("drag", product, (125, 135)), events)
+        self.assertIn(("quantity", 15), events)
+        self.assertNotIn(tuple(gogo.inventory_point(runner.detector.inventory(None), 5, 0)), hovered)  # labelled TIB
+
+    def test_under_fifteen_nothing_moves_and_the_stack_is_remembered(self):
+        runner, events, hovered, counts = self.runner(count=14)
+        self.assertFalse(runner.stash_product())
+        self.assertFalse([e for e in events if e[0] in ("drag", "quantity")])
+        before = len(hovered)
+        counts["value"] = 15
+        self.assertTrue(runner.stash_product())
+        self.assertEqual(len(hovered), before)                              # nothing hovered again
+
+    def test_the_next_full_stack_joins_the_one_put_there_last_time(self):
+        runner, events, hovered, _ = self.runner(count=15)
+        runner.stash_product()
+        runner.stash_cell = (0, 1)                                          # where (105, 115) is
+        events.clear()
+        self.assertTrue(runner.stash_product())
+        self.assertEqual([e for e in events if e[0] == "drag"][0][2], (105, 115))
+
+    def test_no_gogo_window_leaves_the_stack_and_says_so(self):
+        runner, events, _, _ = self.runner(count=15, gogo_window=False)
+        self.assertFalse(runner.stash_product())
+        self.assertFalse([e for e in events if e[0] == "drag"])
+        self.assertTrue(any("no GoGuardian window" in str(e[1]) for e in events if e[0] == "status"))
+
+
+class BlueprintRefillTests(unittest.TestCase):
+    """Out of blueprints in Inventory: 15 more from GoGuardian (7 Nov). Readers stood in for."""
+    BLUEPRINTS, OTHER, TIB = (2, 0), (1, 0), (0, 0)
+
+    def runner(self, blueprints_there=True, window=True):
+        from unittest import mock
+        events, hovered = [], []
+
+        class Window:
+            scale = 1.
+
+            def cell_center(self, col, row):
+                return (105 + col*10, 105 + row*10)
+
+            def box(self):
+                return (90, 90, 200, 200)
+
+        tips = {Window().cell_center(*self.OTHER): "other", Window().cell_center(*self.TIB): "other"}
+        if blueprints_there:
+            tips[Window().cell_center(*self.BLUEPRINTS)] = "weaponpart_9"
+
+        class Detector:
+            seen = {}
+
+            def inventory(self, f, checkpoint=None):
+                return object()
+
+            def text_reader(self):
+                return None
+
+            def gray(self, f):
+                return np.zeros((10, 10), np.uint8)
+
+            def tooltip_recipe(self, f, point, scale):
+                hovered.append(tuple(point))
+                return tips.get(tuple(point))
+
+        r = ConstructionRunner.__new__(ConstructionRunner)
+        r.detector = Detector();r.recipe = "weaponpart_9";r.name = "Tangent Weaponpart 9";r.profile = {}
+        r.frame = lambda: np.zeros((10, 10, 3), np.uint8)
+        r.guard = lambda: None
+        r.wait = lambda seconds, safe_pause=False: None
+        r.move = lambda point: None
+        r.step_aside = lambda: None
+        r.emit = lambda kind, payload=None: events.append((kind, payload))
+        r.drag = lambda a, b: events.append(("drag", tuple(a), tuple(b)))
+        r.enter_quantity = lambda amount: events.append(("quantity", amount))
+        r.inventory_destination = lambda f, inv, code: (500, 600)
+        patches = [mock.patch.object(gogo, "find_gogo", lambda reader, gray, checkpoint=None: Window() if window else None),
+                   mock.patch.object(gogo, "read_cells", lambda reader, gray, w, wanted=None: {
+                       self.TIB: {"code": "TIB", "count": 185, "point": Window().cell_center(*self.TIB)}}),
+                   mock.patch.object(gogo, "occupied_cells", lambda gray, w: [self.TIB, self.OTHER, self.BLUEPRINTS])]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        return r, events, hovered
+
+    def test_the_blueprint_stack_is_found_by_its_tooltip_and_fifteen_come_over(self):
+        runner, events, hovered = self.runner()
+        self.assertTrue(runner.refill_blueprints_from_gogo())
+        self.assertIn(("drag", (125, 105), (500, 600)), events)
+        self.assertIn(("quantity", 15), events)
+        self.assertNotIn((105, 105), hovered)                               # TIB is an ingredient, never hovered
+
+    def test_the_next_time_the_same_stack_is_tried_first_and_others_are_not_hovered_again(self):
+        runner, events, hovered = self.runner()
+        runner.refill_blueprints_from_gogo()
+        hovered.clear()
+        runner.refill_blueprints_from_gogo()
+        self.assertEqual(hovered, [(125, 105)])
+
+    def test_none_there_or_no_window_moves_nothing_and_says_so(self):
+        for there, window, said in ((False, True, "none found in GoGuardian"), (True, False, "no GoGuardian window")):
+            with self.subTest(there=there, window=window):
+                runner, events, _ = self.runner(blueprints_there=there, window=window)
+                self.assertFalse(runner.refill_blueprints_from_gogo())
+                self.assertFalse([e for e in events if e[0] == "drag"])
+                self.assertTrue(any(said in str(e[1]) for e in events if e[0] == "status"), events)
+
+    def test_a_build_that_runs_out_of_blueprints_takes_more_and_goes_on(self):
+        runner, events, _ = self.runner()
+        runner.profile = {"construction": {"available": 10000, "gogo_refill": True}}
+        runner.queue, runner.job_label, runner.count_slots, runner.stop_at_slots, runner.completed = [], None, False, None, 0
+        runner.recipes = {"weaponpart_9": {"name": "Tangent Weaponpart 9", "category": "Weapon parts"}}
+        looks = []
+
+        def locate():
+            looks.append(1)
+            if len(looks) == 1:
+                raise Interrupted("No verified Tangent Weaponpart 9 blueprint found in the remaining Inventory rows.")
+            return (1, 1), (2, 2)
+        runner.locate_blueprint = locate
+        runner.confirm_one = lambda available: None
+        processor = type("P", (), {"start_point": lambda self: (9, 9)})()
+        runner.processor_state = lambda: (None, processor)
+        runner.detector.quantity = lambda f, checkpoint=None: None
+        runner.detector.has_loaded_blueprint = lambda f, p: True
+        runner.click = lambda point: events.append(("click", tuple(point)))
+        runner.await_construction = lambda: None
+        runner.stash_product = lambda: False
+        built, reason = runner.build_job(1, True)
+        self.assertEqual((built, reason), (1, "finished"))
+        self.assertEqual(len(looks), 2)
+        self.assertIn(("quantity", 15), events)
+
+
 if __name__ == "__main__":
     unittest.main()
 

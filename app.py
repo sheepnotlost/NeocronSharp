@@ -533,7 +533,7 @@ class App:
         self.gogo_refill=tk.BooleanVar(value=False)
         gogo_check=ttk.Checkbutton(form,text="More Materials in GoGo",variable=self.gogo_refill)
         gogo_check.grid(row=7,column=0,columnspan=2,sticky="w",pady=(12,0));self.editable.append(gogo_check)
-        ttk.Label(form,text="Keep GoGuardian open").grid(row=8,column=0,columnspan=2,sticky="w",pady=(2,0))
+        ttk.Label(form,text="Keep GoGuardian open: refills and stores 15 at a time.").grid(row=8,column=0,columnspan=2,sticky="w",pady=(2,0))
         self.count_slots=tk.BooleanVar(value=False)
         counter=ttk.Checkbutton(form,text="Count slots on constructed weapons / spells",variable=self.count_slots)
         counter.grid(row=9,column=0,columnspan=2,sticky="w",pady=(12,0))

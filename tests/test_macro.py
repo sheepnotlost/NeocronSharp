@@ -405,5 +405,74 @@ class HandPathTests(unittest.TestCase):
         self.assertGreater(clock.now, .5)
 
 
+class StepAsideTests(unittest.TestCase):
+    """The pointer rests just beside the windows, not in the top-left corner after every action (7 Nov)."""
+    # The 2560x1440 layout of the 7 Nov GoGuardian run: GoGuardian left of Inventory, Processor below it.
+    VIEW = (2560, 1440)
+    PROCESSOR = (855, 777, 1517, 1055)
+    INVENTORY = (1531, 459, 2179, 922)
+    GOGO = (492, 82, 1162, 751)
+
+    def spot(self, here, boxes, seed=0):
+        import random
+        from macro_core import aside_spot
+        return aside_spot(here, boxes, self.VIEW, random.Random(seed))
+
+    def clear_of(self, spot, boxes):
+        x, y = spot
+        return not any(l-44 < x < r+16 and t-44 < y < b+16 for l, t, r, b in boxes)
+
+    def test_after_start_the_pointer_moves_a_short_way_out_of_the_processor(self):
+        boxes = [self.PROCESSOR, self.INVENTORY, self.GOGO]
+        for seed in range(20):
+            spot = self.spot((1425, 1007), boxes, seed)                 # Start
+            self.assertTrue(self.clear_of(spot, boxes), spot)
+            self.assertLess(math.hypot(spot[0]-1425, spot[1]-1007), 120, spot)
+
+    def test_a_spot_between_two_windows_is_never_inside_either(self):
+        boxes = [self.PROCESSOR, self.INVENTORY, self.GOGO]
+        for here in ((1560, 600), (1100, 740), (1022, 898), (1189, 900), (575, 560), (2000, 500)):
+            for seed in range(10):
+                spot = self.spot(here, boxes, seed)
+                self.assertTrue(self.clear_of(spot, boxes), (here, spot))
+                self.assertTrue(12 <= spot[0] <= 2560-44 and 70 <= spot[1] <= 1440-44, (here, spot))
+
+    def test_a_pointer_already_clear_stays_and_a_full_view_has_no_spot(self):
+        self.assertEqual(self.spot((300, 1200), [self.PROCESSOR]), (300, 1200))
+        self.assertIsNone(self.spot((500, 500), [(0, 0, 2560, 1440)]))
+
+    def test_the_runner_steps_aside_beside_the_window_and_only_falls_back_to_the_corner_blind(self):
+        from vision_runner import VisualRunner
+        moves = []
+
+        class Backend:
+            def move(self, point):
+                moves.append(tuple(point))
+
+            def check_focus(self, size):
+                pass
+
+        class Detector:
+            seen = {}
+
+        clock = FakeClock()
+        profile = default_profile()
+        profile["stacks"][STACKS[0]].update(count=1, available=1)
+        runner = VisualRunner(profile, Backend(), Control(), lambda *a: None, clock.clock, clock.sleep,
+                              detector=Detector())
+        runner.pointer = (1425, 1007)
+        runner.step_aside()
+        self.assertEqual(moves[-1], (24, 80))                          # nothing found yet: the old spot
+        runner.detector.seen = {"processor": self.PROCESSOR}
+        runner.view = self.VIEW
+        runner.pointer = (1425, 1007)
+        runner.step_aside()
+        self.assertTrue(self.clear_of(moves[-1], [self.PROCESSOR]), moves[-1])
+        self.assertLess(math.hypot(moves[-1][0]-1425, moves[-1][1]-1007), 120)
+        count = len(moves)
+        runner.step_aside()                                            # already clear: no move
+        self.assertEqual(len(moves), count)
+
+
 if __name__ == "__main__":
     unittest.main()
