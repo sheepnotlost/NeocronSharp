@@ -167,7 +167,7 @@ class BlueprintRunnerTests(unittest.TestCase):
         self.assertEqual(self.profile, original)
         self.assertEqual([e for e in self.backend.events if e[0] == "left"].count(("left", True)), 3)
 
-    def test_each_start_after_a_finished_run_waits_a_random_one_to_five_seconds(self):
+    def test_each_start_after_a_successful_copy_waits_a_random_three_to_six_seconds(self):
         self.setup_run(count=3)
         asked, starts = [], []
         click = self.runner.click
@@ -175,7 +175,7 @@ class BlueprintRunnerTests(unittest.TestCase):
         with patch("vision_runner.random.uniform", lambda low, high: asked.append((low, high)) or 4.5):
             self.runner.run()
         self.assertFalse(self.errors(), self.messages)
-        self.assertEqual(asked, [(1, 5)]*2)                  # none before the first Start, none after the last copy
+        self.assertEqual(asked, [(3, 6)]*2)                  # none before the first Start, none after the last copy
         self.assertEqual(sum("waiting 4.5 s before starting again" in str(m) for m in self.messages), 2)
         for before, after in zip(starts, starts[1:]):
             self.assertGreaterEqual(after-before, 4.5)
@@ -186,7 +186,7 @@ class BlueprintRunnerTests(unittest.TestCase):
         waits = [m[1] for m in self.messages if "before starting again" in str(m[1])]
         self.assertEqual(len(waits), 3)
         for text in waits:
-            self.assertTrue(1 <= float(text.split("waiting ")[1].split(" s")[0]) <= 5, text)
+            self.assertTrue(3 <= float(text.split("waiting ")[1].split(" s")[0]) <= 6, text)
 
     def test_existing_processing_run_is_monitored_without_duplicate_start(self):
         self.setup_run(count=1)

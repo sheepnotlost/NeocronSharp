@@ -1,5 +1,6 @@
 from copy import deepcopy
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -349,6 +350,59 @@ class RecordingReferenceTests(unittest.TestCase):
         path = Path(__file__).parent / "fixtures" / "recording_samples.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         self.assertFalse(samples_match(data["dialog_absent_49s"], data["dialog_open_46s"], 30, 5))
+
+
+class HandPathTests(unittest.TestCase):
+    """The pointer moves as a hand would (7 Nov, after a "speedhack detected" on the VM)."""
+
+    def test_a_long_move_arcs_eases_overshoots_and_lands_exactly(self):
+        import random
+        from macro_core import hand_path
+        for seed in range(20):
+            path = hand_path((100, 100), (700, 400), random.Random(seed))
+            points = [p for _, p in path]
+            seconds = sum(t for t, _ in path)
+            self.assertEqual(points[-1], (700, 400))
+            self.assertTrue(.6 <= seconds <= 1.2, seconds)                 # 670 px at about 600 px a second
+            # off the straight line somewhere: an arc, not a ruler
+            off = max(abs((p[0]-100)*300 - (p[1]-100)*600)/670.8 for p in points)
+            self.assertGreater(off, 15)
+            # slow at the start: the first step is short next to the middle ones
+            steps = [math.hypot(b[0]-a[0], b[1]-a[1]) for a, b in zip([(100, 100)]+points, points)]
+            self.assertLess(steps[0], max(steps)/4)
+            # goes a few pixels past the target, then back
+            past = max((p[0]-100)*600/670.8 + (p[1]-100)*300/670.8 for p in points)
+            self.assertGreater(past, 670.8)
+
+    def test_short_moves_take_at_least_a_tenth_and_never_overshoot(self):
+        import random
+        from macro_core import hand_path
+        path = hand_path((10, 10), (60, 10), random.Random(1))
+        self.assertGreaterEqual(sum(t for t, _ in path), .085)
+        self.assertTrue(all(p[0] <= 62 for _, p in path))
+        self.assertEqual(hand_path((5, 5), (6, 6)), [(0., (6, 6))])
+
+    def test_move_follows_the_path_when_the_pointer_can_be_read(self):
+        clock = FakeClock()
+        moves = []
+
+        class Backend:
+            def cursor_client(self):
+                return moves[-1] if moves else [0, 0]
+
+            def move(self, point):
+                moves.append(list(point))
+
+            def check_focus(self, size):
+                pass
+
+        profile = default_profile()
+        profile["stacks"][STACKS[0]].update(count=1, available=1)
+        runner = ResearchRunner(profile, Backend(), Control(), lambda *a: None, clock.clock, clock.sleep)
+        runner.move((600, 300))
+        self.assertGreater(len(moves), 20)
+        self.assertEqual(moves[-1], [600, 300])
+        self.assertGreater(clock.now, .5)
 
 
 if __name__ == "__main__":

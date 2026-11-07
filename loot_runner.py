@@ -166,6 +166,7 @@ class Engine:
 
 class LootRunner(VisualRunner):
     needs_ready = False
+    HAND_MOVES = False                     # mouse-look: the pointer jumps, as before
     menu_words, ui_visible, set_ui, press, health = (NavRayRunner.menu_words, NavRayRunner.ui_visible, NavRayRunner.set_ui,
                                                      NavRayRunner.press, NavRayRunner.health)
 

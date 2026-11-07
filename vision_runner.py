@@ -169,7 +169,8 @@ class VisualRunner(ResearchRunner):
             self.backend.release_all()
 
 
-RESTART_WAIT = (1, 5)        # seconds, a fresh random wait after each finished run before Start again (the user's word, 3 Nov)
+RESTART_WAIT = (1, 5)        # seconds, a fresh random wait after a failed run before Start again (the user's word, 3 Nov)
+MADE_WAIT = (3, 6)           # seconds, a fresh random wait after each successful copy (the user's word, 7 Nov)
 START_AGAIN = 2              # seconds with no progress after Start before it is clicked once more, never twice (7 Nov)
 NO_PROGRESS_EVERY = 10       # seconds between "no progress yet" lines, with what the macro sees
 
@@ -219,11 +220,11 @@ class BlueprintRunner(VisualRunner):
 
     def execute(self):
         target = self.profile["blueprints"]["count"]
-        failed, finished = 0, False
+        failed, finished, made = 0, False, False
         self.emit("status", f"Blueprint: NeocronSharp version {version()}.")
         while target == 0 or self.completed < target:
             if finished:
-                delay = random.uniform(*RESTART_WAIT)
+                delay = random.uniform(*(MADE_WAIT if made else RESTART_WAIT))
                 self.emit("status", f"Blueprint: waiting {delay:.1f} s before starting again.")
                 self.wait(delay, safe_pause=True)
             self.emit("status", "Blueprint: finding the Processor and checking its progress.")

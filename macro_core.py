@@ -4,10 +4,50 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
+import random
 import subprocess
 import threading
 import time
 from recipes import RECIPES, catalog
+
+
+def hand_path(start, end, rng=random, speed=600., shortest=.1, longest=.8, step=1/60):
+    """The pointer's way from start to end as a hand moves it: [(seconds to wait, (x, y) to move to)].
+
+    A gentle arc to one side, slow at both ends and quickest in the middle (minimum jerk), a little wobble on
+    the way, a different pace each time, and on longer moves a few pixels past the target and back. About 600
+    px a second, a quarter of a quick hand's 2,400 (the user's ask after a "speedhack detected" on the VM,
+    7 Nov). Ends exactly on end."""
+    (x0, y0), (x1, y1) = start, end
+    dx, dy = x1-x0, y1-y0
+    span = math.hypot(dx, dy)
+    if span <= 2:
+        return [(0., (x1, y1))]
+    seconds = min(longest, max(shortest, span/speed)) * rng.uniform(.85, 1.15)
+    past = rng.uniform(3, 8) if span > 150 else 0.                      # overshoot, px
+    ax, ay = x1 + dx/span*past, y1 + dy/span*past                        # where the swing ends
+    bend = span * rng.uniform(.04, .12) * rng.choice((-1, 1))
+    nx, ny = -dy/span, dx/span                                           # to one side of the straight line
+    c1 = (x0 + (ax-x0)*.3 + nx*bend, y0 + (ay-y0)*.3 + ny*bend)
+    c2 = (x0 + (ax-x0)*.7 + nx*bend*rng.uniform(.3, .8), y0 + (ay-y0)*.7 + ny*bend*rng.uniform(.3, .8))
+    steps = max(3, round(seconds/step))
+    path = []
+    for i in range(1, steps+1):
+        t = i/steps
+        s = t*t*t*(10 - 15*t + 6*t*t)                                    # minimum jerk: slow, quick, slow
+        u = 1-s
+        x = u*u*u*x0 + 3*u*u*s*c1[0] + 3*u*s*s*c2[0] + s*s*s*ax
+        y = u*u*u*y0 + 3*u*u*s*c1[1] + 3*u*s*s*c2[1] + s*s*s*ay
+        if i < steps:
+            x, y = x + rng.gauss(0, .6), y + rng.gauss(0, .6)            # a hand's small wobble
+        path.append((seconds/steps, (round(x), round(y))))
+    if past:                                                             # and back onto the target
+        back = rng.uniform(.06, .12)
+        for i in range(1, 4):
+            f = i/3
+            path.append((back/3, (round(ax + (x1-ax)*f), round(ay + (y1-ay)*f))))
+    path[-1] = (path[-1][0], (x1, y1))
+    return path
 
 
 def version():
@@ -324,9 +364,26 @@ class ResearchRunner:
         return samples_match(actual, self.profile["samples"][name],
                              self.settings["color_tolerance"], self.settings["changed_pixels"])
 
+    # Hand-like pointer moves (hand_path) in the Processor and Inventory work; the hunts, missions and
+    # Nav-Ray switch to mouse-look, where a gliding pointer could turn the camera, so they jump as before.
+    HAND_MOVES = True
+
     def move(self, point):
+        """Move the pointer the way a hand would (hand_path) when the backend can say where it is; else jump."""
         self.checkpoint()
-        self.backend.move(point)
+        where = getattr(self.backend, "cursor_client", None) if self.HAND_MOVES else None
+        start = None
+        if where is not None:
+            try:
+                start = where()
+            except RuntimeError:
+                start = None
+        if start is None:
+            self.backend.move(point)
+            return
+        for pause, spot in hand_path(start, point):
+            self.wait(pause)
+            self.backend.move(spot)
 
     # Rest on the spot, then hold: a game running slowly in a VM can miss a press that comes with
     # the move, or one shorter than its frame (7 Nov: Start went unnoticed there).
@@ -354,7 +411,8 @@ class ResearchRunner:
             self.backend.button(button, True)
             self.wait(0.12)
             for step in range(1, 17):
-                self.move(tuple(round(source[i] + (destination[i] - source[i]) * step / 16) for i in (0, 1)))
+                self.checkpoint()
+                self.backend.move(tuple(round(source[i] + (destination[i] - source[i]) * step / 16) for i in (0, 1)))
                 self.wait(self.settings["drag_seconds"] / 16)
         finally:
             self.backend.release_all()

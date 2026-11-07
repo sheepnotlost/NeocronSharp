@@ -177,6 +177,7 @@ RECORD_SIZE = (1280, 720)
 
 
 class NavRayRunner(VisualRunner):
+    HAND_MOVES = False           # mouse-look: the pointer jumps, as before
     # ---- every run leaves a record: the game frame at each decision, and what was decided ----
     record_dir = None            # set to a folder to record; the app and tools point it at diagnostics/last_run
     record_count = 0
