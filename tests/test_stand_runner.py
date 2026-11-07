@@ -65,12 +65,12 @@ class StandTests(unittest.TestCase):
         self.assertTrue(any("nothing within 1000 units" in text for kind, text in events if kind == "status"))
         self.assertGreaterEqual(self.clock["now"], 2*stand_runner.LOOK_EVERY)
 
-    def test_one_behind_something_is_looked_at_again_in_a_few_seconds_and_others_meanwhile(self):
+    def test_one_not_on_screen_is_looked_at_again_in_a_few_seconds_and_others_meanwhile(self):
         rat, spider = actor("Rat", distance=300.), actor("Spider", distance=600.)
         looks = [[rat, spider], [rat, spider], [rat, spider]] + [[rat]]*(stand_runner.BLOCKED_AGAIN+2)
-        seen, events = self.run_hunt(looks, fights=["No line of sight to Rat: a crate is in the way. Camera follow stopped.", True, True])
+        seen, events = self.run_hunt(looks, fights=["No line of sight to Rat: not on screen. Camera follow stopped.", True, True])
         self.assertEqual(seen, [("fight", "Rat"), ("fight", "Spider"), ("fight", "Rat")])
-        self.assertTrue(any("Not starting on Rat: no clear shot from here" in text for _, text in events))
+        self.assertTrue(any("Not starting on Rat: not on screen from here" in text for _, text in events))
 
     def test_one_that_takes_no_damage_waits_longer(self):
         rat = actor("Rat", distance=300.)

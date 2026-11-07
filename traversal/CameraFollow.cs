@@ -92,7 +92,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 5, StepAsideSeconds = 6;
     /// <summary>--stay: seconds a target already shot at may be out of view before it is let go for another.</summary>
-    public const double LostSeconds = 8;   // 5: time for the search round the mob, and more
+    public const double LostSeconds = 8;
+    /// <summary>--stay: seconds aimed at a mob, before the first shot, for the game to draw its label; none means it is behind something.</summary>
+    public const double GlanceSeconds = 1.2;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;
 
     public string Run()
@@ -389,7 +391,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 bool onTarget = CameraAim.OnTarget(yawError, pitchError);
                 var shotFrom = s.Position + new Vector3(0, CameraAim.EyeHeight, 0);
                 var shotTo = point;
-                string? blocker = plan.Shots?.Blocker(shotFrom, shotTo);
+                // --stay goes by the screen alone: the map put a prop in front of an Enlightened Elder the crosshair was on, and
+                // missed the base wall in front of a Launcher Cyclops (7 Nov).
+                string? blocker = plan.Stay ? null : plan.Shots?.Blocker(shotFrom, shotTo);
                 if (plan.Sight)
                 {
                     if (clock.ElapsedMilliseconds >= lookAt)
@@ -437,6 +441,12 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                             }
                             input.Strafe((int)stepSide);
                         }
+                    }
+                    if (plan.Stay && !engaged && aimedAt >= 0 && now - aimedAt > GlanceSeconds && !sight.Seen(now))
+                    {
+                        string hidden = $"No line of sight to {target.Name}: not on screen. Camera follow stopped.";
+                        Record("not-on-screen", s, new { away });
+                        return Done(hidden);
                     }
                     if (plan.Stay && engaged)
                     {
