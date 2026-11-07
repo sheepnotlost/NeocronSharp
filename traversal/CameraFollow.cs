@@ -275,6 +275,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             int ticks = 0;
             int? health = watch.Health;
             long lastHurt = 0, lookAt = 0, markAt = 0;
+            // --stay (Stand and hunt): once shots have gone at it, it is fought until it dies: never dropped for another (7 Nov:
+            // four mobs on you, none dead). Out of sight or behind something, the fire is held and the aim kept for it.
+            bool engaged = false, hurt = false;
             int marksLogged = 0;
             var sight = new SightWatch();
             var learned = plan.Sight ? HuntNotes.Recall(logs, target.Name) : null;
@@ -377,7 +380,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     }
                 }
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
-                if (watch.Health < health) lastHurt = clock.ElapsedMilliseconds;
+                if (watch.Health < health) { lastHurt = clock.ElapsedMilliseconds; hurt = true; }
                 health = watch.Health;
                 bool onTarget = CameraAim.OnTarget(yawError, pitchError);
                 var shotFrom = s.Position + new Vector3(0, CameraAim.EyeHeight, 0);
@@ -419,9 +422,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                                 stepFrom = now;
                                 stepSide = plan.Stay ? 0 : plan.Shots!.ClearSide(shotFrom, shotTo) ?? 0;
                                 Record("in-the-way", s, new { blocker, stepSide });
-                                Console.WriteLine($"{blocker} is in the way of {target.Name}: stepping aside.");
+                                Console.WriteLine($"{blocker} is in the way of {target.Name}: {(plan.Stay ? "holding fire" : "stepping aside")}.");
                             }
-                            if (stepSide == 0 || now - stepFrom > StepAsideSeconds)
+                            if (plan.Stay && engaged) { }   // on it already: wait for it to come out
+                            else if (stepSide == 0 || now - stepFrom > StepAsideSeconds)
                             {
                                 string blocked = $"No line of sight to {target.Name}: {blocker} is in the way. Camera follow stopped.";
                                 Record("blocked", s, new { away, blocker });
@@ -430,14 +434,14 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                             input.Strafe((int)stepSide);
                         }
                     }
-                    if (aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(Math.Max(aimedAt, sight.SeenAt), clearAt) > BlindSeconds)
+                    if (!(plan.Stay && engaged) && aimedAt >= 0 && backOff.Now != BackOff.Phase.Returning && now - Math.Max(Math.Max(aimedAt, sight.SeenAt), clearAt) > BlindSeconds)
                     {
                         string blocked = $"No line of sight to {target.Name}. Camera follow stopped.";
                         Record("blocked", s, new { away });
                         return Done(blocked);
                     }
                 }
-                if (input.LeftHeld && plan.GiveUpSeconds > 0 && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
+                if (input.LeftHeld && plan.GiveUpSeconds > 0 && !(plan.Stay && hurt) && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
                 {
                     string missed = $"No damage to {target.Name} for {plan.GiveUpSeconds:F0} s. Camera follow stopped.";
                     Record("gave-up", s, new { missed });
@@ -446,6 +450,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Firing(now, away) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
+                    engaged = true;
                     if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;
                     Record("hold", s, new { yawError, pitchError, away });
                     Console.WriteLine($"On {target.Name}: holding the left mouse button.");

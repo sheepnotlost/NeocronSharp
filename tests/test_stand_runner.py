@@ -65,20 +65,24 @@ class StandTests(unittest.TestCase):
         self.assertTrue(any("nothing within 1000 units" in text for kind, text in events if kind == "status"))
         self.assertGreaterEqual(self.clock["now"], 2*stand_runner.LOOK_EVERY)
 
-    def test_one_it_cannot_hit_is_tried_again_later(self):
-        rat = actor("Rat", distance=300.)
-        looks = [[rat], [rat], [rat]] + [[rat]]*(stand_runner.RETRY_AFTER+2)
-        seen, events = self.run_hunt(looks, fights=["No line of sight to Rat. Camera follow stopped.", True])
-        self.assertEqual(seen, [("fight", "Rat"), ("fight", "Rat")])
-        self.assertTrue(any("Can't hit Rat from here" in text for _, text in events))
-        self.assertGreaterEqual(self.clock["now"], stand_runner.RETRY_AFTER)
-
-    def test_a_mob_on_you_is_fought_first_then_the_target_again(self):
-        rat, spider = actor("Rat", distance=300.), actor("Spider", distance=1200.)   # its distance is old: it came on you mid-fight
-        seen, events = self.run_hunt([[rat, spider], [rat, spider], [rat]],
-                                     fights=["Switching to Spider Spider: it is on you.", True, True])
+    def test_one_behind_something_is_looked_at_again_in_a_few_seconds_and_others_meanwhile(self):
+        rat, spider = actor("Rat", distance=300.), actor("Spider", distance=600.)
+        looks = [[rat, spider], [rat, spider], [rat, spider]] + [[rat]]*(stand_runner.BLOCKED_AGAIN+2)
+        seen, events = self.run_hunt(looks, fights=["No line of sight to Rat: a crate is in the way. Camera follow stopped.", True, True])
         self.assertEqual(seen, [("fight", "Rat"), ("fight", "Spider"), ("fight", "Rat")])
-        self.assertIn("2 killed", events[-1][1])
+        self.assertTrue(any("Not starting on Rat: no clear shot from here" in text for _, text in events))
+
+    def test_one_that_takes_no_damage_waits_longer(self):
+        rat = actor("Rat", distance=300.)
+        looks = [[rat], [rat]] + [[rat]]*(stand_runner.UNHURT_AGAIN+2)
+        seen, _ = self.run_hunt(looks, fights=["No damage to Rat for 20 s. Camera follow stopped.", True])
+        self.assertEqual(seen, [("fight", "Rat"), ("fight", "Rat")])
+        self.assertGreaterEqual(self.clock["now"], stand_runner.UNHURT_AGAIN)
+
+    def test_it_never_switches_to_one_that_gets_on_you(self):
+        self.run_hunt([[]])
+        self.assertFalse(self.runner.engine.pushers)
+        self.assertTrue(self.runner.engine.stay)
 
     def test_the_engine_is_told_to_stay(self):
         runner_engine = RealEngine(lambda text: None, Control())

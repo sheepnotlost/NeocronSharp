@@ -1,13 +1,17 @@
-"""Stand and hunt: stay where you are and kill every robot, mutant and animal that comes within Attack from, nearest
-first, one at a time, over and over until Stop or F8. Never a human NPC, a player, or a name typed in Don't attack.
+"""Stand and hunt: stay where you are and kill the nearest robot, mutant or animal within Attack from, and only that one
+until it dies; then the next nearest, over and over until Stop or F8. Never a human NPC, a player, or a name typed in
+Don't attack.
 
-It never takes a step: the fight turns the camera and holds the left button (traversal.exe's camera run with --stay), a
-mob on you is fought first, and one that can't be hit from here (no line of sight, no damage) is left for a while and
-tried again later, as mobs move. Badly hurt, it runs to cover as the other hunts do, and hunts on from there once healed.
+It never takes a step and never drops a mob for another (traversal.exe's camera run with --stay): once it has shot at
+one, it keeps the aim on it until it dies, holding fire while it is out of sight or behind something. Dropping them
+for the next left four mobs on you with none dead (7 Nov). One behind something before the first shot isn't started on:
+it is looked at again in a few seconds, as mobs move. Badly hurt, it runs to cover as the other hunts do, and hunts on
+from there once healed.
 """
-from loot_runner import Engine, LootRunner, LowHealth, MOST_SWITCHES, SWITCH, pick_target
+from loot_runner import LootRunner, LowHealth, pick_target
 
-RETRY_AFTER = 30             # seconds a mob that could not be hit from here is left before it is tried again
+BLOCKED_AGAIN = 5            # seconds before a mob behind something is looked at again
+UNHURT_AGAIN = 30            # seconds before one that took no damage (out of the weapon's reach) is tried again
 LOOK_EVERY = 1               # seconds between looks round while nothing is in range
 SHOW_IDLE_EVERY = 30         # seconds between "nothing in range" lines
 
@@ -15,33 +19,11 @@ SHOW_IDLE_EVERY = 30         # seconds between "nothing in range" lines
 class StandRunner(LootRunner):
     def __init__(self, *args, engine=None, **kwargs):
         super().__init__(*args, engine=engine, **kwargs)
-        self.engine.stay = True                  # the whole point: stand here
+        self.engine.stay = True                  # stand here, and fight each one until it dies
         self.engine.kite = False
-        self.engine.pushers = True               # whatever is on you dies first
-        self.engine.avoid = [name.replace(",", " ") for name in self.spare]
+        self.engine.pushers = False              # never drop the target for one that gets on you
         self.back = False
-        self.later = {}                          # id -> clock time it may be tried again
-
-    def shot(self, actor, depth=0):
-        """Fight it from here. True when it died."""
-        switches = 0
-        while True:
-            self.engine.pushers = depth == 0 and switches < MOST_SWITCHES
-            try:
-                last = self.fight(actor, False)
-            finally:
-                self.engine.pushers = True
-            found = SWITCH.search(last)
-            if found:
-                switches += 1
-                other = {"id": found.group(1), "name": found.group(2), "kind": "npc", "distance": 0., "dead": False}
-                self.emit("log", f"{other['name']} is on you: fighting it first.")
-                if self.shot(other, depth+1):
-                    self.killed(other)
-                if not self.alive(actor):
-                    return False
-                continue
-            return " died." in last
+        self.later = {}                          # id -> clock time it may be looked at again
 
     def alive(self, actor):
         here = next((a for a in self.engine.nearby() if a["id"] == actor["id"]), None)
@@ -72,10 +54,13 @@ class StandRunner(LootRunner):
                 idle_shown = None
                 self.hide_pointer()
                 self.emit("status", f"Standing and hunting: {target['name']}, {target['distance']:.0f} units away. {self.kills} killed.")
-                if self.shot(target):
+                last = self.fight(target, False)
+                if " died." in last:
                     self.killed(target)
                 elif self.alive(target):
-                    self.emit("log", f"Can't hit {target['name']} from here: trying others for {RETRY_AFTER} s.")
-                    self.later[target["id"]] = self.clock()+RETRY_AFTER
+                    wait = UNHURT_AGAIN if "No damage to" in last else BLOCKED_AGAIN
+                    why = "it takes no damage from here" if wait == UNHURT_AGAIN else "no clear shot from here"
+                    self.emit("log", f"Not starting on {target['name']}: {why}. Looking again in {wait} s.")
+                    self.later[target["id"]] = self.clock()+wait
             except LowHealth as low:
                 self.retreat(str(low))
