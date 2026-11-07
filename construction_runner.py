@@ -753,8 +753,10 @@ class ConstructionRunner(VisualRunner):
                 return "built"
         if load:
             try:source,destination=self.locate_blueprint()
-            except Interrupted as exc:
-                if not str(exc).startswith("No verified"):raise
+            except RuntimeError as exc:
+                # No blueprint in the rows, or the bottom reached (a scrollbar that can't be read there, 7 Nov):
+                # out of blueprints, so GoGuardian supplies more. Stop, Pause and the like go on up.
+                if self.final(exc) or not (str(exc).startswith("No verified") or "scrollbar" in str(exc)):raise
                 # More from GoGuardian when it's ticked (15 at a time), then the search again.
                 if self.gogo_enabled() and self.refill_blueprints_from_gogo():
                     source,destination=self.locate_blueprint()
