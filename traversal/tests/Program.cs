@@ -232,6 +232,7 @@ else
 }
 
 FollowTests.Run(Test);
+TeamPanelTests.Run(Test);
 PlaceTests.Run(Test, Install);
 DoorObjectTests.Run(Test, Install);
 TerrainTests.Run(Test, Install);

@@ -2,7 +2,7 @@
   <!-- Traversal engine tests: run with `dotnet run -c Release` (needs the local Neocron install for the world tests). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
