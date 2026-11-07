@@ -48,6 +48,31 @@ internal static class ReadTolerance
     }
 }
 
+/// <summary>
+/// A character read that may fail for a while during a fight or a follow without ending it: until <see cref="Window"/>
+/// seconds of failing in a row, the caller keeps the last good sample. Two hunts in Regant's Legacy ended on one failed
+/// read, mid-fight and in the same spot (7 Nov), as if zoning. A change of player or world still stops at once, as the
+/// callers check that on every good read.
+/// </summary>
+internal sealed class ReadLapse(double window = ReadLapse.Window)
+{
+    public const double Window = 3;
+    private double _since = double.NaN;
+
+    /// <summary>The fresh sample, or null while reads fail; throws once they have failed for the whole window.</summary>
+    public PlayerSample? Read(Func<PlayerSample> read, double now, string stopped)
+    {
+        try { var s = read(); _since = double.NaN; return s; }
+        catch (InvalidOperationException e) when (!e.Message.StartsWith("The game closed", StringComparison.Ordinal))
+        {
+            if (double.IsNaN(_since)) _since = now;
+            if (now - _since >= window)
+                throw new InvalidOperationException($"Your character could not be read for {window:F0} s ({e.Message.TrimEnd('.')}). {stopped}");
+            return null;
+        }
+    }
+}
+
 internal sealed partial class PlayerReader
 {
     /// <summary>Current sector (world id), as EntityReader.ReadSector reads it; null while zoning.</summary>

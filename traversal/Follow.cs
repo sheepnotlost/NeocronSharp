@@ -453,6 +453,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         string title = $"FOLLOW  {target.Name}";
         var origin = reader.ReadSteady();
         var previous = origin;
+        var lapse = new ReadLapse();
         double previousAt = 0;
         bool riding = false;   // in a gravity lift: only a sideways jump is a teleport
         var jumps = new PositionJumps();
@@ -467,9 +468,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         {
             if (StopRequest.Made()) throw new OperationCanceledException("Stop pressed.");
             reader.RequireForeground();
-            PlayerSample s;
-            try { s = reader.ReadSteady(); }
-            catch (InvalidOperationException) { throw new InvalidOperationException("Your character could not be read (zoning?). Follow stopped."); }
+            if (lapse.Read(reader.ReadSample, clock.Elapsed.TotalSeconds, "Follow stopped.") is not { } s) return previous;
             if (s.Player != origin.Player || s.World != origin.World || s.Physics != origin.Physics)
                 throw new InvalidOperationException("You changed zone (the player or world changed). Follow stopped; following through zones is not supported yet.");
             int? now = reader.ReadSectorId(s.World);

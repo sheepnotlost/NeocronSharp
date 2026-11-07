@@ -1,5 +1,6 @@
 using System.Numerics;
 using NavmeshPrototype;
+using NeocronSharp;
 using NeocronSharp.Core;
 
 /// <summary>Offline tests for following an actor: the distance band, the gap and the replan decision (<see cref="FollowLogic"/>).</summary>
@@ -130,6 +131,23 @@ internal static class FollowTests
             Check(kite.Step(1, 100, Vector3.Zero) == (true, 0), "too close: backs away");
             Check(kite.Step(1.7, 120, new Vector3(2, 0, 0)).Side != 0, "not moving: a step sideways");
             Check(kite.Step(3, 230, new Vector3(50, 0, 0)) == (false, 0), "room again: stops");
+        });
+
+        test("Read lapse: a fight rides out failed reads of your character, and stops after 3 s of them", () =>
+        {
+            var lapse = new ReadLapse();
+            var good = new PlayerSample(new Vector3(1, 2, 3), 1, 2, 3, Vector3.UnitX);
+            PlayerSample Fail() => throw new InvalidOperationException("A verified in-world player is unavailable. Log in and finish zoning.");
+            Check(lapse.Read(() => good, 0, "Stopped.") == good, "a good read passes through");
+            Check(lapse.Read(Fail, 1, "Stopped.") == null && lapse.Read(Fail, 3.9, "Stopped.") == null, "failing under 3 s: keep going");
+            Check(lapse.Read(() => good, 4, "Stopped.") == good, "reads again: carries on");
+            lapse.Read(Fail, 5, "Stopped.");
+            string? ended = null;
+            try { lapse.Read(Fail, 8, "Stopped."); } catch (InvalidOperationException e) { ended = e.Message; }
+            Check(ended != null && ended.Contains("could not be read for 3 s (A verified in-world player is unavailable"), $"3 s in a row: stops, saying why: {ended}");
+            bool closed = false;
+            try { new ReadLapse().Read(() => throw new InvalidOperationException("The game closed."), 0, "Stopped."); } catch (InvalidOperationException) { closed = true; }
+            Check(closed, "the game closing stops at once");
         });
 
         test("Healer place: beside or behind the fighter, never in front", () =>

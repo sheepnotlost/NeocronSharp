@@ -87,7 +87,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
     private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120,
-        MarkEveryMs = 60, PushEveryMs = 250;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
+        MarkEveryMs = 60, PushEveryMs = 250, BodyFrom = 80;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;
@@ -101,6 +101,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         var origin = reader.ReadSteady();
         int? sector = reader.ReadSectorId(origin.World);
         var previous = origin;
+        var lapse = new ReadLapse();
 
         void Record(string kind, PlayerSample s, object? detail = null) => log.WriteLine(JsonSerializer.Serialize(new {
             timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
@@ -129,9 +130,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         {
             if (F8()) throw new OperationCanceledException("Stop pressed.");
             reader.RequireForeground();
-            PlayerSample s;
-            try { s = reader.ReadSteady(); }
-            catch (InvalidOperationException) { throw new InvalidOperationException("Your character could not be read (zoning?). Camera follow stopped."); }
+            if (lapse.Read(reader.ReadSample, clock.Elapsed.TotalSeconds, "Camera follow stopped.") is not { } s) return previous;
             if (s.Player != origin.Player || s.World != origin.World || s.Physics != origin.Physics || reader.ReadSectorId(s.World) != sector)
                 throw new InvalidOperationException("You changed zone. Camera follow stopped.");
             return previous = s;
@@ -316,7 +315,8 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                         if (took && notes != null)
                         {
                             notes.Mark(now, screen.Mark!.Value.Measured);
-                            if (screen.Locked(now))
+                            // Close up the eye height guessed for the camera is too rough to take the body's height from.
+                            if (screen.Locked(now) && away >= BodyFrom)
                             {
                                 // Where the body is drawn, above the mob's feet: the aim point's line turned by what the screen showed.
                                 float eye = s.Position.Y + CameraAim.EyeHeight, flat = Math.Max(1, away);
