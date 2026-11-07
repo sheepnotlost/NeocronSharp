@@ -261,9 +261,21 @@ internal sealed class ScreenAim
     public bool Locked(double now) => now - InsideAt <= FireSeconds;
     public bool Searching(double now) => now - SeenAt > SearchAfter;
 
+    /// <summary>
+    /// Units: this close, a mob's health box is drawn above the top of the screen, so no mark shows; but its body is too wide
+    /// for the memory point to miss. In first person a Genotoxic Slugger up close went 10 s with no mark, no shot, and the
+    /// fight was given up as out of sight (7 Nov).
+    /// </summary>
+    public const float PointBlank = 110;
+
+    /// <summary>Shoot now? Inside the brackets, or point blank.</summary>
+    public bool Firing(double now, float away) => Locked(now) || away < PointBlank;
+
     /// <summary>The error to turn by now, given the error to the memory point (yaw as the mouse gain counts it, pitch up).</summary>
     public (float Yaw, float Pitch) Error(double now, float yawToMemory, float pitchToMemory, float away)
     {
+        // Point blank with no mark: the memory point itself, no search. A correction learned further out is an angle that no longer fits.
+        if (away < PointBlank && !Seen(now)) { _stepAt = -1; return (yawToMemory, pitchToMemory); }
         float yaw = yawToMemory + Offset.Yaw, pitch = pitchToMemory + Offset.Pitch;
         if (!Searching(now)) { _stepAt = -1; return (yaw, pitch); }
         if (_stepAt < 0) { _stepAt = now; _step = 0; }

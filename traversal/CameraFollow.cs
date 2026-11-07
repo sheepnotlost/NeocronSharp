@@ -380,7 +380,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (clock.ElapsedMilliseconds >= lookAt)
                     {
                         lookAt = clock.ElapsedMilliseconds + LookEveryMs;
-                        sight.Update(now, screen.Seen(now) || TargetBar.Showing(reader.Window));
+                        sight.Update(now, screen.Seen(now) || away < ScreenAim.PointBlank || TargetBar.Showing(reader.Window));
                     }
                     if (onTarget && aimedAt < 0) aimedAt = now;
                     var was = backOff.Now;
@@ -390,7 +390,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     input.Walk(backOff.Now == BackOff.Phase.Returning);
                     if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
                         Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
-                    if (input.LeftHeld && (!screen.Locked(now) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
+                    if (input.LeftHeld && (!screen.Firing(now, away) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
                     var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, away, s.Position) : (Back: false, Side: 0);
                     if (keep.Back) input.Back(true);
                     notes?.Tick(now, away, screen.Locked(now), screen.Searching(now), keep.Back);
@@ -429,7 +429,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     Record("gave-up", s, new { missed });
                     return Done(missed);
                 }
-                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Locked(now) && backOff.Now == BackOff.Phase.Done)))
+                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Firing(now, away) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
                     if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;

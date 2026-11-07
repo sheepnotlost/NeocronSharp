@@ -53,6 +53,15 @@ internal static class FollowTests
             Check(aim.See(2, new[] { new TargetMark(-10, -10, 10, 10, true) }, 0, 0, 1080, 1) && aim.Error(2.1, 0, 0, 3000) == (0, 0), "found: the search stops");
         });
 
+        test("Screen aim: point blank, no mark needed: fires at the memory point and does not search", () =>
+        {
+            var aim = new ScreenAim();
+            Check(aim.See(0, new[] { new TargetMark(-5, 50, 45, 70, true) }, 0, 0, 1080, 1), "a correction learned further out");
+            Check(!aim.Firing(0, 300), "out there, outside the brackets: no shots");
+            Check(aim.Error(3, .02f, -.01f, 40) == (.02f, -.01f) && aim.Error(3.5, .02f, -.01f, 40) == (.02f, -.01f), "40 units, no mark: the point itself, no search steps");
+            Check(aim.Firing(3, 40), "and shoots");
+        });
+
         test("Target marks: the label and three bracket corners give the body's box; red floor tiles make none", () =>
         {
             const int size = 648, high = 1080;
