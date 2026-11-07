@@ -71,6 +71,15 @@ class PixelFontTests(unittest.TestCase):
         two[400+32:400+38, 300+168:300+174] = (220, 220, 220)
         self.assertFalse(self.detector.quantity(two)["one"])
 
+    def test_a_one_with_its_text_cursor_over_another_window(self):
+        # 7 Nov: "1_" beside the field's border read as not-one, so the macro closed the box with its X
+        dialog = self.detector.pixel_quantity(rgb("pixel_quantity_over_window.png"))
+        self.assertTrue(self.detector.pixel is not True or dialog["one"])
+        self.detector.pixel = True
+        dialog = self.detector.quantity(rgb("pixel_quantity_over_window.png"))
+        self.assertTrue(dialog["one"])
+        self.assertLess(abs(dialog["ok"][0] - 291) + abs(dialog["ok"][1] - 90), 8)
+
     def test_the_blueprint_tooltip_is_read(self):
         self.detector.inventory(self.windows)
         frame = self.windows.copy()

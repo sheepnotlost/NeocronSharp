@@ -1470,7 +1470,7 @@ class Detector:
 
     # The Number of Units dialog in the pixel font, in pixels from its title's picture.
     PIXEL_QUANTITY = {"field": (155, 19), "half": (184, 15), "ok": (247, 20), "close": (264, -1),
-                      "box": (-8, -13, 280, 45), "digits": (141, 14, 170, 25)}
+                      "box": (-8, -13, 280, 45), "digits": (141, 14, 154, 25)}
 
     def pixel_quantity(self, frame):
         gray = self.gray(frame)
