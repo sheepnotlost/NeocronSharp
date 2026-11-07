@@ -47,7 +47,7 @@ internal static class FollowTests
             Check(next.Yaw == 0 && MathF.Abs(next.Pitch - ScreenAim.SearchStep) < 1e-6, "then a step up");
             var near = new ScreenAim();
             near.Error(1, 0, 0, 300);
-            Check(MathF.Abs(near.Error(1.3, 0, 0, 300).Pitch - .1f) < 1e-6, "close up, the steps are a body's size");
+            Check(MathF.Abs(near.Error(1.3, 0, 0, 300).Pitch - ScreenAim.MostSearchStep) < 1e-6, "close up, bigger steps, but never a swing");
             Check(!aim.See(2, new[] { new TargetMark(900, 0, 950, 20, true) }, 0, 0, 1080, 1), "a mark far off is another mob's");
             Check(aim.See(2, new[] { new TargetMark(-10, -10, 10, 10, true) }, 0, 0, 1080, 1) && aim.Error(2.1, 0, 0, 3000) == (0, 0), "found: the search stops");
         });
@@ -67,7 +67,7 @@ internal static class FollowTests
             void Label(int x, int y)
             {
                 Paint(x, y, x + 38, y + 12, 171, 36, 23);           // the red box
-                Paint(x + 3, y + 2, x + 30, y + 10, 255, 200, 198); // "100%"
+                Paint(x + 3, y + 2, x + 30, y + 10, 219, 216, 216); // "100%", near white as on a live screen
             }
             Label(300, 280);
             byte r = 150, g = 40, b = 35;
@@ -79,7 +79,7 @@ internal static class FollowTests
             var marks = TargetLock.Find(picture, size, high).OrderBy(m => m.Left).ToList();
             Check(marks.Count == 2, $"two labels, found {marks.Count}");
             var body = marks[0];
-            Check(body.Measured && body.Left == 300 - 324 && body.Top == 298 - 324 && body.Right == 400 - 324 && body.Bottom == 360 - 324,
+            Check(body.Measured && body.Left == 300 - 324 && body.Top == 298.5f - 324 && body.Right == 400 - 324 && body.Bottom == 360 - 324,
                 $"the brackets' box, from the crosshair: {body}");
             var tiled = marks[1];
             Check(!tiled.Measured && MathF.Abs(tiled.Right - tiled.Left - TargetLock.SmallWidth * high) < .01f, $"on the tiles, a small mob's size: {tiled}");

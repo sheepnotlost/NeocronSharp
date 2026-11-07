@@ -235,7 +235,7 @@ internal sealed class ScreenAim
     /// <summary>Of each new correction, the share taken; the rest is what was learned before.</summary>
     public const float Smooth = .5f;
     /// <summary>Radians: the least step of the search, and the most a correction may be (anything further is another mob's mark).</summary>
-    public const float SearchStep = .02f, MostOffset = .35f;
+    public const float SearchStep = .02f, MostSearchStep = .06f, MostOffset = .35f;   // .06: at 50 units, 30/away swung the view 35 degrees a step (7 Nov)
     /// <summary>Of the client height: how far into the brackets' margin still counts as inside them.</summary>
     public const float Margin = .005f;
     public const double SearchAfter = .4, SearchDwell = .25, FireSeconds = .5, SeenSeconds = 1;
@@ -263,7 +263,7 @@ internal sealed class ScreenAim
         if (!Searching(now)) { _stepAt = -1; return (yaw, pitch); }
         if (_stepAt < 0) { _stepAt = now; _step = 0; }
         else if (now - _stepAt >= SearchDwell) { _stepAt = now; _step = (_step + 1) % Pattern.Length; }
-        float step = Math.Max(SearchStep, 30 / Math.Max(away, 1));
+        float step = Math.Clamp(30 / Math.Max(away, 1), SearchStep, MostSearchStep);
         return (yaw + Pattern[_step].Yaw * step, pitch + Pattern[_step].Pitch * step);
     }
 

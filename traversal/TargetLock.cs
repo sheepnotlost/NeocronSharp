@@ -45,7 +45,8 @@ internal static class TargetLock
         bool Pink(int x, int y)
         {
             int i = (y * size + x) * 4, b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
-            return r > 225 && g > 150 && g < 228 && b > 150 && b < 228 && r - g > 25;
+            // Near white on screen (219,216,216 at 2560x1440, 7 Nov); a video blurs it pink (255,200,198).
+            return r > 190 && g > 150 && b > 150 && r >= g - 4 && r - g < 70 && Math.Abs(g - b) < 24;
         }
         bool BoxRed(int x, int y)
         {
@@ -95,7 +96,12 @@ internal static class TargetLock
                 for (int x = Math.Max(0, x0 - (int)(3 * s)); x < x0; x++)
                     if (BoxRed(x, y)) boxed++;
             if (boxed < (y1 - y0) * .5f) continue;
-            float left = x0 - 3 * s, top = y1 + 8 * s;
+            // The box's own edges: left along the text's middle row, bottom below its first letter. The brackets start at
+            // the box's left, a few pixels below it (6 at 1080 high, 9 at 1440).
+            int middle = (y0 + y1) / 2, boxLeft = x0, boxBottom = y1;
+            while (boxLeft > 0 && x0 - boxLeft < .03f * clientHeight && (BoxRed(boxLeft - 1, middle) || Pink(boxLeft - 1, middle))) boxLeft--;
+            while (boxBottom + 1 < size && boxBottom - y1 < .01f * clientHeight && BoxRed(x0 - 1 >= 0 ? x0 - 1 : x0, boxBottom + 1)) boxBottom++;
+            float left = boxLeft, top = boxBottom + 6.5f * s;
             int l = (int)MathF.Round(left), t = (int)MathF.Round(top);
             var box = Brackets(l, t, clientHeight, size, ThinAcross, ThinDown);
             bool measured = box is not null;
