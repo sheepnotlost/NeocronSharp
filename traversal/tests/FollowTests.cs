@@ -182,6 +182,11 @@ internal static class FollowTests
             Check(standing.Front is { } f && MathF.Abs(f.Z - 1) < 1e-3, "front toward the mob being fought");
             Check(standing.Update(new Vector3(0, 0, 100), Vector3.Zero, 120, 200), "between them and the mob: moves");
             Check(standing.Update(new Vector3(500, 0, 0), Vector3.Zero, 120, 200), "fallen behind: moves");
+            // Backing away south from a mob close to the north: the front is still the mob, not the way they walk.
+            var backing = new HealerPlace();
+            for (int i = 0; i <= 10; i++) backing.Observe(i * .1, new Vector3(0, 0, -i * 10), new Vector3(0, 0, 60));
+            Check(backing.Front is { } b && b.Z > .99f, "backing away: front toward the mob");
+            Check(backing.Bearing(new Vector3(0, 0, -200), new Vector3(0, 0, -100)) > HealerPlace.Clear, "the side away from the mob is behind them");
         });
 
         test("Hunt notes: each fight is summed up, what looks wrong is flagged, and what was learned is kept", () =>

@@ -472,7 +472,7 @@ internal static class FollowLogic
 internal sealed class HealerPlace
 {
     public const float FrontHalf = MathF.PI / 2, Clear = 105 * MathF.PI / 180, SideAngle = 115 * MathF.PI / 180;
-    public const float Moved = 40, MobRange = 2500;
+    public const float Moved = 40, MobRange = 2500, Fighting = 600;
     public const double MovedWithin = 1.5;
     private readonly Queue<(double At, Vector3 Where)> _trail = new();
     private bool _moving;
@@ -485,12 +485,13 @@ internal sealed class HealerPlace
         _trail.Enqueue((now, fighter));
         while (_trail.Count > 0 && now - _trail.Peek().At > MovedWithin) _trail.Dequeue();
         var walked = fighter - _trail.Peek().Where; walked.Y = 0;
-        if (walked.Length() >= Moved) Front = Vector3.Normalize(walked);
-        else if (nearestMob is { } mob && PointNavigation.Distance(fighter, mob) is var d && d > 1 && d <= MobRange)
-        {
-            var toMob = mob - fighter; toMob.Y = 0;
-            Front = Vector3.Normalize(toMob);
-        }
+        float d = nearestMob is { } m ? PointNavigation.Distance(fighter, m) : float.PositiveInfinity;
+        var toMob = nearestMob is { } mob ? mob - fighter : Vector3.Zero; toMob.Y = 0;
+        // A mob in a fight's range is the front, whichever way they walk: backing away from one, their walk points away
+        // from it, and the healer took the mob's side for their back (7 Nov).
+        if (d > 1 && d <= Fighting) Front = Vector3.Normalize(toMob);
+        else if (walked.Length() >= Moved) Front = Vector3.Normalize(walked);
+        else if (d > 1 && d <= MobRange) Front = Vector3.Normalize(toMob);
     }
 
     /// <summary>How far round from the fighter's front you are, either way (0 dead ahead, pi behind); null with no front known.</summary>
