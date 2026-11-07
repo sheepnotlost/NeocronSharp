@@ -526,3 +526,110 @@ internal sealed class HealerPlace
         return _moving;
     }
 }
+
+/// <summary>
+/// A healer's rounds over a team (the user's ask, 7 Nov): each ally and the healer itself have a clock per spell, and the
+/// next cast is whichever is most overdue, so nobody's heal or buff lapses and nobody waits while another is cast on twice.
+/// A cast restarts its clock; a reading of the buff timer in an ally's health bar (<see cref="Seen"/>) corrects it, and a
+/// reading with the buff gone makes it due now. Ties go to whoever was cast on longest ago, so the order is a round.
+/// </summary>
+internal sealed class TeamRounds
+{
+    public const string Self = "";
+
+    public sealed record Spell(int Slot, double Every, bool Heal);
+
+    public sealed class Due(string who, Spell spell, double over)
+    {
+        public string Who { get; } = who;
+        public Spell Spell { get; } = spell;
+        /// <summary>Seconds past its time (a spell never cast: a very large number).</summary>
+        public double Over { get; } = over;
+    }
+
+    private readonly List<string> _who;
+    private readonly Spell[] _spells;
+    private readonly Dictionary<(string, int), double> _runsOut = [];
+    private readonly Dictionary<string, double> _lastCast = [];
+    /// <summary>Seconds a spell may have left before it is cast again, so it is renewed before it runs out.</summary>
+    public double Margin { get; init; } = 3;
+
+    /// <param name="allies">The team in the order of the first round, without the healer, who comes last.</param>
+    public TeamRounds(IEnumerable<string> allies, IEnumerable<Spell> spells)
+    {
+        _who = allies.Where(a => a != Self).Distinct().Append(Self).ToList();
+        _spells = spells.ToArray();
+        foreach (var w in _who) _lastCast[w] = double.NegativeInfinity;
+    }
+
+    public IReadOnlyList<string> Who => _who;
+
+    private double RunsOut(string who, Spell spell) => _runsOut.TryGetValue((who, spell.Slot), out var t) ? t : double.NegativeInfinity;
+
+    /// <summary>The most overdue cast at <paramref name="now"/>, heals before buffs when equally overdue; null while all are running.</summary>
+    public Due? Next(double now)
+    {
+        Due? best = null;
+        foreach (var who in _who)
+            foreach (var spell in _spells)
+            {
+                double left = RunsOut(who, spell) - now;
+                if (left > Margin) continue;
+                double over = double.IsNegativeInfinity(left) ? double.MaxValue : -left;
+                if (best == null || Better(who, spell, over, best)) best = new Due(who, spell, over);
+            }
+        return best;
+    }
+
+    private bool Better(string who, Spell spell, double over, Due best)
+    {
+        if (over != best.Over) return over > best.Over;
+        if (spell.Heal != best.Spell.Heal) return spell.Heal;
+        return _lastCast[who] < _lastCast[best.Who];
+    }
+
+    /// <summary>A cast went off: its clock restarts and the member goes to the back of the round.</summary>
+    public void Cast(string who, Spell spell, double now)
+    {
+        _runsOut[(who, spell.Slot)] = now + spell.Every;
+        _lastCast[who] = now;
+    }
+
+    /// <summary>The buff timer read in the member's health bar: seconds left, or null when the buff is not there.</summary>
+    public void Seen(string who, Spell spell, double? secondsLeft, double now) =>
+        _runsOut[(who, spell.Slot)] = secondsLeft is { } left ? now + left : double.NegativeInfinity;
+}
+
+/// <summary>Where a healer waits among a team: behind the middle of the group, away from the mobs, close but not crowding.</summary>
+internal static class TeamStation
+{
+    public const float Close = 160, Crowd = 90;
+
+    /// <summary>
+    /// A point <paramref name="distance"/> behind the group's centre (the side away from <paramref name="mob"/>; with no
+    /// mob, the healer's own side of the centre), then moved out from any ally nearer than <see cref="Crowd"/>.
+    /// </summary>
+    public static Vector3 Spot(Vector3 healer, IReadOnlyList<Vector3> allies, Vector3? mob, float distance = Close)
+    {
+        var centre = Vector3.Zero;
+        foreach (var a in allies) centre += a;
+        centre /= allies.Count;
+        var away = mob is { } m ? centre - m : healer - centre;
+        away.Y = 0;
+        var direction = away.Length() < 1 ? Vector3.UnitX : Vector3.Normalize(away);
+        var spot = centre + direction * distance;
+        for (int i = 0; i < 4; i++)
+        {
+            Vector3? near = null; float nearest = Crowd;
+            foreach (var a in allies)
+            {
+                var d = spot - a; d.Y = 0;
+                if (d.Length() < nearest) { nearest = d.Length(); near = a; }
+            }
+            if (near is not { } crowded) break;
+            var push = spot - crowded; push.Y = 0;
+            spot = crowded + (push.Length() < 1 ? direction : Vector3.Normalize(push)) * Crowd;
+        }
+        return spot;
+    }
+}

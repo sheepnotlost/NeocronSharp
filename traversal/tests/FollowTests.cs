@@ -13,6 +13,35 @@ internal static class FollowTests
 
     public static void Run(Action<string, Action> test)
     {
+        test("Team rounds: the most overdue cast is next, everyone is cast on in turn, a bar reading corrects the clock", () =>
+        {
+            var heal = new TeamRounds.Spell(1, 30, true);
+            var shield = new TeamRounds.Spell(2, 120, false);
+            var team = new TeamRounds(["Ann", "Bob", "Cy"], [heal, shield]);
+            var order = new List<(string, int)>();
+            for (var d = team.Next(0); d != null; d = team.Next(0)) { order.Add((d.Who, d.Spell.Slot)); team.Cast(d.Who, d.Spell, 0); }
+            Check(order.Count == 8, "four people, two spells each, once");
+            Check(order.Take(4).All(o => o.Item2 == 1) && order.Take(4).Select(o => o.Item1).SequenceEqual(["Ann", "Bob", "Cy", TeamRounds.Self]), "heals first, in the order given, the healer last");
+            Check(team.Next(10) == null, "all running: nothing");
+            Check(team.Next(28) is { Spell.Slot: 1 }, "the heal comes back a little before it runs out (margin)");
+            team.Cast("Ann", heal, 29);
+            Check(team.Next(29)!.Who == "Bob", "then the next in the round, not Ann again");
+            team.Seen("Cy", heal, null, 30);
+            Check(team.Next(30)!.Who == "Cy", "a heal gone in the bar is cast at once, before others still running");
+            team.Seen("Cy", heal, 25, 30);
+            Check(!(team.Next(31) is { Who: "Cy", Spell.Slot: 1 }), "a bar showing time left puts the clock right");
+        });
+
+        test("Team station: behind the group away from the mobs, close, never crowding an ally", () =>
+        {
+            var allies = new List<Vector3> { new(0, 0, 0), new(100, 0, 0), new(0, 0, 100) };
+            var spot = TeamStation.Spot(new Vector3(500, 0, 500), allies, new Vector3(-1000, 0, -1000));
+            Check(allies.All(a => Vector3.Distance(new(spot.X, 0, spot.Z), a) >= TeamStation.Crowd - 1), "nobody crowded");
+            Check(spot.X + spot.Z > 100, "on the side away from the mob");
+            var squeezed = TeamStation.Spot(new Vector3(500, 0, 0), [new(0, 0, 0), new(60, 0, 0)], new Vector3(-1000, 0, 0), 20);
+            Check(Vector3.Distance(squeezed, new Vector3(0, 0, 0)) >= TeamStation.Crowd - 1 && Vector3.Distance(squeezed, new Vector3(60, 0, 0)) >= TeamStation.Crowd - 1, "pushed out of a crowd");
+        });
+
         test("Position jumps: one or two are the game correcting you, a third close by is not", () =>
         {
             var jumps = new PositionJumps();
