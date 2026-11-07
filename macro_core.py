@@ -4,9 +4,25 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
+import subprocess
 import threading
 import time
 from recipes import RECIPES, catalog
+
+
+def version():
+    """The commit this copy was made from: VERSION in a VM copy, else git; "unknown" without either."""
+    here = Path(__file__).resolve().parent
+    try:
+        return (here / "VERSION").read_text(encoding="utf-8").strip() or "unknown"
+    except OSError:
+        pass
+    try:
+        done = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=here, capture_output=True, text=True,
+                              timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return done.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 STACKS = ("T", "E", "A", "L")
 POINTS = (*STACKS, "input", "start", "quantity_field", "quantity_ok")
@@ -312,12 +328,17 @@ class ResearchRunner:
         self.checkpoint()
         self.backend.move(point)
 
+    # Rest on the spot, then hold: a game running slowly in a VM can miss a press that comes with
+    # the move, or one shorter than its frame (7 Nov: Start went unnoticed there).
+    CLICK_REST, CLICK_HOLD = .15, .15
+
     def click(self, point):
         self.move(point)
+        self.wait(self.CLICK_REST)
         self.checkpoint()
         self.backend.button("left", True)
         try:
-            self.wait(0.06)
+            self.wait(self.CLICK_HOLD)
         finally:
             self.backend.button("left", False)
 

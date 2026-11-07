@@ -592,6 +592,7 @@ class Detector:
         bar = self.region(frame, anchor, (40, 178, 350, 184)).astype(np.float32)
         r, g, b = bar[:, :, 0], bar[:, :, 1], bar[:, :, 2]
         filled = (g > 135) & (g > r * 1.2) & (g > b * 1.05)
+        self.last_progress = (percent_score, float(filled.mean()))
         return percent_score >= .80 or float(filled.mean()) > .04
 
     @staticmethod

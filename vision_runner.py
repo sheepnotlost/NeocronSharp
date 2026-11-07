@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import random
 
-from macro_core import Interrupted, ResearchRunner, STACKS
+from macro_core import Interrupted, ResearchRunner, STACKS, version
 from vision import Ambiguous, Detector, NotFound, cv2
 
 
@@ -170,6 +170,8 @@ class VisualRunner(ResearchRunner):
 
 
 RESTART_WAIT = (1, 5)        # seconds, a fresh random wait after each finished run before Start again (the user's word, 3 Nov)
+START_AGAIN = 2              # seconds with no progress after Start before it is clicked once more, never twice (7 Nov)
+NO_PROGRESS_EVERY = 10       # seconds between "no progress yet" lines, with what the macro sees
 
 
 class BlueprintRunner(VisualRunner):
@@ -184,11 +186,15 @@ class BlueprintRunner(VisualRunner):
                                "scale": processor.scale, "stacks": {}})
         return processor, state
 
-    def await_blueprint(self, seen_busy=False):
-        """True with a blueprint in the result slot, False without: the research failed and took a datacube with it."""
+    def await_blueprint(self, seen_busy=False, clicked=None):
+        """True with a blueprint in the result slot, False without: the research failed and took a datacube with it.
+
+        clicked is when Start was clicked: with no progress START_AGAIN s later it is clicked once more (the VM's
+        game let a click go by, 7 Nov), and every NO_PROGRESS_EVERY s the log says what the macro sees."""
         idle_samples = 0
+        again, told = clicked is None, clicked
         while True:
-            _, state = self.blueprint_state()
+            processor, state = self.blueprint_state()
             if state["busy"]:
                 seen_busy = True
                 idle_samples = 0
@@ -196,11 +202,25 @@ class BlueprintRunner(VisualRunner):
                 idle_samples += 1
                 if idle_samples >= 3:
                     return bool(state["result"])
+            elif clicked is not None:
+                waited = self.clock() - clicked
+                if not again and waited >= START_AGAIN:
+                    again = True
+                    self.emit("status", f"Blueprint: no progress {START_AGAIN} s after Start; clicking Start once more.")
+                    self.click(processor.start_point())
+                    self.move((24, 80))
+                elif self.clock() - told >= NO_PROGRESS_EVERY:
+                    told = self.clock()
+                    percent, filled = getattr(self.detector, "last_progress", (0., 0.))
+                    self.emit("status", f"Blueprint: no progress yet, {waited:.0f} s after Start. Bar {filled:.0%} green "
+                                        f"(4% counts), % sign match {percent:.2f} (.80 counts), Processor at "
+                                        f"{processor.x},{processor.y} size {processor.scale:.2f}.")
             self.wait(.05, safe_pause=True)
 
     def execute(self):
         target = self.profile["blueprints"]["count"]
         failed, finished = 0, False
+        self.emit("status", f"Blueprint: NeocronSharp version {version()}.")
         while target == 0 or self.completed < target:
             if finished:
                 delay = random.uniform(*RESTART_WAIT)
@@ -217,8 +237,9 @@ class BlueprintRunner(VisualRunner):
                 # current location once before clicking, without an extra idle wait.
                 self.click(processor.start_point())
                 self.move((24, 80))
+                clicked = self.clock()
                 self.emit("status", "Blueprint: Start clicked; waiting for progress and a new blueprint result.")
-                made = self.await_blueprint()
+                made = self.await_blueprint(clicked=clicked)
             finished = True
             if not made:
                 failed += 1

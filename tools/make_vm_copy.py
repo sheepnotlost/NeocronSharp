@@ -26,6 +26,8 @@ def main():
         to = TARGET / path
         to.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / path, to)
+    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    (TARGET / "VERSION").write_text(head + "\n", encoding="utf-8")       # shown in the Research log
     print("Building traversal.exe with .NET inside it ...")
     done = subprocess.run(["dotnet", "publish", str(ROOT / "traversal" / "Traversal.csproj"), "-c", "Release", "-r", "win-x64",
                            "--self-contained", "true", "-o", str(ENGINE), "-nologo", "-v", "q"])

@@ -201,11 +201,25 @@ class BlueprintRunnerTests(unittest.TestCase):
     def test_stale_result_and_ignored_start_never_cause_click_spam_or_false_completion(self):
         self.setup_run()
         self.backend.accept_start = False
-        self.clock.on_sleep = lambda: self.control.stopped.set() if self.clock.now > 20 else None
+        self.clock.on_sleep = lambda: self.control.stopped.set() if self.clock.now > 25 else None
         self.runner.run()
         self.assertEqual(self.runner.completed, 0)
-        self.assertEqual(self.backend.events.count(("left", True)), 1)
+        self.assertEqual(self.backend.events.count(("left", True)), 2)          # Start once more after 2 s, never again
+        text = " ".join(str(m) for m in self.messages)
+        self.assertIn("clicking Start once more", text)
+        self.assertIn("no progress yet, 10 s after Start", text)
+        self.assertIn("NeocronSharp version", text)
         self.assertIn("Stopped", self.errors()[0])
+
+    def test_a_click_the_game_let_go_by_is_made_again_and_the_copy_counts(self):
+        self.setup_run(count=1)
+        self.backend.accept_start = False
+        self.clock.on_sleep = lambda: setattr(self.backend, "accept_start", True) if self.backend.events.count(("left", False)) else None
+        self.runner.run()
+        self.assertFalse(self.errors(), self.messages)
+        self.assertEqual(self.runner.completed, 1)
+        self.assertEqual(len(self.backend.starts), 1)
+        self.assertEqual(self.backend.events.count(("left", True)), 2)
 
     def test_a_failed_research_is_not_a_copy_and_does_not_stop_the_batch(self):
         self.setup_run()
