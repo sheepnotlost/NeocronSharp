@@ -21,18 +21,76 @@ internal static class FollowTests
             Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
         });
 
-        test("Aim height: tries lower on a mob with no target bar, keeps the one that brings it up", () =>
+        test("Screen aim: learns where the body is drawn, keeps it as the mob moves, fires only inside the brackets", () =>
         {
-            var aim = new AimHeight();
-            Check(aim.Height == CameraAim.ShotHeight, "starts at chest height");
-            Check(!aim.Update(0, false, false) && !aim.Update(5, false, false), "off target nothing changes");
-            aim.Update(10, true, false);
-            Check(!aim.Update(10.2, true, false) && aim.Height == CameraAim.ShotHeight, "a moment on target first");
-            Check(aim.Update(10.5, true, false) && aim.Height == 35, "then lower");
-            aim.Update(11, true, false); aim.Update(11.5, true, false);
-            Check(aim.Height == 8, "and lower still, for a thing on the floor");
-            aim.Update(11.6, true, true);
-            Check(aim.Locked && !aim.Update(20, true, false) && aim.Height == 8, "the bar came up: kept for the fight");
+            var aim = new ScreenAim();
+            const int high = 1080;
+            float focal = ScreenAim.Focal * high, across = MathF.Atan(20 / focal), down = MathF.Atan(-60 / focal);
+            Check(aim.Error(0, .1f, -.05f, 500) == (.1f, -.05f), "at first, straight at the memory point");
+            // Memory says the mob is dead ahead; the game draws its body 60 px below and 20 px right of the crosshair.
+            Check(aim.See(0.1, new[] { new TargetMark(-5, 50, 45, 70, true) }, 0, 0, high, 1), "the mark is taken");
+            var e = aim.Error(0.1, 0, 0, 500);
+            Check(MathF.Abs(e.Yaw - across) < 1e-4 && MathF.Abs(e.Pitch - down) < 1e-4, "turn down and right onto it");
+            Check(!aim.Locked(0.1), "not inside the brackets yet: no shots");
+            var moved = aim.Error(0.2, .03f, 0, 500);
+            Check(MathF.Abs(moved.Yaw - (.03f + across)) < 1e-4, "the mob moves: memory carries the correction along");
+            // Turned onto it: now the memory point is up and left of the crosshair, and another mob's mark is off to the side.
+            Check(aim.See(0.3, new[] { new TargetMark(150, -200, 190, -180, true), new TargetMark(-25, -5, 25, 15, true) }, -across, -down, high, 1), "seen again");
+            Check(aim.Mark is { X: 0 } && aim.Locked(0.3) && aim.Locked(0.8) && !aim.Locked(0.9), "its own mark, crosshair inside: shots for half a second after each look");
+        });
+
+        test("Screen aim: with no mark for a moment, it looks round the point in small steps", () =>
+        {
+            var aim = new ScreenAim();
+            Check(aim.Error(1, 0, 0, 3000) == (0, 0), "the point itself first");
+            var next = aim.Error(1.3, 0, 0, 3000);
+            Check(next.Yaw == 0 && MathF.Abs(next.Pitch - ScreenAim.SearchStep) < 1e-6, "then a step up");
+            var near = new ScreenAim();
+            near.Error(1, 0, 0, 300);
+            Check(MathF.Abs(near.Error(1.3, 0, 0, 300).Pitch - .1f) < 1e-6, "close up, the steps are a body's size");
+            Check(!aim.See(2, new[] { new TargetMark(900, 0, 950, 20, true) }, 0, 0, 1080, 1), "a mark far off is another mob's");
+            Check(aim.See(2, new[] { new TargetMark(-10, -10, 10, 10, true) }, 0, 0, 1080, 1) && aim.Error(2.1, 0, 0, 3000) == (0, 0), "found: the search stops");
+        });
+
+        test("Target marks: the label and three bracket corners give the body's box; red floor tiles make none", () =>
+        {
+            const int size = 648, high = 1080;
+            var picture = new byte[size * size * 4];
+            void Paint(int x0, int y0, int x1, int y1, byte r, byte g, byte b)
+            {
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++) { int i = (y * size + x) * 4; picture[i] = b; picture[i + 1] = g; picture[i + 2] = r; picture[i + 3] = 255; }
+            }
+            Paint(0, 0, size - 1, size - 1, 25, 22, 21);
+            for (int y = 0; y < size; y += 16)                      // a red grid floor on the right
+                for (int x = 450; x < size - 12; x += 16) Paint(x, y, x + 11, Math.Min(size - 1, y + 11), 169, 73, 83);
+            void Label(int x, int y)
+            {
+                Paint(x, y, x + 38, y + 12, 171, 36, 23);           // the red box
+                Paint(x + 3, y + 2, x + 30, y + 10, 255, 200, 198); // "100%"
+            }
+            Label(300, 280);
+            byte r = 150, g = 40, b = 35;
+            Paint(300, 298, 306, 298, r, g, b); Paint(300, 298, 300, 304, r, g, b);
+            Paint(394, 298, 400, 298, r, g, b); Paint(400, 298, 400, 304, r, g, b);
+            Paint(300, 360, 306, 360, r, g, b); Paint(300, 354, 300, 360, r, g, b);
+            Paint(394, 360, 400, 360, r, g, b); Paint(400, 354, 400, 360, r, g, b);
+            Label(486, 100);                                        // a mob on the tiles, its corners lost in them
+            var marks = TargetLock.Find(picture, size, high).OrderBy(m => m.Left).ToList();
+            Check(marks.Count == 2, $"two labels, found {marks.Count}");
+            var body = marks[0];
+            Check(body.Measured && body.Left == 300 - 324 && body.Top == 298 - 324 && body.Right == 400 - 324 && body.Bottom == 360 - 324,
+                $"the brackets' box, from the crosshair: {body}");
+            var tiled = marks[1];
+            Check(!tiled.Measured && MathF.Abs(tiled.Right - tiled.Left - TargetLock.SmallWidth * high) < .01f, $"on the tiles, a small mob's size: {tiled}");
+        });
+
+        test("Screen aim: a mob measured once keeps its size when its corners are lost", () =>
+        {
+            var aim = new ScreenAim();
+            Check(aim.See(0, new[] { new TargetMark(-100, -100, 100, 100, true) }, 0, 0, 1080, 1, 500), "measured at 500");
+            Check(aim.See(0.1, new[] { new TargetMark(-50, -50, 4, -23, false) }, 0, 0, 1080, 1, 1000), "corners lost at 1000");
+            Check(aim.Mark is { Right: 50, Bottom: 50 }, $"half the size at twice the range: {aim.Mark}");
         });
 
         test("Camera angles: the short way round", () =>

@@ -93,6 +93,12 @@ else
         Check(exits.All(e => e.Exit.Properties["NextLevelStartIndex"] != "0"), "placeholders (start index 0) are excluded");
     });
 
+    Test("Don't attack: a typed part of a name spares it", () => {
+        Check(SweepTargets.Spared("Genotoxic  Parasite", new[] { "parasite" }), "part of the name");
+        Check(SweepTargets.Spared("Genotoxic Parasite", new[] { "genotoxic parasite" }), "the whole name, spaces evened out");
+        Check(!SweepTargets.Spared("Genotoxic Crawler", new[] { "parasite", "" }), "a blank entry spares nothing");
+    });
+
     Test("Regant's Legacy sweep: each point a walk on from the last, on several floors, with its way out and back in known", () => {
         var nav = Bake(1913);
         var travel = NewTravel(Scratch());

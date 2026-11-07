@@ -85,9 +85,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Where a run to a loot box starts to stop. The view stops at 43 degrees down, so the crosshair can't reach the ground nearer than about 88 units, and W up slides on. Not yet set live.</summary>
     public const float BoxReach = 120;
     private const float FacingToRun = 0.35f;
-    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120;
+    private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120,
+        MarkEveryMs = 60;   // a look for the game's marks on the mob: about 5 ms for the middle of a 1080 screen
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
-    private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for every aim height once, and again
+    private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;
 
     public string Run()
@@ -255,9 +256,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             Console.WriteLine($"Watching {target.Name}. The camera turns; you keep moving. F8 stops.");
             int ticks = 0;
             int? health = watch.Health;
-            long lastHurt = 0, lookAt = 0;
+            long lastHurt = 0, lookAt = 0, markAt = 0;
+            int marksLogged = 0;
             var sight = new SightWatch();
-            var aimHeight = new AimHeight();
+            var screen = new ScreenAim();
             var backOff = new BackOff(plan.BackTo);
             double aimedAt = -1, clearAt = -1, stepFrom = -1;
             float stepSide = 0;
@@ -267,8 +269,27 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (watch.Read() is { } gone) { Record("lost", s, new { gone }); hud.Post(Hud.Cyan, title, gone); return gone; }
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
-                float yawError = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight.Height : CameraAim.ShotHeight, 0)) - view.Pitch;
+                var point = watch.SeenAt + new Vector3(0, plan.Sight ? ScreenAim.MemoryHeight : CameraAim.ShotHeight, 0);
+                float yawToMemory = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
+                float pitchToMemory = CameraAim.PitchTo(s.Position, point) - view.Pitch;
+                double now = clock.Elapsed.TotalSeconds;
+                if (plan.Sight && clock.ElapsedMilliseconds >= markAt)
+                {
+                    markAt = clock.ElapsedMilliseconds + MarkEveryMs;
+                    if (TargetLock.Look(reader.Window) is { } look)
+                    {
+                        bool wasLocked = screen.Locked(now);
+                        if (screen.See(now, look.Marks, yawToMemory, pitchToMemory, look.ClientHeight, MathF.Sign(yawGain), away) && marksLogged++ % 5 == 0)
+                            Record("mark", s, new { x = screen.Mark!.Value.X, y = screen.Mark.Value.Y, measured = screen.Mark.Value.Measured, marks = look.Marks.Count,
+                                offsetYaw = screen.Offset.Yaw, offsetPitch = screen.Offset.Pitch, locked = screen.Locked(now), away });
+                        if (!wasLocked && screen.Locked(now))
+                        {
+                            Record("aim-locked", s, new { offsetYaw = screen.Offset.Yaw, offsetPitch = screen.Offset.Pitch, away });
+                            Console.WriteLine($"Crosshair on {target.Name}'s body.");
+                        }
+                    }
+                }
+                var (yawError, pitchError) = plan.Sight ? screen.Error(now, yawToMemory, pitchToMemory, away) : (yawToMemory, pitchToMemory);
                 int x = CameraAim.Pixels(CameraAim.Turn(yawError, away), yawGain), y = CameraAim.Pixels(CameraAim.Turn(pitchError, away), pitchGain);
                 input.LookPulse(x, y);
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
@@ -276,18 +297,14 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 health = watch.Health;
                 bool onTarget = CameraAim.OnTarget(yawError, pitchError);
                 var shotFrom = s.Position + new Vector3(0, CameraAim.EyeHeight, 0);
-                var shotTo = watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight.Height : CameraAim.ShotHeight, 0);
+                var shotTo = point;
                 string? blocker = plan.Shots?.Blocker(shotFrom, shotTo);
                 if (plan.Sight)
                 {
-                    double now = clock.Elapsed.TotalSeconds;
                     if (clock.ElapsedMilliseconds >= lookAt)
                     {
                         lookAt = clock.ElapsedMilliseconds + LookEveryMs;
-                        sight.Update(now, TargetBar.Showing(reader.Window));
-                        bool wasLocked = aimHeight.Locked;
-                        if (aimHeight.Update(now, onTarget, sight.Showing)) Record("aim-height", s, new { height = aimHeight.Height, away });
-                        else if (!wasLocked && aimHeight.Locked) { Record("aim-locked", s, new { height = aimHeight.Height, away }); Console.WriteLine($"Target bar up: aiming {aimHeight.Height:F0} above its feet."); }
+                        sight.Update(now, screen.Seen(now) || TargetBar.Showing(reader.Window));
                     }
                     if (onTarget && aimedAt < 0) aimedAt = now;
                     var was = backOff.Now;
@@ -297,7 +314,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     input.Walk(backOff.Now == BackOff.Phase.Returning);
                     if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
                         Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
-                    if (input.LeftHeld && (!sight.ClearToFire(now) || blocker != null)) input.HoldLeft(false);   // Something in the way: the shots would only hit that.
+                    if (input.LeftHeld && (!screen.Locked(now) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
                     if (blocker == null) { input.Strafe(0); stepFrom = -1; }
                     else
                     {
@@ -333,7 +350,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     Record("gave-up", s, new { missed });
                     return missed;
                 }
-                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && sight.ClearToFire(clock.Elapsed.TotalSeconds) && backOff.Now == BackOff.Phase.Done)))
+                if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Locked(now) && backOff.Now == BackOff.Phase.Done)))
                 {
                     input.HoldLeft(true);
                     if (lastHurt == 0) lastHurt = clock.ElapsedMilliseconds;
@@ -342,7 +359,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 }
                 hud.Show(Hud.Green, title, $"{away:F0} units away, {MathF.Abs(yawError) * 180 / MathF.PI:F0} deg across, {MathF.Abs(pitchError) * 180 / MathF.PI:F0} deg up/down", "F8 stops");
                 // A few lines a second: every tick would be 40 MB an hour.
-                if (ticks++ % 10 == 0) Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
+                if (ticks++ % 10 == 0) Record("track", s, new { Angle = yawError, pitch = pitchError, pixels = x, pixelsY = y, away, offsetYaw = screen.Offset.Yaw, offsetPitch = screen.Offset.Pitch, searching = plan.Sight && screen.Searching(now), target = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } });
                 Wait(Tick);
             }
         }

@@ -219,30 +219,76 @@ internal sealed class ShotLine(IEnumerable<SectorObjects.Prop> props)
 }
 
 /// <summary>
-/// How high above a mob's feet to aim. The list gives no height: 75 is a standing human's chest, but a Genotoxic Parasite
-/// is a small thing on the floor, and in third person the crosshair's line starts above and behind you, so at 75 it passed
-/// over one in a straight corridor and the target bar never came up (7 Nov). On target with no bar, it tries the next height
-/// after a moment; the first height that brings the bar up is kept for the rest of the fight.
+/// The aim on a mob, put right by what the screen shows. Memory gives where its feet are, and in third person the
+/// crosshair's line starts above and behind you, so aiming at a height above them missed small mobs: a Genotoxic Parasite
+/// was passed over, under, and never met (videos, 6 Nov). The game marks a mob near the crosshair with its health box and
+/// red corner brackets round the body (<see cref="TargetLock"/>), so each look learns how far the body is drawn from the
+/// memory point, and the aim keeps that correction while memory follows the mob as it moves. With no mark seen for a moment
+/// it looks round the point in small steps until one shows. Shots go only while the crosshair is inside the brackets.
 /// </summary>
-internal sealed class AimHeight
+internal sealed class ScreenAim
 {
-    public static readonly float[] Tries = { CameraAim.ShotHeight, 35, 8, 120 };
-    public const double DwellSeconds = 0.4;
-    private int _index;
-    private double _since = -1;
-    public bool Locked { get; private set; }
-    public float Height => Tries[_index];
+    /// <summary>Above the feet in memory: the rough aim the screen puts right.</summary>
+    public const float MemoryHeight = 30;
+    /// <summary>Pixels per unit of tangent, of the client height: 90 degrees across at 16:9. Only how fast a correction lands depends on it.</summary>
+    public const float Focal = .89f;
+    /// <summary>Of each new correction, the share taken; the rest is what was learned before.</summary>
+    public const float Smooth = .5f;
+    /// <summary>Radians: the least step of the search, and the most a correction may be (anything further is another mob's mark).</summary>
+    public const float SearchStep = .02f, MostOffset = .35f;
+    /// <summary>Of the client height: how far into the brackets' margin still counts as inside them.</summary>
+    public const float Margin = .005f;
+    public const double SearchAfter = .4, SearchDwell = .25, FireSeconds = .5, SeenSeconds = 1;
+    private static readonly (int Yaw, int Pitch)[] Pattern =
+        { (0, 0), (0, 1), (0, -1), (1, 0), (-1, 0), (0, 2), (0, -2), (2, 0), (-2, 0), (1, 1), (-1, 1), (1, -1), (-1, -1), (0, 3), (0, -3) };
 
-    /// <summary>True when it moved on to another height.</summary>
-    public bool Update(double now, bool onTarget, bool barShowing)
+    private int _step;
+    private double _stepAt = -1;
+    public (float Yaw, float Pitch) Offset { get; private set; }
+    public double SeenAt { get; private set; } = double.NegativeInfinity;
+    public double InsideAt { get; private set; } = double.NegativeInfinity;
+    public TargetMark? Mark { get; private set; }
+    // The brackets' size times the range, from the last look that found all their corners: a mob drawn this big keeps
+    // its size when the corners are lost on a red floor, and the label's corner alone would put the aim at its edge.
+    private (float Width, float Height)? _sizeAtRange;
+
+    public bool Seen(double now) => now - SeenAt <= SeenSeconds;
+    public bool Locked(double now) => now - InsideAt <= FireSeconds;
+    public bool Searching(double now) => now - SeenAt > SearchAfter;
+
+    /// <summary>The error to turn by now, given the error to the memory point (yaw as the mouse gain counts it, pitch up).</summary>
+    public (float Yaw, float Pitch) Error(double now, float yawToMemory, float pitchToMemory, float away)
     {
-        if (Locked) return false;
-        if (barShowing) { Locked = true; return false; }
-        if (!onTarget) { _since = -1; return false; }
-        if (_since < 0) { _since = now; return false; }
-        if (now - _since < DwellSeconds) return false;
-        _index = (_index + 1) % Tries.Length;
-        _since = -1;
+        float yaw = yawToMemory + Offset.Yaw, pitch = pitchToMemory + Offset.Pitch;
+        if (!Searching(now)) { _stepAt = -1; return (yaw, pitch); }
+        if (_stepAt < 0) { _stepAt = now; _step = 0; }
+        else if (now - _stepAt >= SearchDwell) { _stepAt = now; _step = (_step + 1) % Pattern.Length; }
+        float step = Math.Max(SearchStep, 30 / Math.Max(away, 1));
+        return (yaw + Pattern[_step].Yaw * step, pitch + Pattern[_step].Pitch * step);
+    }
+
+    /// <summary>
+    /// A look at the screen: the marks found, and the error to the memory point when it was taken. yawSign is the sign of
+    /// the yaw gain: which way a turn to the right counts. True when a mark was taken for the mob.
+    /// </summary>
+    public bool See(double now, IReadOnlyList<TargetMark> marks, float yawToMemory, float pitchToMemory, int clientHeight, float yawSign, float away = 0)
+    {
+        if (marks.Count == 0 || clientHeight <= 0) return false;
+        float focal = Focal * clientHeight;
+        float Across(float yaw) => focal * MathF.Tan(Math.Clamp(yawSign * yaw, -1.2f, 1.2f));
+        float Down(float pitch) => -focal * MathF.Tan(Math.Clamp(pitch, -1.2f, 1.2f));
+        float ex = Across(yawToMemory + Offset.Yaw), ey = Down(pitchToMemory + Offset.Pitch);
+        var mark = marks.MinBy(m => (m.X - ex) * (m.X - ex) + (m.Y - ey) * (m.Y - ey));
+        if (away > 0 && mark.Measured) _sizeAtRange = ((mark.Right - mark.Left) * away, (mark.Bottom - mark.Top) * away);
+        else if (away > 0 && _sizeAtRange is { } size)
+            mark = mark with { Right = mark.Left + size.Width / away, Bottom = mark.Top + size.Height / away };
+        var learned = (Yaw: yawSign * MathF.Atan(mark.X / focal) - yawToMemory, Pitch: MathF.Atan(-mark.Y / focal) - pitchToMemory);
+        if (MathF.Abs(learned.Yaw) > MostOffset || MathF.Abs(learned.Pitch) > MostOffset) return false;
+        Offset = Seen(now) ? (Offset.Yaw + Smooth * (learned.Yaw - Offset.Yaw), Offset.Pitch + Smooth * (learned.Pitch - Offset.Pitch)) : learned;
+        SeenAt = now;
+        Mark = mark;
+        float margin = Margin * clientHeight;
+        if (MathF.Abs(mark.X) <= mark.HalfWidth + margin && MathF.Abs(mark.Y) <= mark.HalfHeight + margin) InsideAt = now;
         return true;
     }
 }

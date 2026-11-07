@@ -4,8 +4,8 @@ Follow's target list without the walk: the work is done by traversal.exe's "came
 which sends mouse movement only (no movement keys, no clicks) and stops on Stop or F8.
 The one option adds a click: on an NPC it can hold the left mouse button (--hold-left).
 The hunt (loot_runner.py) repeats walk, fight, run and loot on every robot, mutant and animal in the zone, except names ticked
-"leave alone" in the enemy list; never a human NPC or a player. In Regant's Legacy Start hunt is the dungeon sweep instead.
-Hunt Regant's Legacy (dungeon_runner.py) walks that dungeon's main area a room at a time, kills every NPC as it comes near,
+"leave alone" in the enemy list or typed (whole or in part) in Don't attack; never a human NPC or a player. In Regant's Legacy Start hunt is the dungeon sweep instead.
+Hunt Regant's Legacy (dungeon_runner.py) walks that dungeon's main area a room at a time, kills every creature but Don't attack as it comes near,
 then goes out, waits for the place to fill up again, and goes back in.
 Follow and heal runs on the healer's own PC (or VM), one Neocron client there, with the fighter played on another computer:
 "follow --heal", real mouse input, Follow's routes to the fighter named here, then aiming and a cast every 30 s when in reach.
@@ -27,6 +27,7 @@ from macro_core import Control
 
 
 FIGHTER_FILE = tt.PROJECT / "fighter.txt"
+AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next time
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
@@ -34,6 +35,11 @@ TWO_CLIENTS = ("{} Neocron clients are open on this PC. Close all but one: Follo
                "with the fighter on another computer.")
 TICKED, UNTICKED = "\u2611", "\u2610"
 log_box = tt.log_box
+
+
+def typed_names(text):
+    """The Don't attack box: names or parts of names, split at commas."""
+    return [" ".join(part.split()) for part in text.split(",") if part.strip()]
 
 
 def enemy_rows(actors, ticked=()):
@@ -55,7 +61,7 @@ class TargetTab:
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk, follow or job loop is steering the same mouse
         self.loot_runner = loot_runner      # makes a LootRunner(names, reach, emit, control) bound to the game
-        self.dungeon_runner = dungeon_runner    # makes a DungeonRunner(reach, emit, control) bound to the game
+        self.dungeon_runner = dungeon_runner    # makes a DungeonRunner(reach, emit, control, avoid) bound to the game
         self.hunted = {}                    # names ticked "leave alone": lower-case name -> name (kept name for old callers)
         self.sector = None                  # the zone the last Refresh read
         self.heal_name = None               # the fighter a healer alone keeps going back to
@@ -120,6 +126,18 @@ class TargetTab:
         hunting.columnconfigure(0, weight=1)
         hunting.rowconfigure(1, weight=1)
         ttk.Label(hunting, text="Enemies here (no humans): tick any to leave alone").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        avoid_row = ttk.Frame(hunting)
+        avoid_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        avoid_row.columnconfigure(1, weight=1)
+        ttk.Label(avoid_row, text="Don't attack:").grid(row=0, column=0, sticky="w")
+        try:
+            kept = AVOID_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            kept = ""
+        self.avoid = tk.StringVar(value=kept)
+        self.avoid.trace_add("write", lambda *_: self.show_enemies() if getattr(self, "ready", False) else None)
+        ttk.Entry(avoid_row, textvariable=self.avoid).grid(row=0, column=1, sticky="ew", padx=6)
+        ttk.Label(avoid_row, text="names or parts, commas between: parasite, slugger").grid(row=0, column=2, sticky="w")
         self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
         for column, text, width, anchor in (("hunt", "Spare", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
                                             ("nearest", "Nearest", 70, "e")):
@@ -310,7 +328,8 @@ class TargetTab:
         for i, row in enumerate(enemy_rows(self.actors, self.hunted.values())):
             iid = f"e{i}"
             self.enemy_names[iid] = row["name"]
-            self.enemies.insert("", "end", iid=iid, values=(TICKED if row["name"].lower() in self.hunted else UNTICKED, row["name"], row["alive"],
+            spared = row["name"].lower() in self.hunted or not hunted({"kind": "npc", "faction": 16, "name": row["name"]}, typed_names(self.avoid.get()))
+            self.enemies.insert("", "end", iid=iid, values=(TICKED if spared else UNTICKED, row["name"], row["alive"],
                                                             "" if row["nearest"] is None else f"{row['nearest']:,.0f}"))
 
     def toggle_enemy(self, event):
@@ -424,10 +443,20 @@ class TargetTab:
             self.queue.put(("done", None))
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
 
+    def avoid_names(self):
+        """Names ticked in the list and names, or parts of names, typed in Don't attack; the box is kept for next time."""
+        typed = typed_names(self.avoid.get())
+        try:
+            AVOID_FILE.write_text(", ".join(typed), encoding="utf-8")
+        except OSError:
+            pass
+        names = list(self.hunted.values())
+        return names + [name for name in typed if name.lower() not in {n.lower() for n in names}]
+
     def start_hunt(self):
         if self.sector in (INSIDE, OUTSIDE) and self.dungeon_runner:
             return self.start_dungeon()         # Regant's Legacy: the sweep through it, not the zone hunt
-        names, reach = list(self.hunted.values()), self.reach_units()
+        names, reach = self.avoid_names(), self.reach_units()
         problem = self.hunt_problem(None, reach)
         if problem:
             self.status.set(problem)
@@ -462,24 +491,25 @@ class TargetTab:
             self.loot_event("done", f"Hunt could not start: {exc}")
 
     def start_dungeon(self):
-        """Every NPC in Regant's Legacy's main area, one at a time; nothing to tick, and the Attack from box still counts."""
-        reach = self.reach_units()
+        """Every robot, mutant and animal in Regant's Legacy's main area, one at a time, except Don't attack; the Attack from box still counts."""
+        reach, avoid = self.reach_units(), self.avoid_names()
         problem = self.hunt_problem(None, reach)
         if problem:
             self.status.set(problem)
             self.append(problem)
             return
         self.looting = Control()
-        self.append("Regant's Legacy: every Genotoxic Parasite, Slugger and Crawler in the main area, one at a time, then out for 5 min and back in. "
+        spared = f", leaving {', '.join(avoid)} alone" if avoid else ""
+        self.append(f"Regant's Legacy: every creature in the main area{spared}, one at a time; never humans or players. Then out for 5 min and back in. "
                     "Start inside it or outside its door. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
-        self.loot_start = self.root.after(5000, self.begin_dungeon, reach)
+        self.loot_start = self.root.after(5000, self.begin_dungeon, reach, avoid)
 
-    def begin_dungeon(self, reach):
+    def begin_dungeon(self, reach, avoid=()):
         self.loot_start = None
         try:
             clients.focus()
-            runner = self.dungeon_runner(reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting)
+            runner = self.dungeon_runner(reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting, avoid)
             threading.Thread(target=runner.run, daemon=True, name="dungeon").start()
         except Exception as exc:
             self.loot_event("done", f"The Regant's Legacy hunt could not start: {exc}")

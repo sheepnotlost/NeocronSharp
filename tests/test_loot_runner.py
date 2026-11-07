@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 import loot_runner
-from loot_runner import LootRunner, pick_target
+from loot_runner import LootRunner, hunted, pick_target
 from macro_core import Control, Interrupted, default_profile
 from vision import Detector
 
@@ -18,6 +18,12 @@ def actor(name, kind="npc", distance=50., dead=False, id=None, faction=17):
 
 
 class PickTests(unittest.TestCase):
+    def test_a_spared_name_may_be_part_of_one(self):
+        parasite = {"kind": "npc", "faction": 17, "name": "Genotoxic  Parasite"}
+        self.assertFalse(hunted(parasite, ["parasite"]))
+        self.assertFalse(hunted(parasite, ["genotoxic parasite"]))
+        self.assertTrue(hunted(parasite, ["slugger", ""]))
+
     def test_nearest_living_creature_in_range_not_spared(self):
         actors = [actor("Rat", distance=90), actor("Rat", distance=30, id="near"), actor("Spider", distance=5),
                   actor("Rat", distance=1, dead=True, id="body"), actor("Rat", distance=900, id="far")]

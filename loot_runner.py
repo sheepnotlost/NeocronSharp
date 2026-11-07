@@ -47,9 +47,11 @@ PREY = {16, 17, 18}          # pak_factions: Robot, Mutant, Wildlife. Every othe
 
 
 def hunted(actor, spare=()):
-    """A robot, mutant or animal not named in spare. Never a player, never a human NPC (City Mercs, LowSL, ...)."""
+    """A robot, mutant or animal not named in spare, where a spare name may be part of one ("parasite" spares Genotoxic
+    Parasite). Never a player, never a human NPC (City Mercs, LowSL, ...)."""
+    name = " ".join(actor["name"].lower().split())
     return (actor["kind"] == "npc" and actor.get("faction") in PREY
-            and actor["name"].lower() not in {name.lower() for name in spare})
+            and not any(part and part in name for part in (" ".join(s.lower().split()) for s in spare)))
 
 
 def pick_target(actors, spare=(), within=float("inf"), skip=()):

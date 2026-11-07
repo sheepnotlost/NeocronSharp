@@ -104,7 +104,9 @@ class EngineTests(unittest.TestCase):
         sent = []
         engine.live = lambda args, tick: sent.append(args) or ""
         engine.sweep(None, set(), None)
-        self.assertEqual(sent[0][:5], ["sweep", "--world", str(INSIDE), "--names", "Genotoxic Parasite,Genotoxic Slugger,Genotoxic Crawler"])
+        self.assertEqual(sent[0][:3], ["sweep", "--world", str(INSIDE)])
+        self.assertNotIn("--names", sent[0])
+        self.assertNotIn("--avoid", sent[0])
         self.assertEqual(sent[0][sent[0].index("--engage")+1], str(dungeon_runner.ENGAGE))
         self.assertNotIn("--from", sent[0])
         engine.calibration = "190,0.0024"
@@ -114,6 +116,13 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(sent[1][sent[1].index("--skip")+1], "a1,b2")
         engine.travel(OUTSIDE, None)
         self.assertEqual(sent[2][:2], ["travel", str(OUTSIDE)])
+        engine.avoid = ["parasite", "Genotoxic Slugger"]
+        engine.sweep(None, set(), None)
+        self.assertEqual(sent[3][sent[3].index("--avoid")+1], "parasite,Genotoxic Slugger")
+
+    def test_the_runner_hands_dont_attack_to_the_sweep(self):
+        runner = DungeonRunner(default_profile(), Backend(), Control(), lambda *a: None, spare=["parasite"])
+        self.assertEqual(runner.engine.avoid, ["parasite"])
 
 
 if __name__ == "__main__":

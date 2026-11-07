@@ -19,6 +19,9 @@ class TargetTabTests(unittest.TestCase):
         self.frame = tk.Frame(self.root)
         self.frame.pack()
         self.walking = False
+        kept = patch.object(target_tab, "AVOID_FILE", Path(tempfile.mkdtemp()) / "avoid.txt")
+        kept.start()
+        self.addCleanup(kept.stop)
         with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
             self.tab = target_tab.TargetTab(self.frame, self.root, autoload=False, other_live=lambda: self.walking)
         self.tab.show_nearby(("ok", NEARBY))
@@ -199,19 +202,19 @@ class TargetTabTests(unittest.TestCase):
         class Runner:
             def run(self):
                 made.append("ran")
-        self.tab.dungeon_runner = lambda reach, emit, control: made.append(reach) or Runner()
+        self.tab.dungeon_runner = lambda reach, emit, control, avoid: made.append((reach, avoid)) or Runner()
         self.tab.update_buttons()
         self.assertEqual(str(self.tab.dungeon_button.cget("state")), "normal")
         self.tab.start_dungeon()
         self.assertIsNotNone(self.tab.looting)
         self.assertEqual(str(self.tab.dungeon_button.cget("state")), "disabled")
-        self.assertIn("Regant's Legacy: every Genotoxic Parasite, Slugger and Crawler", self.log())
+        self.assertIn("Regant's Legacy: every creature in the main area, one at a time", self.log())
         self.root.after_cancel(self.tab.loot_start)
         with patch.object(target_tab.clients, "focus"):
-            self.tab.begin_dungeon(4000)
+            self.tab.begin_dungeon(4000, ["parasite"])
         for thread in [t for t in threading.enumerate() if t.name == "dungeon"]:
             thread.join(5)
-        self.assertEqual(made, [4000, "ran"])
+        self.assertEqual(made, [(4000, ["parasite"]), "ran"])
         self.tab.looting = None
 
     def test_start_hunt_says_why_it_cannot_start(self):
@@ -360,6 +363,11 @@ if __name__ == "__main__":
 
 
 class SpareTests(unittest.TestCase):
+    def setUp(self):
+        kept = patch.object(target_tab, "AVOID_FILE", Path(tempfile.mkdtemp()) / "avoid.txt")
+        kept.start()
+        self.addCleanup(kept.stop)
+
     def test_nothing_ticked_starts_the_hunt_and_regants_legacy_starts_the_sweep(self):
         root = tk.Tk(); root.withdraw()
         frame = tk.Frame(root); frame.pack()
@@ -375,7 +383,25 @@ class SpareTests(unittest.TestCase):
             tab.show_nearby(("ok", {**NEARBY, "sector": target_tab.INSIDE}))
             with patch.object(root, "after"):
                 tab.start_hunt()
-            self.assertIn("Regant's Legacy: every Genotoxic", tab.log.get("1.0", "end"))
+            self.assertIn("Regant's Legacy: every creature in the main area, one at a time", tab.log.get("1.0", "end"))
+            tab.looting = None
+        finally:
+            tab.close(); root.destroy()
+
+    def test_typed_names_or_parts_are_left_alone_and_kept(self):
+        root = tk.Tk(); root.withdraw()
+        frame = tk.Frame(root); frame.pack()
+        with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
+            tab = target_tab.TargetTab(frame, root, autoload=False, loot_runner=lambda *a: None, dungeon_runner=lambda *a: None)
+        try:
+            tab.show_nearby(("ok", {**NEARBY, "sector": target_tab.INSIDE}))
+            tab.avoid.set(" parasite ,  Genotoxic  Slugger,, ")
+            self.assertEqual(target_tab.typed_names(tab.avoid.get()), ["parasite", "Genotoxic Slugger"])
+            with patch.object(root, "after") as after:
+                tab.start_hunt()
+            self.assertEqual(after.call_args.args[3], ["parasite", "Genotoxic Slugger"])
+            self.assertIn("leaving parasite, Genotoxic Slugger alone", tab.log.get("1.0", "end"))
+            self.assertEqual(target_tab.AVOID_FILE.read_text(encoding="utf-8"), "parasite, Genotoxic Slugger")
             tab.looting = None
         finally:
             tab.close(); root.destroy()

@@ -26,22 +26,25 @@ internal static class TargetBar
         return red > split * height * Share || green > (width - split) * height * Share;
     }
 
-    public static bool Showing(nint window)
+    public static bool Showing(nint window) =>
+        Grab(window, (w, h) => ((int)(w * Left), (int)(h * Top), (int)(w * (Right - Left)), (int)(h * (Bottom - Top)))) is { } p && Looks(p.Pixels, p.Width, p.Height);
+
+    /// <summary>A part of the client area as it is on screen, top-down BGRA; region takes the client size and gives x, y, width, height in it.</summary>
+    internal static (byte[] Pixels, int Width, int Height, int ClientHeight)? Grab(nint window, Func<int, int, (int X, int Y, int Width, int Height)> region)
     {
-        if (!GetClientRect(window, out var client)) return false;
+        if (!GetClientRect(window, out var client)) return null;
         var corner = new Point();
-        if (!ClientToScreen(window, ref corner)) return false;
-        int x = corner.X + (int)(client.Right * Left), y = corner.Y + (int)(client.Bottom * Top);
-        int width = (int)(client.Right * (Right - Left)), height = (int)(client.Bottom * (Bottom - Top));
-        if (width < 1 || height < 1) return false;
+        if (!ClientToScreen(window, ref corner)) return null;
+        var (rx, ry, width, height) = region(client.Right, client.Bottom);
+        if (width < 1 || height < 1) return null;
         nint screen = GetDC(0), memory = CreateCompatibleDC(screen), picture = CreateCompatibleBitmap(screen, width, height);
         try
         {
             var pixels = new byte[width * height * 4];
             var header = new BitmapHeader { Size = 40, Width = width, Height = -height, Planes = 1, Bits = 32 };
             SelectObject(memory, picture);
-            return BitBlt(memory, 0, 0, width, height, screen, x, y, 0x00CC0020) &&   // SRCCOPY
-                GetDIBits(memory, picture, 0, (uint)height, pixels, ref header, 0) != 0 && Looks(pixels, width, height);
+            return BitBlt(memory, 0, 0, width, height, screen, corner.X + rx, corner.Y + ry, 0x00CC0020) &&   // SRCCOPY
+                GetDIBits(memory, picture, 0, (uint)height, pixels, ref header, 0) != 0 ? (pixels, width, height, client.Bottom) : null;
         }
         finally
         {

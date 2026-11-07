@@ -1,5 +1,5 @@
 """Regant's Legacy hunt: walk the Main Detention Area a room at a time and kill every NPC, one at a time, as each comes
-within a short walk; once all of it has been walked, leave by its exit, wait outside for it to fill up again, go back in
+within a short walk (robots, mutants and animals: never a human or a player, nor a name typed in Don't attack); once all of it has been walked, leave by its exit, wait outside for it to fill up again, go back in
 and walk it again, until Stop or F8.
 
 traversal.exe does the walking: "sweep" walks the place's planned points (Sweep.cs) and stops the moment an NPC is near,
@@ -14,7 +14,6 @@ from macro_core import Interrupted
 INSIDE = 1913                # MAIN DETENTION AREA, where the entrance leads
 OUTSIDE = 2083               # E 03 - SWAMP, where the exit comes out and the entrance stands
 PLACE = "Regant's Legacy"
-TARGETS = ("Genotoxic Parasite", "Genotoxic Slugger", "Genotoxic Crawler")   # all it kills here, by exact name
 CLOSE_IN = 500               # units: indoors it walks this close before the first shot; from 1,000 down a corridor it shot the wall (7 Nov)
 ENGAGE = 1500                # units' walk: an NPC this near stops the sweep to be fought
 RESPAWN_WAIT = 300           # seconds outside between sweeps, for the place to fill up again
@@ -24,6 +23,8 @@ ENEMY = re.compile(r"^enemy (\S+) (\d+) (.+)$", re.M)
 
 
 class DungeonEngine(Engine):
+    avoid = ()                   # names, or parts of names, never to stop for
+
     def where(self):
         """The sector you are in, read from the game."""
         data = self.tool(["nearby"])
@@ -33,7 +34,9 @@ class DungeonEngine(Engine):
 
     def sweep(self, at, skip, tick):
         """Walk on from point at = (point, points left), or from the nearest point; skip: NPCs it can't kill."""
-        args = ["sweep", "--world", str(INSIDE), "--names", ",".join(TARGETS), "--engage", str(ENGAGE), "--pulse", self.pulse]
+        args = ["sweep", "--world", str(INSIDE), "--engage", str(ENGAGE), "--pulse", self.pulse]
+        if self.avoid:
+            args += ["--avoid", ",".join(self.avoid)]
         if at is not None:
             args += ["--from", str(at[0]), "--left", str(at[1])]
         if skip:
@@ -50,6 +53,7 @@ class DungeonRunner(LootRunner):
     def __init__(self, *args, engine=None, wait_outside=RESPAWN_WAIT, **kwargs):
         super().__init__(*args, **kwargs)
         self.engine = engine or DungeonEngine(lambda text: self.emit("log", text), self.control)
+        self.engine.avoid = [name.replace(",", " ") for name in self.spare]
         self.wait_outside = wait_outside
         self.back = False            # indoors, backing away walks into the next room's mobs
         self.reach = min(self.reach, CLOSE_IN)

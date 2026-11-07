@@ -52,3 +52,4 @@ traversal/logs/*
 !traversal/logs/wasteland-places.json
 !traversal/logs/arrows-*.json
 traversal/fighter.txt
+traversal/avoid.txt

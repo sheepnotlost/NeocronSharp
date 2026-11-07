@@ -971,12 +971,12 @@ class App:
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)  # With two open, the engine reads the client you clicked into.
         return LootRunner(self.profile,self.backend,control,emit,spare=names,reach=reach)
 
-    def dungeon_runner(self,reach,emit,control):
+    def dungeon_runner(self,reach,emit,control,avoid=()):
         from dungeon_runner import DungeonRunner
         import clients,os
         self.ensure_bound()
         if os.environ.get("NEOCRON_PID"):clients.choose(self.backend.pid)
-        return DungeonRunner(self.profile,self.backend,control,emit,reach=reach)
+        return DungeonRunner(self.profile,self.backend,control,emit,spare=avoid,reach=reach)
 
     def job_clients(self):
         """Opening the Job Loop tab lists the open clients for its Client list (two open: pick the one for the jobs)."""
