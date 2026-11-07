@@ -92,7 +92,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
     private const double BlindSeconds = 5, StepAsideSeconds = 6;
     /// <summary>--stay: seconds a target already shot at may be out of view before it is let go for another.</summary>
-    public const double LostSeconds = 8;
+    public const double LostSeconds = 3;   // 8 at first: too long stood idle (7 Nov)
     /// <summary>--stay: seconds aimed at a mob, before the first shot, for the game to draw its label; none means it is behind something.</summary>
     public const double GlanceSeconds = 1.2;   // 5: time for the search round the mob, and more
     private const float StuckBelow = 15;

@@ -3,7 +3,7 @@ until it dies; then the next nearest, over and over until Stop or F8. Never a hu
 Don't attack.
 
 It never takes a step and never drops a mob for another (traversal.exe's camera run with --stay): once it has shot at
-one, it keeps the aim on it until it dies, holding fire while it is out of sight or behind something; only after 8 s
+one, it keeps the aim on it until it dies, holding fire while it is out of sight or behind something; only after 3 s
 out of view is it let go for the nearest one in view, and looked at again later. Dropping them
 for the next left four mobs on you with none dead (7 Nov). What is in view is the game's say, not the map's: it turns to
 each mob, nearest first, and one whose label the game doesn't draw within about a second is behind something, so the
