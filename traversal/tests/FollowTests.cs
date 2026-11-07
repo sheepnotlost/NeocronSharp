@@ -132,6 +132,31 @@ internal static class FollowTests
             Check(kite.Step(3, 230, new Vector3(50, 0, 0)) == (false, 0), "room again: stops");
         });
 
+        test("Healer place: beside or behind the fighter, never in front", () =>
+        {
+            var place = new HealerPlace();
+            var fighter = Vector3.Zero;
+            Check(place.Update(new Vector3(100, 0, 0), fighter, 120, 200) == false, "no front known, within reach: stays");
+            // The fighter walks along +X: that is their front.
+            for (int i = 0; i <= 10; i++) place.Observe(i * .1, new Vector3(i * 10, 0, 0), null);
+            fighter = new Vector3(100, 0, 0);
+            var ahead = fighter + new Vector3(90, 0, 10);
+            Check(place.Update(ahead, fighter, 120, 200), "in front of them: moves");
+            var spot = place.Station(ahead, fighter, 100);
+            float bearing = place.Bearing(spot, fighter)!.Value;
+            Check(bearing >= HealerPlace.SideAngle - 1e-3 && MathF.Abs(PointNavigation.Distance(spot, fighter) - 100) < .1f, $"to the side, swung round: {bearing * 180 / MathF.PI:F0} deg");
+            Check((spot - fighter).Z > 0, "on the side it was already on");
+            Check(!place.Update(spot, fighter, 120, 200), "there: stops");
+            var behind = fighter + new Vector3(-100, 0, 0);
+            Check(Vector3.Distance(place.Station(behind, fighter, 100), fighter + new Vector3(-100, 0, 0)) < .01f, "behind is kept as it is");
+            // Standing still, shooting at a mob to the north: the front turns that way.
+            var standing = new HealerPlace();
+            for (int i = 0; i <= 10; i++) standing.Observe(i * .1, Vector3.Zero, new Vector3(0, 0, 800));
+            Check(standing.Front is { } f && MathF.Abs(f.Z - 1) < 1e-3, "front toward the mob being fought");
+            Check(standing.Update(new Vector3(0, 0, 100), Vector3.Zero, 120, 200), "between them and the mob: moves");
+            Check(standing.Update(new Vector3(500, 0, 0), Vector3.Zero, 120, 200), "fallen behind: moves");
+        });
+
         test("Camera angles: the short way round", () =>
         {
             Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");

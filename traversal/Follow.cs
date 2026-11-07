@@ -514,13 +514,20 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
         // ---- the route ----
         Plan? plan = null, doorPlan = null;
         double unreachableSince = -1, retryAt = 0;
-        Plan? MakePlan(Vector3 from)
+        // A healer walks to its place beside or behind the fighter (HealerPlace); everyone else to the target itself.
+        var place = heal != null ? new HealerPlace() : null;
+        Vector3 goal = target.Position;
+        long mobsAt = 0;
+        Vector3? mob = null;
+        Plan? PlanTo(Vector3 from, Vector3 to)
         {
-            var corners = nav.RouteNear(from, watch.SeenAt, out bool complete);
+            var corners = nav.RouteNear(from, to, out bool complete);
             // On the target's floor, not the one under it (gravity lifts join stacked floors).
-            if (corners.Count < 2 || !complete || MathF.Abs(corners[^1].Y - watch.SeenAt.Y) > 150) return null;
-            return new(new RouteFollower(corners), watch.SeenAt, PointNavigation.Distance(corners[^1], watch.SeenAt), clock.Elapsed.TotalSeconds);
+            if (corners.Count < 2 || !complete || MathF.Abs(corners[^1].Y - to.Y) > 150) return null;
+            return new(new RouteFollower(corners), to, PointNavigation.Distance(corners[^1], to), clock.Elapsed.TotalSeconds);
         }
+        // A place in a wall or off the floor: the fighter will do.
+        Plan? MakePlan(Vector3 from) => PlanTo(from, goal) ?? (place != null ? PlanTo(from, watch.SeenAt) : null);
 
         try
         {
@@ -532,6 +539,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
             int lastPixels = 0;
             var first = Guard();
             Vector3 lastForward = first.Forward;
+            goal = watch.SeenAt;
             plan = MakePlan(first.Position);
             float startGap = FollowLogic.Gap(FollowLogic.Straight(first.Position, watch.SeenAt), plan?.Route.Remaining, plan?.Miss ?? 0);
             band.Start(startGap);
@@ -559,10 +567,23 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 }
                 if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
 
-                float straight = FollowLogic.Straight(s.Position, watch.SeenAt);
+                goal = watch.SeenAt;
+                if (place != null)
+                {
+                    if (clock.ElapsedMilliseconds >= mobsAt)
+                    {
+                        mobsAt = clock.ElapsedMilliseconds + 500;
+                        var fighter = watch.SeenAt;
+                        mob = FollowCommand.ReadSnapshot(reader).Entities.Where(e => SweepTargets.Hunted(e) && !FollowCommand.Dead(e))
+                            .Select(e => e.Position).OrderBy(p => PointNavigation.Distance(p, fighter)).Cast<Vector3?>().FirstOrDefault();
+                    }
+                    place.Observe(now, watch.SeenAt, mob);
+                    goal = place.Station(s.Position, watch.SeenAt, band.Distance * .85f);
+                }
+                float straight = FollowLogic.Straight(s.Position, goal);
                 float off = plan?.Route.Update(s.Position) ?? 0;
                 float gap = FollowLogic.Gap(straight, plan?.Route.Remaining, plan?.Miss ?? 0);
-                var why = FollowLogic.Decide(plan != null, plan == null ? 0 : PointNavigation.Distance(plan.Goal, watch.SeenAt), gap, band.Moving ? off : 0,
+                var why = FollowLogic.Decide(plan != null, plan == null ? 0 : PointNavigation.Distance(plan.Goal, goal), gap, (place != null ? wasMoving : band.Moving) ? off : 0,
                     plan?.Route.Remaining ?? 0, plan == null ? 0 : now - plan.At);
                 // With no route, retry twice a second rather than every tick.
                 if (why == FollowReplan.First && now < retryAt) why = FollowReplan.None;
@@ -596,7 +617,7 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     Record("arrived", s, new { gap, straight });
                     return $"Reached {target.Name}, {straight:F0} units away.";
                 }
-                bool moving = arrive || band.Update(gap);
+                bool moving = arrive || (place != null ? place.Update(s.Position, watch.SeenAt, band.Distance, band.Resume) : band.Update(gap));
                 // A blocking step ahead (a lift, a door) must not start with the cast's button down.
                 if (moving && castEnds >= 0) { input.HoldLeft(false); castEnds = -1; casting = null; }
                 if (moving != wasMoving)

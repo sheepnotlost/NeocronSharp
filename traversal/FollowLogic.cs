@@ -445,3 +445,63 @@ internal static class FollowLogic
             .OrderBy(e => PointNavigation.Distance(e.Position, lastSeen))
             .Select(e => ((Vector3, int)?)e).FirstOrDefault();
 }
+
+/// <summary>
+/// Where a healer stands: beside or behind the fighter, never in front, where it was in the way (7 Nov). The fighter's
+/// front is the way they are walking, or, standing, the way to the nearest mob they would be shooting; the game keeps no
+/// facing for other characters where it keeps yours. In front, or fallen behind, the healer walks to a spot at the side it
+/// is on, swung round to at least 110 degrees from the front, and stops there once it is clear of the front half.
+/// </summary>
+internal sealed class HealerPlace
+{
+    public const float FrontHalf = MathF.PI / 2, Clear = 105 * MathF.PI / 180, SideAngle = 115 * MathF.PI / 180;
+    public const float Moved = 40, MobRange = 2500;
+    public const double MovedWithin = 1.5;
+    private readonly Queue<(double At, Vector3 Where)> _trail = new();
+    private bool _moving;
+
+    /// <summary>The fighter's front on the flat, once known.</summary>
+    public Vector3? Front { get; private set; }
+
+    public void Observe(double now, Vector3 fighter, Vector3? nearestMob)
+    {
+        _trail.Enqueue((now, fighter));
+        while (_trail.Count > 0 && now - _trail.Peek().At > MovedWithin) _trail.Dequeue();
+        var walked = fighter - _trail.Peek().Where; walked.Y = 0;
+        if (walked.Length() >= Moved) Front = Vector3.Normalize(walked);
+        else if (nearestMob is { } mob && PointNavigation.Distance(fighter, mob) is var d && d > 1 && d <= MobRange)
+        {
+            var toMob = mob - fighter; toMob.Y = 0;
+            Front = Vector3.Normalize(toMob);
+        }
+    }
+
+    /// <summary>How far round from the fighter's front you are, either way (0 dead ahead, pi behind); null with no front known.</summary>
+    public float? Bearing(Vector3 healer, Vector3 fighter)
+    {
+        var from = healer - fighter; from.Y = 0;
+        return Front is { } front && from.Length() > 1 ? MathF.Abs(PointNavigation.SignedAngle(front, from)) : null;
+    }
+
+    /// <summary>The spot to walk to, this far from the fighter on your side of them, and never nearer the front than the side.</summary>
+    public Vector3 Station(Vector3 healer, Vector3 fighter, float distance)
+    {
+        var from = healer - fighter; from.Y = 0;
+        if (Front is not { } front)
+            return from.Length() > 1 ? fighter + Vector3.Normalize(from) * distance : fighter;
+        float angle = from.Length() > 1 ? PointNavigation.SignedAngle(front, from) : MathF.PI;
+        if (MathF.Abs(angle) < SideAngle) angle = (angle >= 0 ? 1 : -1) * SideAngle;
+        float cos = MathF.Cos(angle), sin = MathF.Sin(angle);
+        return fighter + new Vector3(front.X * cos - front.Z * sin, 0, front.X * sin + front.Z * cos) * distance;
+    }
+
+    /// <summary>Walk now? Sets off when the fighter is past resume or you are in their front half; stops within distance and clear of it.</summary>
+    public bool Update(Vector3 healer, Vector3 fighter, float distance, float resume)
+    {
+        float gap = PointNavigation.Distance(healer, fighter);
+        float? bearing = Bearing(healer, fighter);
+        if (!_moving) _moving = gap > resume || bearing < FrontHalf;
+        else if (gap <= distance && !(bearing < Clear)) _moving = false;
+        return _moving;
+    }
+}
