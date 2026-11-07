@@ -140,7 +140,7 @@ class TargetTab:
         self.avoid = tk.StringVar(value=kept)
         self.avoid.trace_add("write", lambda *_: self.show_enemies() if getattr(self, "ready", False) else None)
         ttk.Entry(avoid_row, textvariable=self.avoid).grid(row=0, column=1, sticky="ew", padx=6)
-        ttk.Label(avoid_row, text="names or parts, commas between: parasite, slugger").grid(row=0, column=2, sticky="w")
+        ttk.Label(avoid_row, text="e.g. parasite, slugger").grid(row=0, column=2, sticky="w")
         self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
         for column, text, width, anchor in (("hunt", "Spare", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
                                             ("nearest", "Nearest", 70, "e")):
@@ -183,8 +183,9 @@ class TargetTab:
             pinned = False
         self.pin = tk.BooleanVar(value=pinned)
         self.pin.trace_add("write", lambda *_: self.keep_pin())
-        ttk.Checkbutton(hunt_buttons, text="Pin camera (writes game memory)", variable=self.pin).pack(side="right", padx=(12, 0))
-        ttk.Button(hunt_buttons, text="Hunt notes", command=self.open_notes).pack(side="left", padx=(0, 6))
+        # Beside Don't attack: the button row below is full (the Regant's button was squeezed to "Hun", 7 Nov).
+        ttk.Checkbutton(avoid_row, text="Pin camera (writes game memory)", variable=self.pin).grid(row=0, column=3, sticky="w", padx=(12, 0))
+        ttk.Button(avoid_row, text="Hunt notes", command=self.open_notes).grid(row=0, column=4, sticky="e", padx=(12, 0))
         self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
