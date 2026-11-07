@@ -7,6 +7,7 @@ The hunt (loot_runner.py) repeats walk, fight, run and loot on every robot, muta
 "leave alone" in the enemy list or typed (whole or in part) in Don't attack; never a human NPC or a player. In Regant's Legacy Start hunt is the dungeon sweep instead.
 Hunt Regant's Legacy (dungeon_runner.py) walks that dungeon's main area a room at a time, kills every creature but Don't attack as it comes near,
 then goes out, waits for the place to fill up again, and goes back in.
+Stand and hunt (stand_runner.py) never takes a step: it shoots every creature but Don't attack that comes within Attack from, over and over.
 Follow and heal runs on the healer's own PC (or VM), one Neocron client there, with the fighter played on another computer:
 "follow --heal", real mouse input, Follow's routes to the fighter named here, then aiming and a cast every 30 s when in reach.
 If that ends for any reason but Stop, it looks for the fighter again, so a healer left alone keeps going. Two clients on one
@@ -58,13 +59,15 @@ def enemy_rows(actors, ticked=()):
 
 
 class TargetTab:
-    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None, hunt_parent=None, dungeon_runner=None):
+    def __init__(self, parent, root, autoload=True, other_live=lambda: False, loot_runner=None, hunt_parent=None, dungeon_runner=None,
+                 stand_runner=None):
         """Track and Follow and heal in parent. With hunt_parent, the Hunt is its own tab there; without, it sits beside them."""
         self.root = root
         self.autoload = autoload            # read the game on first view; tests turn it off
         self.other_live = other_live        # a walk, follow or job loop is steering the same mouse
         self.loot_runner = loot_runner      # makes a LootRunner(names, reach, emit, control) bound to the game
         self.dungeon_runner = dungeon_runner    # makes a DungeonRunner(reach, emit, control, avoid) bound to the game
+        self.stand_runner = stand_runner        # makes a StandRunner(reach, emit, control, avoid) bound to the game
         self.hunted = {}                    # names ticked "leave alone": lower-case name -> name (kept name for old callers)
         self.sector = None                  # the zone the last Refresh read
         self.heal_name = None               # the fighter a healer alone keeps going back to
@@ -190,6 +193,8 @@ class TargetTab:
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
         self.dungeon_button.pack(side="right", padx=(0, 12))
+        self.stand_button = ttk.Button(hunt_buttons, text="Stand and hunt", command=self.start_stand)
+        self.stand_button.pack(side="right", padx=(0, 6))
         ttk.Label(hunt_buttons, text="units").pack(side="right", padx=(0, 8))
         self.reach = tk.StringVar(value=str(REACH))
         self.reach.trace_add("write", lambda *_: self.update_buttons())
@@ -235,6 +240,7 @@ class TargetTab:
         # Stays clickable so a hunt that cannot start says why: greyed out with nothing ticked looked like a dead button (1 Nov).
         self.hunt_button.configure(state="normal" if self.loot_runner and self.looting is None else "disabled")
         self.dungeon_button.configure(state="normal" if self.dungeon_runner and self.looting is None else "disabled")
+        self.stand_button.configure(state="normal" if self.stand_runner and self.looting is None else "disabled")
         self.track_button.configure(state="normal" if idle and actor is not None and not actor["dead"] else "disabled")
         self.hold_check.configure(state="normal" if idle and actor is not None and actor["kind"] == "npc" else "disabled")
         self.heal_button.configure(state="normal" if idle and self.may_heal(actor) else "disabled")
@@ -548,6 +554,30 @@ class TargetTab:
             threading.Thread(target=runner.run, daemon=True, name="dungeon").start()
         except Exception as exc:
             self.loot_event("done", f"The Regant's Legacy hunt could not start: {exc}")
+
+    def start_stand(self):
+        """Stay put and shoot every robot, mutant and animal that comes within Attack from, over and over, except Don't attack."""
+        reach, avoid = self.reach_units(), self.avoid_names()
+        problem = self.hunt_problem(None, reach)
+        if problem:
+            self.status.set(problem)
+            self.append(problem)
+            return
+        self.looting = Control()
+        spared = f", leaving {', '.join(avoid)} alone" if avoid else ""
+        self.append(f"Stand and hunt: from where you stand, every creature within {reach} units{spared}, nearest first, over and over; "
+                    "never humans or players, and never a step. Click into Neocron now. Starting in 5 s...")
+        self.update_buttons()
+        self.loot_start = self.root.after(5000, self.begin_stand, reach, avoid)
+
+    def begin_stand(self, reach, avoid=()):
+        self.loot_start = None
+        try:
+            clients.focus()
+            runner = self.pinned(self.stand_runner(reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting, avoid))
+            threading.Thread(target=runner.run, daemon=True, name="stand").start()
+        except Exception as exc:
+            self.loot_event("done", f"Stand and hunt could not start: {exc}")
 
     def loot_event(self, kind, payload):
         if kind in ("log", "status"):

@@ -66,7 +66,8 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 /// countdown (<see cref="Now"/>) and passes on the mouse gains the first run measured.</summary>
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
     bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null, bool Use = false,
-    bool Pin = false, bool Pushers = false, IReadOnlyCollection<string>? Avoid = null, bool Kite = false);
+    bool Pin = false, bool Pushers = false, IReadOnlyCollection<string>? Avoid = null, bool Kite = false,
+    bool Stay = false);   // never take a step: a blocked shot ends the fight instead of stepping aside (Stand and hunt)
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -416,7 +417,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                             if (stepFrom < 0)
                             {
                                 stepFrom = now;
-                                stepSide = plan.Shots!.ClearSide(shotFrom, shotTo) ?? 0;
+                                stepSide = plan.Stay ? 0 : plan.Shots!.ClearSide(shotFrom, shotTo) ?? 0;
                                 Record("in-the-way", s, new { blocker, stepSide });
                                 Console.WriteLine($"{blocker} is in the way of {target.Name}: stepping aside.");
                             }

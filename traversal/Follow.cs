@@ -411,7 +411,7 @@ internal static class FollowCommand
             string value = rest[i + 1]; rest.RemoveRange(i, 2); return value;
         }
         bool holdLeft = rest.Remove("--hold-left"), now = rest.Remove("--now"), box = rest.Remove("--box"), use = rest.Remove("--use"), sight = rest.Remove("--sight"),
-            pin = rest.Remove("--pin"), pushers = rest.Remove("--pushers"), kite = rest.Remove("--kite");
+            pin = rest.Remove("--pin"), pushers = rest.Remove("--pushers"), kite = rest.Remove("--kite"), stay = rest.Remove("--stay");
         var avoid = (Option("--avoid") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(n => string.Join(' ', n.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))).Where(n => n.Length > 0).ToList();
         float backTo = float.Parse(Option("--back-off") ?? "0", CultureInfo.InvariantCulture);
@@ -426,7 +426,7 @@ internal static class FollowCommand
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
         Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use,
-            Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+            Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite, Stay: stay), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

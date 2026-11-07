@@ -412,6 +412,25 @@ class SpareTests(unittest.TestCase):
         finally:
             tab.close(); root.destroy()
 
+    def test_stand_and_hunt_starts_with_the_range_and_dont_attack(self):
+        root = tk.Tk(); root.withdraw()
+        frame = tk.Frame(root); frame.pack()
+        with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
+            tab = target_tab.TargetTab(frame, root, autoload=False, loot_runner=lambda *a: None, dungeon_runner=lambda *a: None,
+                                       stand_runner=lambda *a: None)
+        try:
+            tab.show_nearby(("ok", NEARBY))
+            tab.reach.set("800")
+            tab.avoid.set("parasite")
+            with patch.object(root, "after") as after:
+                tab.start_stand()
+            self.assertEqual(after.call_args.args[1:], (tab.begin_stand, 800, ["parasite"]))
+            self.assertIn("every creature within 800 units, leaving parasite alone", tab.log.get("1.0", "end"))
+            self.assertEqual(str(tab.stand_button.cget("state")), "disabled")
+            tab.looting = None
+        finally:
+            tab.close(); root.destroy()
+
     def test_typed_names_or_parts_are_left_alone_and_kept(self):
         root = tk.Tk(); root.withdraw()
         frame = tk.Frame(root); frame.pack()

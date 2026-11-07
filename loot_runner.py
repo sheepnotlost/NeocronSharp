@@ -74,6 +74,7 @@ class Engine:
         self.pushers = False         # a mob on you is fought first
         self.kite = False            # walk backwards from a mob too close to see
         self.avoid = ()              # names, or parts of names, never to fight
+        self.stay = False            # never take a step: a blocked shot ends the fight instead of stepping aside
 
     def tool(self, args):
         return tt.run_tool(args)
@@ -144,6 +145,7 @@ class Engine:
     def fight(self, actor, tick, back=False):
         """Only shoots with a clear line to it, and first backs away from it when asked."""
         extra = (["--pin"] if self.pin else []) + (["--pushers"] if self.pushers else []) + (["--kite"] if self.kite else [])
+        extra += ["--stay"] if getattr(self, "stay", False) else []
         if self.pushers and self.avoid:
             extra += ["--avoid", ",".join(name.replace(",", " ") for name in self.avoid)]
         text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off", str(SAFE)] if back else []), *extra], tick)
