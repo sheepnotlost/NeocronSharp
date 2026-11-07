@@ -190,6 +190,115 @@ class RefillSequenceTests(unittest.TestCase):
             runner.refill_from_gogo()
         self.assertFalse([e for e in events if e[0] == "drag"])
 
+    def retries(self, events):
+        return [e[1] for e in events if e[0] == "status" and "Trying again" in e[1]]
+
+    def test_a_dialog_that_opens_late_is_filled_in_not_dragged_again(self):
+        # Live (7 Nov): the game lagged and the Strastin dialog came after the wait for it ended.
+        runner, events, _ = self.runner()
+        original = runner.detector.quantity
+        def quantity(f, checkpoint=None, expected=False):
+            return original(f, checkpoint, expected) if runner.clock() >= 1. else None
+        runner.detector.quantity = quantity
+        self.assertEqual(runner.refill_from_gogo(), 5)
+        self.assertEqual(sum(e[0] == "drag" for e in events), 5)
+        self.assertEqual(sum(e == ("click", (20, 10)) for e in events), 5)
+        self.assertEqual(len(self.retries(events)), 1)
+        self.assertIn("(1 of 3)", self.retries(events)[0])
+
+    def test_a_drag_the_game_missed_is_made_again(self):
+        runner, events, _ = self.runner()
+        drag = runner.drag
+        missed = []
+        def lagging(a, b):
+            if not missed:missed.append((a, b));events.append(("missed",));return
+            drag(a, b)
+        runner.drag = lagging
+        self.assertEqual(runner.refill_from_gogo(), 5)
+        self.assertEqual(sum(e[0] == "drag" for e in events), 5)
+        self.assertEqual(len(self.retries(events)), 1)
+
+    def test_it_gives_up_after_four_tries(self):
+        runner, events, _ = self.runner()
+        runner.detector.quantity = lambda f, checkpoint=None, expected=False: None
+        with self.assertRaisesRegex(Interrupted, "Expected quantity dialog"):
+            runner.refill_from_gogo()
+        self.assertEqual(sum(e[0] == "drag" for e in events), ConstructionRunner.TRIES)
+        self.assertEqual(len(self.retries(events)), ConstructionRunner.TRIES - 1)
+
+    def test_stop_is_never_tried_again(self):
+        runner, events, _ = self.runner()
+        def stopped(a, b):
+            events.append(("drag", a, b))
+            raise Interrupted("Stopped. Check the current item before restarting.")
+        runner.drag = stopped
+        with self.assertRaisesRegex(Interrupted, "Stopped"):
+            runner.refill_from_gogo()
+        self.assertEqual(sum(e[0] == "drag" for e in events), 1)
+        self.assertFalse(self.retries(events))
+
+
+class BuildRetryTests(unittest.TestCase):
+    """A failed build is tried again from what the Processor shows (the user's ask, 7 Nov: the game lags)."""
+
+    def runner(self, loaded=False, busy=False, dialog=False, ran=False):
+        state = {"dialog": dialog}
+        clicks = []
+        class Processor:
+            def start_point(self):return (300, 400)
+        class Detector:
+            def quantity(self, f, checkpoint=None, expected=False):
+                return {"field": [100, 100], "ok": [200, 100], "scale": 1.} if state["dialog"] else None
+            def construction_state(self, f, a, recipe):return {"busy": busy}
+            def has_loaded_blueprint(self, f, a):return loaded
+        r = ConstructionRunner.__new__(ConstructionRunner)
+        r.detector = Detector();r.name = "Tangent Weaponpart 9";r.recipe = "weaponpart_9";r.ran = ran
+        r.settings = {"settle_seconds": 0}
+        r.frame = lambda: None
+        r.guard = lambda: None
+        r.processor_state = lambda: (None, Processor())
+        r.wait = lambda seconds, safe_pause=False: None
+        r.step_aside = lambda: None
+        r.emit = lambda kind, payload=None: None
+        def click(point):
+            clicks.append(tuple(point))
+            if tuple(point) == (216, 76):state["dialog"] = False      # the dialog's X
+        r.click = click
+        r.await_construction = lambda: None
+        def locate():raise AssertionError("no second blueprint may be loaded")
+        r.locate_blueprint = locate
+        return r, clicks
+
+    def test_a_loaded_blueprint_is_started(self):
+        runner, clicks = self.runner(loaded=True)
+        self.assertEqual(runner.build_one({}, False, 2), "built")
+        self.assertEqual(clicks, [(300, 400)])
+
+    def test_a_build_under_way_is_only_followed(self):
+        runner, clicks = self.runner(busy=True)
+        self.assertEqual(runner.build_one({}, False, 2), "built")
+        self.assertEqual(clicks, [])
+
+    def test_a_build_that_already_ran_is_counted_not_repeated(self):
+        runner, clicks = self.runner(ran=True)
+        self.assertEqual(runner.build_one({}, False, 2), "built")
+        self.assertEqual(clicks, [])
+
+    def test_a_dialog_left_open_is_closed_with_its_x(self):
+        runner, clicks = self.runner(loaded=True, dialog=True)
+        self.assertEqual(runner.build_one({}, False, 2), "built")
+        self.assertEqual(clicks, [(216, 76), (300, 400)])
+
+    def test_out_of_materials_is_not_tried_again(self):
+        from construction_runner import OutOfMaterials
+        runner, _ = self.runner()
+        calls = []
+        def step(attempt):
+            calls.append(attempt)
+            raise OutOfMaterials("Start was refused.")
+        with self.assertRaises(OutOfMaterials):runner.retrying("x", step)
+        self.assertEqual(calls, [1])
+
 
 class MaterialsListTests(unittest.TestCase):
     def test_materials_text_round_trips_and_rejects_bad_entries(self):

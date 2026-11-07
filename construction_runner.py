@@ -417,6 +417,42 @@ class ConstructionRunner(VisualRunner):
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
 
+    TRIES=4            # a step is tried this often before the batch stops: the game lags (the user's ask, 7 Nov)
+    RETRY_WAIT=1.      # s, times the try's number, for a lagging game to catch up first
+    FINAL=("Stopped","Paused","Game lost focus","Bound game window closed","Bound window identity changed")
+
+    def final(self,exc):
+        """The user's Stop or Pause, a lost game window, or no materials left (a queue skips that job): never tried again."""
+        return isinstance(exc,OutOfMaterials) or str(exc).startswith(self.FINAL)
+
+    def retrying(self,label,step):
+        """step(try_number), tried TRIES times; each failure but the last only says so and waits a moment."""
+        for attempt in range(1,self.TRIES+1):
+            try:return step(attempt)
+            except RuntimeError as exc:
+                if self.final(exc) or attempt==self.TRIES:raise
+                self.emit("status",f"{label}: {exc} Trying again ({attempt} of {self.TRIES-1}).")
+                self.wait(self.RETRY_WAIT*attempt)
+
+    def close_dialog(self,dialog):
+        """Close a quantity dialog with its X (never Esc), so nothing moves."""
+        scale=dialog.get("scale") or 1.;ok=dialog["ok"]
+        self.click((round(ok[0]+16*scale),round(ok[1]-24*scale)))
+        self.step_aside();self.wait(self.settings["settle_seconds"])
+        if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
+            raise Interrupted("A quantity dialog would not close.")
+
+    def transfer(self,label,source,destination,amount):
+        """Drag source to destination() and enter amount in the dialog, tried again when the game lags. A dialog
+        that opened late belongs to the last drag: it is filled in, not dragged a second time."""
+        def step(attempt):
+            if attempt>1 and self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
+                return self.enter_quantity(amount)
+            where=destination()
+            self.drag(source,where);self.step_aside()
+            self.enter_quantity(amount)
+        self.retrying(label,step)
+
     def learn_gogo_labels(self,reader,window,cells,missing):
         """{ingredient: label} found by hovering GoGuardian stacks and reading the tooltip name."""
         learned={};todo=list(missing)
@@ -466,12 +502,13 @@ class ConstructionRunner(VisualRunner):
         except LookupError as exc:raise OutOfMaterials(str(exc)) from None
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
         for name,code,point,amount in plan:
-            destination=self.inventory_destination(self.frame(),inventory,code)
-            if destination is None:
-                raise Interrupted("No free Inventory slot for the GoGuardian materials. Make room and restart.")
+            def destination(code=code):
+                where=self.inventory_destination(self.frame(),inventory,code)
+                if where is None:
+                    raise Interrupted("No free Inventory slot for the GoGuardian materials. Make room and restart.")
+                return where
             self.emit("status",f"GoGuardian: moving {amount} {name} to Inventory.")
-            self.drag(point,destination);self.step_aside()
-            self.enter_quantity(amount)
+            self.transfer(f"GoGuardian {name}",point,destination,amount)
         return len(plan)
 
     STASH_AT=gogo.BATCH  # finished parts go into GoGuardian once their Inventory stack holds 15 (the user's ask, 7 Nov)
@@ -539,8 +576,7 @@ class ConstructionRunner(VisualRunner):
             self.emit("status",f"{self.name}: GoGuardian has no free cell for {code}; {count} left in Inventory.")
             return False
         self.emit("status",f"GoGuardian: moving {count} {code} into it.")
-        self.drag(gogo.inventory_point(inventory,col,row),destination);self.step_aside()
-        self.enter_quantity(count)
+        self.transfer(f"GoGuardian {code}",gogo.inventory_point(inventory,col,row),lambda:destination,count)
         self.product=None
         self.stash_cell=(round((destination[0]-window.cell_origin(0,0)[0])//(gogo.CELL_W*window.scale)),
                          round((destination[1]-window.cell_origin(0,0)[1])//(gogo.CELL_H*window.scale)))
@@ -605,12 +641,13 @@ class ConstructionRunner(VisualRunner):
             return False
         frame=self.frame()
         inventory=self.detector.inventory(frame,checkpoint=self.guard)
-        destination=self.inventory_destination(frame,inventory,None)
-        if destination is None:
-            raise Interrupted(f"No free Inventory cell for the {self.name} blueprints from GoGuardian. Make room and restart.")
+        def destination():
+            where=self.inventory_destination(self.frame(),inventory,None)
+            if where is None:
+                raise Interrupted(f"No free Inventory cell for the {self.name} blueprints from GoGuardian. Make room and restart.")
+            return where
         self.emit("status",f"GoGuardian: moving {gogo.BATCH} {self.name} blueprints to Inventory.")
-        self.drag(window.cell_center(*cell),destination);self.step_aside()
-        self.enter_quantity(gogo.BATCH)
+        self.transfer(f"GoGuardian {self.name} blueprints",window.cell_center(*cell),destination,gogo.BATCH)
         self.source_cell=None                        # the blueprints are in a new cell now
         return True
 
@@ -637,7 +674,7 @@ class ConstructionRunner(VisualRunner):
                     and self.detector.has_loaded_blueprint(frame,processor)):
                 return "refused"
             if state["busy"]:
-                seen_busy=True
+                seen_busy=self.ran=True              # a retry after this counts the build instead of loading another
                 idle=0
             elif seen_busy:
                 idle+=1
@@ -694,11 +731,25 @@ class ConstructionRunner(VisualRunner):
         self.source_cell=None
         self.slot_counts={i:0 for i in range(6)};self.slot_unread=0;self.slot_na=0
 
-    def build_job(self, target, stack_unknown):
-        """Build up to `target` of the current recipe. Returns (built, "finished" / "out_of_blueprints" / slots reached)."""
-        config=self.profile["construction"]
-        self.job_built=0
-        for _ in range(target):
+    def build_one(self, config, stack_unknown, attempt):
+        """One build: a blueprint into the Processor, Start, follow it to its end. "out_of_blueprints" when none is left.
+
+        A second try carries on from what the Processor shows: a dialog left open is closed with its X, a build under
+        way is followed, a loaded blueprint is started, and a build that already ran (self.ran) is counted."""
+        load=start=True
+        if attempt>1:
+            frame,processor=self.processor_state()
+            dialog=self.detector.quantity(frame,checkpoint=self.guard)
+            if dialog is not None:
+                self.close_dialog(dialog)
+                frame,processor=self.processor_state()
+            if self.detector.construction_state(frame,processor,self.recipe)["busy"]:
+                load=start=False
+            elif self.detector.has_loaded_blueprint(frame,processor):
+                load=False
+            elif self.ran:
+                return "built"
+        if load:
             try:source,destination=self.locate_blueprint()
             except Interrupted as exc:
                 if not str(exc).startswith("No verified"):raise
@@ -708,7 +759,7 @@ class ConstructionRunner(VisualRunner):
                 # With no stack size entered, running out of blueprints is how a batch ends.
                 # A queued job that runs out is reported and the queue goes on.
                 elif self.queue or stack_unknown and self.job_built>0:
-                    return self.job_built,"out_of_blueprints"
+                    return "out_of_blueprints"
                 else:raise
             self.emit("status", f"{self.name}: transferring one blueprint; ingredients stay untouched.")
             self.drag(source,destination)
@@ -719,20 +770,31 @@ class ConstructionRunner(VisualRunner):
                 raise Interrupted("Quantity dialog is still open. No construction was started.")
             if not self.detector.has_loaded_blueprint(frame,processor):
                 raise Interrupted("No loaded blueprint was recognized. No construction was started.")
+        if start:
             self.click(processor.start_point())
             self.step_aside()
+        self.emit("status", f"{self.name}: building; following Processor progress.")
+        refills=0
+        while self.await_construction()=="refused":
+            if not self.gogo_enabled():
+                raise OutOfMaterials(f"Start was refused for {self.name}; its materials ran out.")
+            refills+=1
+            if refills>2:
+                raise OutOfMaterials("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
+            self.refill_from_gogo()
+            frame,processor=self.processor_state()
+            self.click(processor.start_point());self.step_aside()
             self.emit("status", f"{self.name}: building; following Processor progress.")
-            refills=0
-            while self.await_construction()=="refused":
-                if not self.gogo_enabled():
-                    raise OutOfMaterials(f"Start was refused for {self.name}; its materials ran out.")
-                refills+=1
-                if refills>2:
-                    raise OutOfMaterials("Start was refused again after refilling from GoGuardian. Check the recipe's materials.")
-                self.refill_from_gogo()
-                frame,processor=self.processor_state()
-                self.click(processor.start_point());self.step_aside()
-                self.emit("status", f"{self.name}: building; following Processor progress.")
+        return "built"
+
+    def build_job(self, target, stack_unknown):
+        """Build up to `target` of the current recipe. Returns (built, "finished" / "out_of_blueprints" / slots reached)."""
+        config=self.profile["construction"]
+        self.job_built=0
+        for _ in range(target):
+            self.ran=False
+            if self.retrying(self.name,lambda attempt:self.build_one(config,stack_unknown,attempt))=="out_of_blueprints":
+                return self.job_built,"out_of_blueprints"
             self.completed+=1
             self.job_built+=1
             if not self.queue:config["available"]-=1
@@ -748,7 +810,7 @@ class ConstructionRunner(VisualRunner):
                 else:self.slot_unread+=1
                 event.update(slot_counts=self.slot_counts.copy(),slot_unread=self.slot_unread,slot_na=self.slot_na)
             self.emit("construction_cycle", event)
-            if self.gogo_enabled():self.stash_product()
+            if self.gogo_enabled():self.retrying(f"{self.name} into GoGuardian",lambda attempt:self.stash_product())
             if self.job_label and self.job_target:
                 self.emit("queue_update",{"index":self.job_row,"count":target-self.job_built or None})
             if self.stop_at_slots is not None and slots is not None and slots>=self.stop_at_slots:

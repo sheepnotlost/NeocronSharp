@@ -363,7 +363,7 @@ class HandPathTests(unittest.TestCase):
             points = [p for _, p in path]
             seconds = sum(t for t, _ in path)
             self.assertEqual(points[-1], (700, 400))
-            self.assertTrue(.6 <= seconds <= 1.2, seconds)                 # 670 px at about 600 px a second
+            self.assertTrue(.45 <= seconds <= .85, seconds)                # 670 px at about 780 px a second
             # off the straight line somewhere: an arc, not a ruler
             off = max(abs((p[0]-100)*300 - (p[1]-100)*600)/670.8 for p in points)
             self.assertGreater(off, 15)
@@ -378,7 +378,7 @@ class HandPathTests(unittest.TestCase):
         import random
         from macro_core import hand_path
         path = hand_path((10, 10), (60, 10), random.Random(1))
-        self.assertGreaterEqual(sum(t for t, _ in path), .085)
+        self.assertGreaterEqual(sum(t for t, _ in path), .065)
         self.assertTrue(all(p[0] <= 62 for _, p in path))
         self.assertEqual(hand_path((5, 5), (6, 6)), [(0., (6, 6))])
 

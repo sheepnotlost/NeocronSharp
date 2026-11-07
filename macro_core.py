@@ -11,13 +11,16 @@ import time
 from recipes import RECIPES, catalog
 
 
-def hand_path(start, end, rng=random, speed=600., shortest=.1, longest=.8, step=1/60):
+DRAG_PACE = 1.3     # drags 30% quicker than drag_seconds says (user's ask, 7 Nov), like hand_path
+
+
+def hand_path(start, end, rng=random, speed=780., shortest=.077, longest=.615, step=1/60):
     """The pointer's way from start to end as a hand moves it: [(seconds to wait, (x, y) to move to)].
 
     A gentle arc to one side, slow at both ends and quickest in the middle (minimum jerk), a little wobble on
-    the way, a different pace each time, and on longer moves a few pixels past the target and back. About 600
-    px a second, a quarter of a quick hand's 2,400 (the user's ask after a "speedhack detected" on the VM,
-    7 Nov). Ends exactly on end."""
+    the way, a different pace each time, and on longer moves a few pixels past the target and back. About 780
+    px a second: 600 after a "speedhack detected" on the VM, then 30% quicker on the user's ask (7 Nov).
+    Ends exactly on end."""
     (x0, y0), (x1, y1) = start, end
     dx, dy = x1-x0, y1-y0
     span = math.hypot(dx, dy)
@@ -465,7 +468,7 @@ class ResearchRunner:
             for step in range(1, 17):
                 self.checkpoint()
                 self.backend.move(tuple(round(source[i] + (destination[i] - source[i]) * step / 16) for i in (0, 1)))
-                self.wait(self.settings["drag_seconds"] / 16)
+                self.wait(self.settings["drag_seconds"] / 16 / DRAG_PACE)
         finally:
             self.backend.release_all()
         self.pointer = tuple(destination)

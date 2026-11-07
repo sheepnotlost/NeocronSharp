@@ -188,6 +188,12 @@ class ConstructionDetector:
 
 
 class ConstructionRunnerTests(unittest.TestCase):
+    def setUp(self):
+        # These check what one failure does; trying again is tested in test_gogo.RetryTests.
+        original=ConstructionRunner.TRIES
+        ConstructionRunner.TRIES=1
+        self.addCleanup(setattr,ConstructionRunner,"TRIES",original)
+
     def setup_run(self, recipe="weaponpart_7", available=3, count=0, search_mode="all_cells"):
         self.profile=default_profile()
         self.profile["operation"]="construction"
