@@ -157,6 +157,34 @@ internal static class FollowTests
             Check(standing.Update(new Vector3(500, 0, 0), Vector3.Zero, 120, 200), "fallen behind: moves");
         });
 
+        test("Hunt notes: each fight is summed up, what looks wrong is flagged, and what was learned is kept", () =>
+        {
+            string logs = Path.Combine(Path.GetTempPath(), "hunt-notes-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(logs);
+            try
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    var fight = new FightNotes("Genotoxic Parasite", $"p{i}", 400, 30);
+                    for (int t = 0; t < 10; t++) fight.Tick(t * .1, 400 - t * 40, t >= 8, t < 8, false);
+                    fight.Mark(.8, true);
+                    foreach (float h in new[] { 6f, 8f, 7f }) fight.Body(h);
+                    Check(fight.BodyHeight == 7, "the middle of what was seen");
+                    HuntNotes.Add(logs, fight.Line(3, i < 3 ? "Genotoxic Parasite died. Camera follow stopped." : "No line of sight to it."));
+                    HuntNotes.Remember(logs, "Genotoxic Parasite", fight.BodyHeight, (8000, 4000));
+                }
+                var lines = HuntNotes.Read(logs);
+                Check(lines.Count == 4 && (string?)lines[0]["outcome"] == "killed" && (string?)lines[3]["outcome"] == "no-sight", "one line a fight, with how it ended");
+                string notes = File.ReadAllText(HuntNotes.Digest(logs));
+                Check(notes.Contains("on the body only 20%") && notes.Contains("searching 80%") && notes.Contains("got within 60 units"), "the trouble is named: " + notes);
+                Check(notes.Contains("| Genotoxic Parasite | 4 | 3 |"), "a row per mob");
+                var learned = HuntNotes.Recall(logs, "genotoxic  parasite");
+                Check(learned is { BodyHeight: 7, WidthAtRange: 8000, Fights: 4 }, $"learned, whatever the spacing: {learned}");
+                Check(HuntNotes.Recall(logs, "Genotoxic Slugger") == null, "nothing yet for another mob");
+            }
+            finally { Directory.Delete(logs, true); }
+        });
+
         test("Camera angles: the short way round", () =>
         {
             Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");

@@ -12,6 +12,7 @@ Follow and heal runs on the healer's own PC (or VM), one Neocron client there, w
 If that ends for any reason but Stop, it looks for the fighter again, so a healer left alone keeps going. Two clients on one
 PC are not supported any more: the tab says to close one.
 """
+import os
 import queue
 import re
 import subprocess
@@ -29,6 +30,7 @@ from macro_core import Control
 FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next time
 PIN_FILE = tt.PROJECT / "pin.txt"          # the Pin camera tick, kept for next time
+NOTES_FILE = tt.PROJECT / "logs" / "notes.md"   # the hunt's notes, written by the engine after every fight
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
@@ -182,6 +184,7 @@ class TargetTab:
         self.pin = tk.BooleanVar(value=pinned)
         self.pin.trace_add("write", lambda *_: self.keep_pin())
         ttk.Checkbutton(hunt_buttons, text="Pin camera (writes game memory)", variable=self.pin).pack(side="right", padx=(12, 0))
+        ttk.Button(hunt_buttons, text="Hunt notes", command=self.open_notes).pack(side="left", padx=(0, 6))
         self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
@@ -450,6 +453,16 @@ class TargetTab:
             process.wait()
             self.queue.put(("done", None))
         threading.Thread(target=pump, args=(self.process,), daemon=True, name="target-camera").start()
+
+    def open_notes(self):
+        """The notes the hunt keeps on every fight, in the default viewer."""
+        if not NOTES_FILE.exists():
+            self.append("No hunt notes yet: they're written after each fight.")
+            return
+        try:
+            os.startfile(NOTES_FILE)
+        except OSError as exc:
+            self.append(f"Could not open the hunt notes: {exc}")
 
     def keep_pin(self):
         try:

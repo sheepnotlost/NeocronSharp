@@ -219,6 +219,16 @@ class TargetTabTests(unittest.TestCase):
             thread.join(5)
         self.assertEqual(made, [(4000, ["parasite"]), "ran"])
 
+    def test_hunt_notes_open_or_say_there_are_none(self):
+        missing = Path(tempfile.mkdtemp()) / "notes.md"
+        with patch.object(target_tab, "NOTES_FILE", missing):
+            self.tab.open_notes()
+        self.assertIn("No hunt notes yet", self.log())
+        missing.write_text("# Hunt notes", encoding="utf-8")
+        with patch.object(target_tab, "NOTES_FILE", missing), patch.object(target_tab.os, "startfile", create=True) as opened:
+            self.tab.open_notes()
+        opened.assert_called_once_with(missing)
+
     def test_pin_camera_is_handed_to_the_runner_and_kept(self):
         class Runner:
             engine = type("E", (), {"pin": False})()

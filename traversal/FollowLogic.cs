@@ -252,6 +252,11 @@ internal sealed class ScreenAim
     // its size when the corners are lost on a red floor, and the label's corner alone would put the aim at its edge.
     private (float Width, float Height)? _sizeAtRange;
 
+    /// <param name="sizeAtRange">The brackets' size times the range, as learned in earlier fights with this mob.</param>
+    public ScreenAim((float Width, float Height)? sizeAtRange = null) => _sizeAtRange = sizeAtRange;
+
+    public (float Width, float Height)? SizeAtRange => _sizeAtRange;
+
     public bool Seen(double now) => now - SeenAt <= SeenSeconds;
     public bool Locked(double now) => now - InsideAt <= FireSeconds;
     public bool Searching(double now) => now - SeenAt > SearchAfter;

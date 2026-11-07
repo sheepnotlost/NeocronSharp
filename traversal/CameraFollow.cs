@@ -108,6 +108,23 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
 
         bool F8() => StopRequest.Made();
 
+        // The notebook: one line per fight, and what it learned about the mob.
+        string logs = Path.GetDirectoryName(logPath) ?? ".";
+        FightNotes? notes = null;
+        ScreenAim? seen = null;
+        void Note(string ended)
+        {
+            if (notes == null) return;
+            try
+            {
+                HuntNotes.Add(logs, notes.Line(clock.Elapsed.TotalSeconds, ended));
+                HuntNotes.Remember(logs, target.Name, notes.BodyHeight, seen?.SizeAtRange);
+            }
+            catch (IOException) { }   // a notebook that can't be written must not end a fight
+            notes = null;
+        }
+        string Done(string text) { Note(text); return text; }
+
         PlayerSample Guard()
         {
             if (F8()) throw new OperationCanceledException("Stop pressed.");
@@ -260,11 +277,20 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             long lastHurt = 0, lookAt = 0, markAt = 0;
             int marksLogged = 0;
             var sight = new SightWatch();
-            var screen = new ScreenAim();
+            var learned = plan.Sight ? HuntNotes.Recall(logs, target.Name) : null;
+            float aimHeight = learned?.BodyHeight is { } body ? Math.Clamp(body, -30, 150) : ScreenAim.MemoryHeight;
+            var screen = new ScreenAim(learned is { WidthAtRange: { } w, HeightAtRange: { } h } ? (w, h) : null);
+            seen = screen;
+            if (plan.Sight)
+            {
+                notes = new FightNotes(target.Name, FollowCommand.Id(target), PointNavigation.Distance(previous.Position, watch.SeenAt), aimHeight);
+                if (learned?.BodyHeight != null) Console.WriteLine($"Aiming {aimHeight:F0} units above {target.Name}'s feet, as learned in {learned.Fights} fights.");
+            }
             var track = new TrackAim();
             using var pin = plan.Pin && plan.Sight ? CameraWriter.Open(reader.Process.Id) : null;
             if (plan.Pin && plan.Sight) Console.WriteLine(pin == null ? "Could not open the game to pin the camera: the mouse aims." : "Pinning the camera.");
             bool pinned = pin != null;
+            if (notes != null) notes.Pin = pinned;
             long pushAt = 0;
             var kite = new Kite();
             var backOff = new BackOff(plan.BackTo);
@@ -273,10 +299,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             while (true)
             {
                 var s = Guard();
-                if (watch.Read() is { } gone) { Record("lost", s, new { gone }); hud.Post(Hud.Cyan, title, gone); return gone; }
+                if (watch.Read() is { } gone) { Record("lost", s, new { gone }); hud.Post(Hud.Cyan, title, gone); return Done(gone); }
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
-                var point = watch.SeenAt + new Vector3(0, plan.Sight ? ScreenAim.MemoryHeight : CameraAim.ShotHeight, 0);
+                var point = watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight : CameraAim.ShotHeight, 0);
                 float yawToMemory = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
                 float pitchToMemory = CameraAim.PitchTo(s.Position, point) - view.Pitch;
                 double now = clock.Elapsed.TotalSeconds;
@@ -286,7 +312,19 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (TargetLock.Look(reader.Window) is { } look)
                     {
                         bool wasLocked = screen.Locked(now);
-                        if (screen.See(now, look.Marks, yawToMemory, pitchToMemory, look.ClientHeight, MathF.Sign(yawGain), away) && marksLogged++ % 5 == 0)
+                        bool took = screen.See(now, look.Marks, yawToMemory, pitchToMemory, look.ClientHeight, MathF.Sign(yawGain), away);
+                        if (took && notes != null)
+                        {
+                            notes.Mark(now, screen.Mark!.Value.Measured);
+                            if (screen.Locked(now))
+                            {
+                                // Where the body is drawn, above the mob's feet: the aim point's line turned by what the screen showed.
+                                float eye = s.Position.Y + CameraAim.EyeHeight, flat = Math.Max(1, away);
+                                float drawn = eye + MathF.Tan(MathF.Atan2(point.Y - eye, flat) + screen.Offset.Pitch) * flat;
+                                notes.Body(drawn - watch.SeenAt.Y);
+                            }
+                        }
+                        if (took && marksLogged++ % 5 == 0)
                             Record("mark", s, new { x = screen.Mark!.Value.X, y = screen.Mark.Value.Y, measured = screen.Mark.Value.Measured, marks = look.Marks.Count,
                                 offsetYaw = screen.Offset.Yaw, offsetPitch = screen.Offset.Pitch, locked = screen.Locked(now), away });
                         if (!wasLocked && screen.Locked(now))
@@ -308,6 +346,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     pinned = false;
                     Record("pin-refused", s, new { yawError, pitchError });
                     Console.WriteLine("The game put its own camera back: the mouse aims instead.");
+                    if (notes != null) notes.PinRefused = true;
                 }
                 else if (!pinned)
                 {
@@ -326,7 +365,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                         string other = $"Switching to {FollowCommand.Id(pusher)} {pusher.Name}: it is on you.";
                         Record("switch", s, new { to = pusher.Name, id = FollowCommand.Id(pusher), away });
                         hud.Post(Hud.Amber, title, other);
-                        return other;
+                        return Done(other);
                     }
                 }
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
@@ -354,6 +393,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (input.LeftHeld && (!screen.Locked(now) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
                     var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, away, s.Position) : (Back: false, Side: 0);
                     if (keep.Back) input.Back(true);
+                    notes?.Tick(now, away, screen.Locked(now), screen.Searching(now), keep.Back);
                     if (blocker == null) { input.Strafe(keep.Side); stepFrom = -1; }
                     else
                     {
@@ -371,7 +411,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                             {
                                 string blocked = $"No line of sight to {target.Name}: {blocker} is in the way. Camera follow stopped.";
                                 Record("blocked", s, new { away, blocker });
-                                return blocked;
+                                return Done(blocked);
                             }
                             input.Strafe((int)stepSide);
                         }
@@ -380,14 +420,14 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     {
                         string blocked = $"No line of sight to {target.Name}. Camera follow stopped.";
                         Record("blocked", s, new { away });
-                        return blocked;
+                        return Done(blocked);
                     }
                 }
                 if (input.LeftHeld && plan.GiveUpSeconds > 0 && clock.ElapsedMilliseconds - lastHurt > plan.GiveUpSeconds * 1000)
                 {
                     string missed = $"No damage to {target.Name} for {plan.GiveUpSeconds:F0} s. Camera follow stopped.";
                     Record("gave-up", s, new { missed });
-                    return missed;
+                    return Done(missed);
                 }
                 if (plan.HoldLeft && !input.LeftHeld && onTarget && (!plan.Sight || (blocker == null && screen.Locked(now) && backOff.Now == BackOff.Phase.Done)))
                 {
@@ -405,6 +445,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
         catch (Exception error)
         {
             Record("stopped", previous, new { error.Message });
+            Note(error.Message);
             hud.Post(Hud.Red, "CAMERA  stopped", error.Message);
             throw;
         }
