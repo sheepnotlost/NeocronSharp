@@ -292,6 +292,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             if (notes != null) notes.Pin = pinned;
             long pushAt = 0;
             var kite = new Kite();
+            bool cornerSaid = false;
             var backOff = new BackOff(plan.BackTo);
             double aimedAt = -1, clearAt = -1, stepFrom = -1;
             float stepSide = 0;
@@ -301,7 +302,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (watch.Read() is { } gone) { Record("lost", s, new { gone }); hud.Post(Hud.Cyan, title, gone); return Done(gone); }
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
-                var point = watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight : CameraAim.ShotHeight, 0);
+                // Point blank with no mark, low: a parasite lies flat at your feet, and a slugger's legs are still body.
+                float height = !plan.Sight ? CameraAim.ShotHeight
+                    : away < ScreenAim.PointBlank && !screen.Seen(clock.Elapsed.TotalSeconds) ? Math.Min(aimHeight, ScreenAim.PointBlankHeight) : aimHeight;
+                var point = watch.SeenAt + new Vector3(0, height, 0);
                 float yawToMemory = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
                 float pitchToMemory = CameraAim.PitchTo(s.Position, point) - view.Pitch;
                 double now = clock.Elapsed.TotalSeconds;
@@ -359,7 +363,10 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 if (plan.Pushers && clock.ElapsedMilliseconds >= pushAt)
                 {
                     pushAt = clock.ElapsedMilliseconds + PushEveryMs;
-                    if (Pushers.OnYou(s.Position, FollowCommand.ReadSnapshot(reader).Entities, target, away, plan.Avoid) is { } pusher)
+                    IReadOnlyList<WorldEntity> around;
+                    try { around = FollowCommand.ReadSnapshot(reader).Entities; }
+                    catch (InvalidOperationException) { around = Array.Empty<WorldEntity>(); }   // caught mid-update: next time
+                    if (Pushers.OnYou(s.Position, around, target, away, plan.Avoid) is { } pusher)
                     {
                         input.HoldLeft(false);
                         string other = $"Switching to {FollowCommand.Id(pusher)} {pusher.Name}: it is on you.";
@@ -393,6 +400,12 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (input.LeftHeld && (!screen.Firing(now, away) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
                     var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, away, s.Position) : (Back: false, Side: 0);
                     if (keep.Back) input.Back(true);
+                    if (kite.Cornered && !cornerSaid)
+                    {
+                        cornerSaid = true;
+                        Record("cornered", s, new { away });
+                        Console.WriteLine("Backed into a wall: standing here and shooting.");
+                    }
                     notes?.Tick(now, away, screen.Locked(now), screen.Searching(now), keep.Back);
                     if (blocker == null) { input.Strafe(keep.Side); stepFrom = -1; }
                     else

@@ -133,13 +133,16 @@ internal static class FollowTests
             Check(CameraWriter.Angles(80, 0, 0, .5f).Pitch == 86, "never past the 43 degrees the view stops at");
         });
 
-        test("Kite: backs away from a mob too close to see, steps aside when a wall stops it", () =>
+        test("Kite: backs away from a mob too close to see, and holds its ground once backed into a wall", () =>
         {
             var kite = new Kite();
             Check(kite.Step(0, 300, Vector3.Zero) == (false, 0), "far enough: stays");
             Check(kite.Step(1, 100, Vector3.Zero) == (true, 0), "too close: backs away");
-            Check(kite.Step(1.7, 120, new Vector3(2, 0, 0)).Side != 0, "not moving: a step sideways");
-            Check(kite.Step(3, 230, new Vector3(50, 0, 0)) == (false, 0), "room again: stops");
+            Check(kite.Step(1.7, 120, new Vector3(50, 0, 0)) == (true, 0), "moving back: keeps going");
+            Check(kite.Step(3, 230, new Vector3(80, 0, 0)) == (false, 0), "room again: stops");
+            Check(kite.Step(4, 100, new Vector3(80, 0, 0)) == (true, 0), "close again: backs away");
+            Check(kite.Step(4.7, 90, new Vector3(82, 0, 0)) == (false, 0) && kite.Cornered, "a wall stops it: stands there");
+            Check(kite.Step(6, 40, new Vector3(82, 0, 0)) == (false, 0), "and stays, however close the mob");
         });
 
         test("Read lapse: a fight rides out failed reads of your character, and stops after 3 s of them", () =>

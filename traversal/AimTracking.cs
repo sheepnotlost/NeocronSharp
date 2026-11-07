@@ -132,29 +132,32 @@ internal static class Pushers
 /// <summary>
 /// Keeps a mob out in front. In third person a small one close up drops under the view (it stops 43 degrees down) and
 /// behind your own back, out of the crosshair's reach: so with the target this close, it walks backwards until there is
-/// room again, and when a wall stops the walk it steps sideways, one way then the other.
+/// room again. Once a wall stops the walk it stands there for the rest of the fight, back to the wall, and shoots: mobs
+/// can only come at you from the front, and stepping sideways along the wall only cost shots (7 Nov).
 /// </summary>
 internal sealed class Kite
 {
     public const float TooClose = 150, Enough = 220, Stuck = 10;
-    public const double StuckSeconds = .6, SideSeconds = .8;
+    public const double StuckSeconds = .6;
     private bool _backing;
-    private double _since = -1, _sideUntil = -1;
+    private double _since = -1;
     private Vector3 _from;
-    private int _side = 1;
 
     /// <summary>Walk backwards? And which way to step (-1 left, 1 right, 0 none).</summary>
+    /// <summary>Backed into a wall: stays put from now on.</summary>
+    public bool Cornered { get; private set; }
+
+    /// <summary>Walk backwards? (Side is always 0 now: kept for the callers.)</summary>
     public (bool Back, int Side) Step(double now, float away, Vector3 me)
     {
+        if (Cornered) return (false, 0);
         if (!_backing && away < TooClose) { _backing = true; _since = now; _from = me; }
-        else if (_backing && away > Enough) { _backing = false; _sideUntil = -1; }
+        else if (_backing && away > Enough) _backing = false;
         if (!_backing) return (false, 0);
-        if (now < _sideUntil) return (true, _side);
         if (now - _since >= StuckSeconds)
         {
-            bool stuck = PointNavigation.Distance(me, _from) < Stuck;
+            if (PointNavigation.Distance(me, _from) < Stuck) { Cornered = true; _backing = false; return (false, 0); }
             _since = now; _from = me;
-            if (stuck) { _side = -_side; _sideUntil = now + SideSeconds; return (true, _side); }
         }
         return (true, 0);
     }

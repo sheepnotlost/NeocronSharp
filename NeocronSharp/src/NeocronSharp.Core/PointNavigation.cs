@@ -48,7 +48,12 @@ public static class PointNavigation
             throw new InvalidOperationException("Player orientation is not a valid rotation transform.");
         // Genesis-style native transform: the view's inward axis is minus column Z.
         // Live movement must independently confirm this convention before navigation.
-        return Planar(new(-matrix[2], -matrix[5], -matrix[8]));
+        var forward = new Vector3(-matrix[2], -matrix[5], -matrix[8]);
+        // Looking straight down (first person, at a mob at your feet) the view's axis has no heading left on the ground;
+        // its up axis then points the way you face (or behind you, looking straight up).
+        if (forward.X * forward.X + forward.Z * forward.Z < 0.04f)
+            return Planar(new Vector3(matrix[1], matrix[4], matrix[7]) * (forward.Y < 0 ? 1 : -1));
+        return Planar(forward);
     }
 
     public static void VerifyForward(Vector3 expected, Vector3 measured)

@@ -81,6 +81,13 @@ Test("Native transform heading ignores pitch", () => {
     var forward = PointNavigation.ForwardFromTransform(transform);
     Check(Vector3.Distance(forward,P(0,-1)) < 0.00001f, "Heading lies on the ground plane");
 });
+Test("Native transform heading holds looking straight down or up", () => {
+    foreach (float pitch in new[]{1.55f, MathF.PI / 2, -1.55f, -MathF.PI / 2}) {
+        float[] transform = {1,0,0, 0,MathF.Cos(pitch),MathF.Sin(pitch), 0,-MathF.Sin(pitch),MathF.Cos(pitch), 10,20,30};
+        var forward = PointNavigation.ForwardFromTransform(transform);
+        Check(Vector3.Distance(forward,P(0,-1)) < 0.00001f, $"Same heading at pitch {pitch}");
+    }
+});
 Test("Corrupt transform is rejected", () => Reject(() => PointNavigation.ForwardFromTransform(new float[12])));
 Test("Incorrect native forward convention cannot enable navigation", () => Reject(() => PointNavigation.VerifyForward(P(1),P(-10))));
 Test("Forward calibration rejects blocked movement", () => Reject(() => PointNavigation.VerifyForward(P(1),Vector3.Zero)));

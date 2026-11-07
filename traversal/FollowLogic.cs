@@ -268,6 +268,9 @@ internal sealed class ScreenAim
     /// </summary>
     public const float PointBlank = 110;
 
+    /// <summary>Units over the feet aimed at point blank with no mark: low enough for a parasite flat on the floor.</summary>
+    public const float PointBlankHeight = 20;
+
     /// <summary>Shoot now? Inside the brackets, or point blank.</summary>
     public bool Firing(double now, float away) => Locked(now) || away < PointBlank;
 
