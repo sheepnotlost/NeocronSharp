@@ -1339,14 +1339,10 @@ class Detector:
                     anchor=self.quantity_dense(frame,checkpoint)
             if anchor is None:return None
         self.quantity_misses=0
+        anchor, score = self.quantity_layout(frame, anchor)
+        if anchor is None or score < (.60 if self.quantity_scale else .75):
+            return None
         self.region(frame, anchor, (-7, -7, 316, 55))
-        half = self.region(frame, anchor, (205, 14, 251, 39))
-        template = self.template("quantity_half", anchor.scale)
-        if half.shape[0] < template.shape[0] or half.shape[1] < template.shape[1]:
-            return None
-        score = float(cv2.matchTemplate(self.gray(half), template, cv2.TM_CCOEFF_NORMED).max())
-        if score < (.60 if self.quantity_scale else .75):
-            return None
         field = self.region(frame, anchor, (156, 16, 198, 36))
         # Frame antialiasing may leave a bright vertical border in this crop.
         # Digits are inset; exclude the border before counting numeric glyphs.
@@ -1369,6 +1365,27 @@ class Detector:
                 confirmations+=np.logical_and(glyph, self.quantity_one).sum()/max(1,union)>=.65
         is_one=not multiple and confirmations>=2
         return {"field": anchor.point(177, 25), "ok": anchor.point(286, 25), "one": bool(is_one), "scale": anchor.scale}
+
+    QUANTITY_HALF_X = 214      # Half's left edge right of the title, at one scale for words and buttons
+
+    def quantity_layout(self, frame, title):
+        """(anchor that places the field, Half and Ok, Half's score), or (None, 0.) with no Half beside the title.
+
+        The game draws the dialog's words at a whole font size and its buttons at the UI scale, so the two can
+        differ (2560x1440, 7 Nov: words 1.19, buttons 1.26) and Half sits further right of the title than one
+        scale puts it. Half is looked for along the title's line, and the button scale comes from where it is."""
+        s = title.scale
+        reference = self.template("quantity_half", s)
+        left, right = title.x + round(185*s), title.x + round(270*s) + reference.shape[1]
+        top, bottom = title.y + round(8*s), title.y + round(40*s) + reference.shape[0]
+        if left < 0 or top < 0 or right > frame.shape[1] or bottom > frame.shape[0]:
+            return None, 0.
+        _, score, _, (x, _) = cv2.minMaxLoc(cv2.matchTemplate(self.gray(frame[top:bottom, left:right]), reference,
+                                                              cv2.TM_CCOEFF_NORMED))
+        layout = round((left + x - title.x) / self.QUANTITY_HALF_X, 3)
+        if not .85*s <= layout <= 1.2*s:
+            return None, 0.
+        return Anchor(title.x, title.y, layout, title.score), float(score)
 
     def quantity_dense(self, frame, checkpoint):
         """Find the Number of Units dialog at any UI scale: title proposes, Half confirms."""
@@ -1401,14 +1418,7 @@ class Detector:
                     continue
                 _, score, _, (px, py) = cv2.minMaxLoc(cv2.matchTemplate(patch, title, cv2.TM_CCOEFF_NORMED))
                 anchor = Anchor(left+px, top+py, scale, float(score))
-                try:
-                    half = self.region(frame, anchor, (205, 14, 251, 39))
-                except NotFound:
-                    continue
-                reference = self.template("quantity_half", scale)
-                if half.shape[0] < reference.shape[0] or half.shape[1] < reference.shape[1]:
-                    continue
-                confirm = float(cv2.matchTemplate(self.gray(half), reference, cv2.TM_CCOEFF_NORMED).max())
+                _, confirm = self.quantity_layout(frame, anchor)
                 if confirm >= .60 and score >= .60 and (best is None or confirm+score > best[0]):
                     best = (confirm+score, anchor)
             if best is not None:

@@ -313,9 +313,9 @@ class ConstructionRunner(VisualRunner):
         raise Interrupted("Inventory search limit reached. No verified blueprint was transferred.")
 
     def confirm_one(self, available):
-        elapsed=0
         dialog=None
-        while elapsed<self.settings["dialog_timeout"]:
+        until=self.clock()+self.settings["dialog_timeout"]
+        while self.clock()<until:
             frame=self.frame()
             dialog=self.detector.quantity(frame,checkpoint=self.guard,**({"expected":True} if hasattr(self.detector,"quantity_dense") else {}))
             if dialog is not None:
@@ -325,7 +325,6 @@ class ConstructionRunner(VisualRunner):
                 if self.detector.has_loaded_blueprint(frame,processor):
                     return
             self.wait(.1)
-            elapsed+=.1
         if dialog is None:
             if available is not None and available>1:
                 raise Interrupted("Expected blueprint quantity dialog was not detected. No construction was started.")
@@ -367,12 +366,12 @@ class ConstructionRunner(VisualRunner):
 
     def enter_quantity(self, amount):
         """Open dialog from a GoGuardian drag: type the amount, confirm by reading it, press Ok."""
-        elapsed=0.
         dialog=None
-        while elapsed<self.settings["dialog_timeout"]:
+        until=self.clock()+self.settings["dialog_timeout"]
+        while self.clock()<until:
             dialog=self.detector.quantity(self.frame(),checkpoint=self.guard,expected=True)
             if dialog is not None:break
-            self.wait(.1);elapsed+=.1
+            self.wait(.1)
         if dialog is None:
             raise Interrupted("Expected quantity dialog was not detected after the GoGuardian drag. Nothing was confirmed.")
         def field_number(frame,dialog):

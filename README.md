@@ -214,7 +214,7 @@ Switching away from the game stops the batch with no automatic resume. Check the
 
 ## Tech-part research behavior
 
-Each cycle detects the UI, drags one part to input slot 2, handles the one-unit dialog, finds the Processor again, and clicks its current Start button. The quantity dialog is recognized by its opaque title text and Half control, so the background behind it can change. The macro verifies that the numeric field contains exactly **1** before clicking OK. An existing 1 is left alone; an unverified value is never confirmed. Transfers are always plain left drags; there are no drag button/modifier options.
+Each cycle detects the UI, drags one part to input slot 2, handles the one-unit dialog, finds the Processor again, and clicks its current Start button. The quantity dialog is recognized by its opaque title text and Half control, so the background behind it can change. Some screens (2560x1440) draw the dialog's words smaller than its buttons; Half is found along the title's line and the field and OK are placed from where it is. The macro verifies that the numeric field contains exactly **1** before clicking OK. An existing 1 is left alone; an unverified value is never confirmed. Transfers are always plain left drags; there are no drag button/modifier options.
 
 Available must match the real stack size. The last unit of a stack may transfer without the quantity dialog. A larger stack must show a recognized dialog before the macro types or confirms anything.
 

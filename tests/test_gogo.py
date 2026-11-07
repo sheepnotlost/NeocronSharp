@@ -88,7 +88,11 @@ class RefillSequenceTests(unittest.TestCase):
         r.settings = {"dialog_timeout": .3, "settle_seconds": 0}
         r.frame = lambda: frame
         r.guard = lambda: None
-        r.wait = lambda seconds, safe_pause=False: None
+        now = [0.]
+        r.clock = lambda: now[0]
+        def wait(seconds, safe_pause=False):
+            now[0] += seconds
+        r.wait = wait
         r.move = lambda point: None
         r.emit = lambda kind, payload=None: events.append((kind, payload))
         def drag(a, b):

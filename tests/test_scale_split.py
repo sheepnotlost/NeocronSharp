@@ -102,6 +102,26 @@ class WindowedQuantityDialogTests(unittest.TestCase):
         self.assertIsNone(detector.quantity(np.zeros_like(frame)))
 
 
+class FullscreenQuantityDialogTests(unittest.TestCase):
+    def test_a_dialog_whose_words_are_smaller_than_its_buttons_is_found_and_ok_is_hit(self):
+        # Real 2560x1440 capture (7 Nov): Processor and Inventory at 1.26, the dialog's words at
+        # 1.19, so its field, Half and Ok sit further right of the title than one scale puts them.
+        # The construction run waited on this dialog (1 already in it) until it was stopped. Replay.
+        import numpy as np
+        crop=cv2.cvtColor(cv2.imread(str(Path(__file__).parent/"fixtures"/"fullscreen_1440_quantity_dialog.png")),cv2.COLOR_BGR2RGB)
+        frame=np.zeros((1440,2560,3),np.uint8);frame[840:960,760:1260]=crop
+        detector=Detector();detector.last_scale=1.264;detector.inventory_scale=1.259
+        dialog=detector.quantity(frame,expected=True)
+        self.assertIsNotNone(dialog)
+        self.assertTrue(dialog["one"])
+        x,y=dialog["ok"]
+        self.assertTrue(1160<=x<=1210 and 894<=y<=907,dialog)          # inside the Ok button
+        x,y=dialog["field"]
+        self.assertTrue(1035<=x<=1068 and 893<=y<=908,dialog)          # inside the number field
+        self.assertEqual(detector.quantity(frame)["ok"],dialog["ok"])  # found again cheaply
+        self.assertIsNone(detector.quantity(np.zeros_like(frame)))
+
+
 class TooltipClearedTests(unittest.TestCase):
     def test_a_frame_whose_tooltip_is_gone_reads_as_nothing_not_as_another_item(self):
         # After matching the blueprint the macro moves away and waits for its tooltip to
