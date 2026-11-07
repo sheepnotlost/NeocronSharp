@@ -239,20 +239,12 @@ class ConstructionRunner(VisualRunner):
                 self.move(candidate["point"])
                 identity=None
                 arrived,attempt=self.clock(),-1
-                last=None;rehovered=False
                 while True:
                     attempt+=1
                     if self.search_mode=="fast":
-                        # Stay on the stack until its tooltip has been read: a lagging game shows it late
-                        # (7 Nov: the right cube was hovered and left unread). Two reads in a row must agree;
-                        # one that stays unreadable gets the pointer off and back once, then up to HOVER_LIMIT.
-                        if identity not in (None,"unknown") and identity==last:break
-                        last=identity
-                        if self.clock()-arrived>=self.HOVER_LIMIT:
-                            if identity is None or rehovered:break
-                            rehovered=True
-                            self.step_aside();self.wait(.3);self.move(candidate["point"])
-                            arrived,last=self.clock(),None
+                        # Stay on the stack until its tooltip is read, then that read decides (user, 7 Nov).
+                        if identity not in (None,"unknown"):break
+                        if self.clock()-arrived>=self.HOVER_LIMIT:break
                     elif attempt>=4:break
                     self.wait((.10 if self.search_mode=="fast" else .035) if attempt==0 else .05 if attempt==1 else .035)
                     hover=self.inventory_frame(inventory,candidate["point"])
@@ -272,33 +264,7 @@ class ConstructionRunner(VisualRunner):
                     break
                 if identity!=self.recipe:self.note_hover(candidate,identity,hover)
                 if identity==self.recipe:
-                    # Do not inherit a previous cell's tooltip. Observe its
-                    # disappearance outside Inventory before confirming this
-                    # exact cell again from a newly displayed tooltip.
-                    self.step_aside()
-                    until=self.clock()+self.TOOLTIP_WAIT
-                    while True:
-                        self.wait(.025)
-                        cleared=self.frame()
-                        if self.detector.tooltip_recipe(cleared,candidate["point"],inventory.scale) is None:break
-                        if self.clock()>=until:
-                            raise Interrupted("Previous blueprint tooltip did not clear. No transfer was attempted.")
-                    current=self.detector.current_inventory(cleared,inventory,checkpoint=self.guard)
-                    if not self.same_window(current,inventory):
-                        relocated=True;break
-                    self.move(candidate["point"])
-                    arrived,attempt=self.clock(),-1
-                    while True:
-                        attempt+=1
-                        if attempt>=6 and self.clock()-arrived>=self.HOVER_LIMIT:break
-                        self.wait(.065 if attempt==0 else .035)
-                        hover=self.frame()
-                        if not self.same_window(self.detector.current_inventory(hover,inventory,checkpoint=self.guard),inventory):
-                            relocated=True;break
-                        verified=self.detector.tooltip_recipe(hover,candidate["point"],inventory.scale)
-                        if verified==self.recipe:match=candidate;break
-                        if verified not in (None,"unknown"):break
-                    if relocated or match:break
+                    match=candidate;break
                 elif identity=="unknown":
                     unreadable+=1
                 empty=current_snapshot is not None and float((current_snapshot[candidate["cell"]]**2).sum())<.5
