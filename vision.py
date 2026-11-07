@@ -100,6 +100,14 @@ class Detector:
         if one is None:
             raise RuntimeError("Missing quantity-one reference.")
         self.quantity_one = self.normalize_glyph(one > 127)
+        # The pixel font's word pictures (see pixel_inventory); optional.
+        self.pixel = None            # True once a window shows the pixel font, False once one shows the other
+        self.pixel_templates = {}
+        for name in ("pixel_max_load", "pixel_free_load", "pixel_quantity_title", "pixel_quantity_half"):
+            data = read_gray(ROOT / "assets" / f"{name}.png")
+            if data is not None:
+                self.pixel_templates[name] = data
+        self.pixel_reader = None
 
     @staticmethod
     def gray(frame):
@@ -723,7 +731,49 @@ class Detector:
                 "thumb_top":inventory.point(419,66+a/inventory.scale)[1],
                 "thumb_bottom":inventory.point(419,66+b/inventory.scale)[1]}
 
+    def pixel_tooltips(self, frame, point):
+        """Text of each tooltip panel (black, light border) near the point, in the pixel font, nearest first."""
+        import pixelfont
+        gray = self.gray(frame)
+        x, y = point
+        left, top = max(0, x - 500), max(0, y - 120)
+        patch = gray[top:min(gray.shape[0], y + 160), left:min(gray.shape[1], x + 500)]
+        if patch.size == 0:
+            return []
+        _, _, stats, _ = cv2.connectedComponentsWithStats((patch < 42).astype(np.uint8))
+        found = []
+        for px, py, w, h, area in stats[1:].tolist():
+            if w < 40 or not 8 <= h <= 80 or area/(w*h) < .45 or py == 0 or py + h >= patch.shape[0]:
+                continue
+            if (patch[py-1, px:px+w] > 90).mean() > .8 and (patch[py+h, px:px+w] > 90).mean() > .8:
+                found.append((abs(top + py + h/2 - y) + abs(left + px + w/2 - x)/4, px, py, w, h))
+        return [pixelfont.read(patch[py:py+h, px:px+w], "tooltip") for _, px, py, w, h in sorted(found)[:3]]
+
+    def pixel_name(self, text):
+        """The recipe whose name (or an alias) is a run of the text's words, else None."""
+        import pixelfont
+        words = text.split()
+        for key, recipe in self.recipes.items():
+            for name in (recipe["name"], *recipe.get("aliases", ())):
+                n = len(name.split())
+                if any(pixelfont.same_name(" ".join(words[i:i+n]), name) for i in range(len(words) - n + 1)):
+                    return key
+        return None
+
+    def pixel_tooltip_recipe(self, frame, point):
+        texts = self.pixel_tooltips(frame, point)
+        if not texts:
+            return None
+        text = texts[0]
+        self.last_tooltip_raw = self.last_tooltip_text = text
+        if not re.search(r"LUEP|UEPR|EPRI|PRINT", text.upper()):
+            return "other"
+        name = text.split(":", 1)[1] if ":" in text else text
+        return self.pixel_name(name) or "unknown"
+
     def tooltip_recipe(self, frame, point, scale):
+        if self.pixel:
+            return self.pixel_tooltip_recipe(frame, point)
         # Tooltips reposition to stay on screen, so search around the current
         # cursor rather than assuming one tooltip location or inventory cell.
         x,y = point
@@ -893,6 +943,11 @@ class Detector:
         return recipe
 
     def text_reader(self):
+        if self.pixel:
+            if self.pixel_reader is None:
+                from pixelfont import PixelReader
+                self.pixel_reader = PixelReader()
+            return self.pixel_reader
         if self.reader is None:
             from text_reader import TextReader
             self.reader = TextReader()
@@ -909,6 +964,13 @@ class Detector:
 
     def result_details(self, frame, point, scale):
         """Read a constructed item's hover label, allowing quality prefixes."""
+        if self.pixel:
+            for text in self.pixel_tooltips(frame, point):
+                identity = self.pixel_name(text)
+                if identity is not None:
+                    self.last_tooltip_text = text
+                    return {"recipe": identity, "slots": None, "text": text}
+            return None
         x,y=point
         left,top=max(0,round(x-800*scale)),max(0,round(y-55*scale))
         gray=self.gray(frame[top:min(frame.shape[0],round(y+85*scale)),
@@ -1071,10 +1133,66 @@ class Detector:
         return candidates[0][1] if candidates else None
 
     def inventory(self, frame, checkpoint=lambda: None):
-        return self.saw("inventory", self.inventory_found(frame, checkpoint))
+        found = self.inventory_found(frame, checkpoint)
+        if self.pixel is None:
+            self.pixel = False
+        return self.saw("inventory", found)
+
+    # The VM at 1024x768 with UI scale 1.0 (7 Nov) draws every word in a blocky pixel font at one size. No
+    # word picture above matches it and Windows text recognition can't read it, but its words are the same
+    # pixels every time: they're matched as they are, unscaled, and read letter by letter (pixelfont.py).
+    PIXEL_SCALE = .862               # the windows' layout there (Inventory's grid)
+    PIXEL_MAX_LOAD = (64.97, 46.4)   # MAX LOAD's picture, in Inventory units from its anchor
+    PIXEL_FREE_DX = (150, 215)       # FREE LOAD's picture starts this many pixels right of MAX LOAD's
+
+    def pixel_matches(self, gray, name, threshold=.9, limit=4, box=None):
+        """[(score, x, y)] where a pixel-font picture is, best first, in frame pixels."""
+        reference = self.pixel_templates.get(name)
+        if reference is None:
+            return []
+        left, top = (max(0, box[0]), max(0, box[1])) if box else (0, 0)
+        area = gray[top:max(top, box[3]), left:max(left, box[2])] if box else gray
+        if area.shape[0] < reference.shape[0] or area.shape[1] < reference.shape[1]:
+            return []
+        scores = cv2.matchTemplate(area, reference, cv2.TM_CCOEFF_NORMED)
+        h, w = reference.shape
+        found = []
+        for _ in range(limit):
+            _, score, _, (x, y) = cv2.minMaxLoc(scores)
+            if score < threshold:
+                break
+            found.append((float(score), left + x, top + y))
+            scores[max(0, y-h):y+h, max(0, x-w):x+w] = -1
+        return found
+
+    def pixel_inventory(self, frame, gray, checkpoint=lambda: None):
+        """Inventory by its MAX LOAD and FREE LOAD words in the pixel font, placed exactly by its cell grid."""
+        found = []
+        for score, x, y in self.pixel_matches(gray, "pixel_max_load"):
+            checkpoint()
+            box = (x + self.PIXEL_FREE_DX[0], y - 4, x + self.PIXEL_FREE_DX[1] + 70, y + 14)
+            if not self.pixel_matches(gray, "pixel_free_load", box=box, limit=1):
+                continue
+            scale = self.inventory_scale or self.PIXEL_SCALE
+            guess = Anchor(math.floor(x - self.PIXEL_MAX_LOAD[0]*scale + .5),
+                           math.floor(y - self.PIXEL_MAX_LOAD[1]*scale + .5), scale, score, None, 1.0)
+            fitted = self.fit_inventory_grid(gray, guess, shift=(8, 6), span=.06)
+            if fitted is not None and not any(abs(f.x-fitted.x) < 20 and abs(f.y-fitted.y) < 20 for f in found):
+                found.append(fitted)
+        if len(found) > 1:
+            raise Ambiguous("Multiple Inventory windows found; no position selected.")
+        if not found:
+            return None
+        self.pixel = True
+        self.inventory_scale = found[0].scale
+        return found[0]
 
     def inventory_found(self, frame, checkpoint=lambda: None):
         gray = self.gray(frame)
+        if self.pixel is not False:
+            found = self.pixel_inventory(frame, gray, checkpoint)
+            if found is not None:
+                return found
         # Text is opaque; window trim includes the changing 3D scene behind it.
         # Verify the load labels before accepting a title, because the game's
         # top navigation bar also says INVENTORY.
@@ -1349,7 +1467,33 @@ class Detector:
             self.seen["quantity"] = dialog["box"]
         return dialog
 
+    # The Number of Units dialog in the pixel font, in pixels from its title's picture.
+    PIXEL_QUANTITY = {"field": (155, 19), "half": (184, 15), "ok": (247, 20), "close": (264, -1),
+                      "box": (-8, -13, 280, 45), "digits": (141, 14, 170, 25)}
+
+    def pixel_quantity(self, frame):
+        gray = self.gray(frame)
+        for score, x, y in self.pixel_matches(gray, "pixel_quantity_title", threshold=.85, limit=2):
+            hx, hy = self.PIXEL_QUANTITY["half"]
+            if not self.pixel_matches(gray, "pixel_quantity_half", threshold=.85, limit=1,
+                                      box=(x + hx - 6, y + hy - 6, x + hx + 46, y + hy + 16)):
+                continue
+            at = lambda key: [x + self.PIXEL_QUANTITY[key][0], y + self.PIXEL_QUANTITY[key][1]]
+            left, top, right, bottom = self.PIXEL_QUANTITY["digits"]
+            field = gray[y+top:y+bottom, x+left:x+right]
+            # The field's digits: a single mark one or two pixels wide and six tall is a 1.
+            _, _, stats, _ = cv2.connectedComponentsWithStats((field >= 90).astype(np.uint8))
+            marks = [st for st in stats[1:] if st[3] >= 4]
+            one = len(marks) == 1 and marks[0][2] <= 3 and 5 <= marks[0][3] <= 7
+            bl, bt, br, bb = self.PIXEL_QUANTITY["box"]
+            return {"field": at("field"), "ok": at("ok"), "close": at("close"), "one": bool(one),
+                    "value": 1 if one else None, "scale": self.PIXEL_SCALE,
+                    "box": (x + bl, y + bt, x + br, y + bb)}
+        return None
+
     def quantity_found(self, frame, checkpoint=lambda: None, expected=False):
+        if self.pixel:
+            return self.pixel_quantity(frame)
         # Inventory already establishes the UI scale during construction.
         # Keep exact title verification, avoiding seven full-size scale scans
         # when no dialog is open; retain the raster-jitter fallback.

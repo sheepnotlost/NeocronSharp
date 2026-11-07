@@ -108,6 +108,10 @@ def format_materials(materials):
 
 def find_gogo(reader, gray, tiles=((0, 0), (1, 0), (0, 1), (1, 1)), checkpoint=lambda: None):
     """Locate the button strip anywhere in a grayscale frame. Returns GoGo or None."""
+    if getattr(reader, "pixel", False):          # the game's pixel font: its words are matched as pictures
+        import pixelfont
+        found = pixelfont.find_strip(gray)
+        return GoGo(*found) if found else None
     height, width = gray.shape[:2]
     tile_w, tile_h = width//2 + width//8, height//2 + height//8
     for tx, ty in tiles:

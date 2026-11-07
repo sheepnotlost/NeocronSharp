@@ -366,7 +366,10 @@ class ConstructionRunner(VisualRunner):
         """Point to drop an ingredient: its existing stack (merges) or the first empty cell."""
         gray=self.detector.gray(frame)
         left,top=inventory.point(39,63);right,bottom=inventory.point(39+8*44.6,63+6*45.5)
-        words=self.detector.text_reader().read_words(gray[top:bottom,left:right])
+        reader=self.detector.text_reader()
+        # The pixel font's labels sit on the item art; its colour alone tells them apart there.
+        words=reader.read_words(gogo.text_mask(frame[top:bottom,left:right]) if getattr(reader,"pixel",False)
+                                else gray[top:bottom,left:right])
         occupied=set()
         for text,x,y,w,h in words:
             col=int(x//(44.6*inventory.scale));row=int(y//(45.5*inventory.scale))
@@ -391,6 +394,7 @@ class ConstructionRunner(VisualRunner):
         if dialog is None:
             raise Interrupted("Expected quantity dialog was not detected after the GoGuardian drag. Nothing was confirmed.")
         def field_number(frame,dialog):
+            if "value" in dialog:return dialog["value"]          # the detector read it (pixel font)
             scale=dialog.get("scale") or 1.
             x,y=dialog["field"];r=max(8,round(9*scale));wide=round(22*scale)
             crop=self.detector.gray(frame[y-r:y+r,x-wide:x+wide])
@@ -437,7 +441,7 @@ class ConstructionRunner(VisualRunner):
     def close_dialog(self,dialog):
         """Close a quantity dialog with its X (never Esc), so nothing moves."""
         scale=dialog.get("scale") or 1.;ok=dialog["ok"]
-        self.click((round(ok[0]+16*scale),round(ok[1]-24*scale)))
+        self.click(dialog.get("close") or (round(ok[0]+16*scale),round(ok[1]-24*scale)))
         self.step_aside();self.wait(self.settings["settle_seconds"])
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("A quantity dialog would not close.")
