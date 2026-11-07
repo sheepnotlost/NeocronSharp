@@ -87,7 +87,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
     private const float FacingToRun = 0.35f;
     private const int StuckAfterMs = 3000, BoxAimMs = 2000, UseAimMs = 5000, UseSteadyMs = 625, LookEveryMs = 120;
     /// <summary>Seconds aimed at the target with the game not targeting it before the shot is called blocked.</summary>
-    private const double BlindSeconds = 4, StepAsideSeconds = 6;
+    private const double BlindSeconds = 5, StepAsideSeconds = 6;   // 5: time for every aim height once, and again
     private const float StuckBelow = 15;
 
     public string Run()
@@ -257,6 +257,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             int? health = watch.Health;
             long lastHurt = 0, lookAt = 0;
             var sight = new SightWatch();
+            var aimHeight = new AimHeight();
             var backOff = new BackOff(plan.BackTo);
             double aimedAt = -1, clearAt = -1, stepFrom = -1;
             float stepSide = 0;
@@ -267,7 +268,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 float away = PointNavigation.Distance(s.Position, watch.SeenAt);
                 var view = View(s);
                 float yawError = away < TooClose ? 0 : PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), watch.SeenAt - s.Position);
-                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, CameraAim.ShotHeight, 0)) - view.Pitch;
+                float pitchError = CameraAim.PitchTo(s.Position, watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight.Height : CameraAim.ShotHeight, 0)) - view.Pitch;
                 int x = CameraAim.Pixels(CameraAim.Turn(yawError, away), yawGain), y = CameraAim.Pixels(CameraAim.Turn(pitchError, away), pitchGain);
                 input.LookPulse(x, y);
                 // Any fall counts, not just a new lowest: a mob healing between hits was given up on while it was being hurt.
@@ -275,7 +276,7 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                 health = watch.Health;
                 bool onTarget = CameraAim.OnTarget(yawError, pitchError);
                 var shotFrom = s.Position + new Vector3(0, CameraAim.EyeHeight, 0);
-                var shotTo = watch.SeenAt + new Vector3(0, CameraAim.ShotHeight, 0);
+                var shotTo = watch.SeenAt + new Vector3(0, plan.Sight ? aimHeight.Height : CameraAim.ShotHeight, 0);
                 string? blocker = plan.Shots?.Blocker(shotFrom, shotTo);
                 if (plan.Sight)
                 {
@@ -284,6 +285,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     {
                         lookAt = clock.ElapsedMilliseconds + LookEveryMs;
                         sight.Update(now, TargetBar.Showing(reader.Window));
+                        bool wasLocked = aimHeight.Locked;
+                        if (aimHeight.Update(now, onTarget, sight.Showing)) Record("aim-height", s, new { height = aimHeight.Height, away });
+                        else if (!wasLocked && aimHeight.Locked) { Record("aim-locked", s, new { height = aimHeight.Height, away }); Console.WriteLine($"Target bar up: aiming {aimHeight.Height:F0} above its feet."); }
                     }
                     if (onTarget && aimedAt < 0) aimedAt = now;
                     var was = backOff.Now;

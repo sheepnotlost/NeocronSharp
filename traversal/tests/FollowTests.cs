@@ -21,6 +21,20 @@ internal static class FollowTests
             Check(!spread.TooMany(0) && !spread.TooMany(8) && !spread.TooMany(16) && !spread.TooMany(24), "far apart they never add up");
         });
 
+        test("Aim height: tries lower on a mob with no target bar, keeps the one that brings it up", () =>
+        {
+            var aim = new AimHeight();
+            Check(aim.Height == CameraAim.ShotHeight, "starts at chest height");
+            Check(!aim.Update(0, false, false) && !aim.Update(5, false, false), "off target nothing changes");
+            aim.Update(10, true, false);
+            Check(!aim.Update(10.2, true, false) && aim.Height == CameraAim.ShotHeight, "a moment on target first");
+            Check(aim.Update(10.5, true, false) && aim.Height == 35, "then lower");
+            aim.Update(11, true, false); aim.Update(11.5, true, false);
+            Check(aim.Height == 8, "and lower still, for a thing on the floor");
+            aim.Update(11.6, true, true);
+            Check(aim.Locked && !aim.Update(20, true, false) && aim.Height == 8, "the bar came up: kept for the fight");
+        });
+
         test("Camera angles: the short way round", () =>
         {
             Check(MathF.Abs(CameraAim.Between(3.1f, -3.1f) - (2 * MathF.PI - 6.2f)) < 0.001f, "the short way across the wrap");

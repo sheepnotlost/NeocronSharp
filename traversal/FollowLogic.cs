@@ -218,6 +218,35 @@ internal sealed class ShotLine(IEnumerable<SectorObjects.Prop> props)
     }
 }
 
+/// <summary>
+/// How high above a mob's feet to aim. The list gives no height: 75 is a standing human's chest, but a Genotoxic Parasite
+/// is a small thing on the floor, and in third person the crosshair's line starts above and behind you, so at 75 it passed
+/// over one in a straight corridor and the target bar never came up (7 Nov). On target with no bar, it tries the next height
+/// after a moment; the first height that brings the bar up is kept for the rest of the fight.
+/// </summary>
+internal sealed class AimHeight
+{
+    public static readonly float[] Tries = { CameraAim.ShotHeight, 35, 8, 120 };
+    public const double DwellSeconds = 0.4;
+    private int _index;
+    private double _since = -1;
+    public bool Locked { get; private set; }
+    public float Height => Tries[_index];
+
+    /// <summary>True when it moved on to another height.</summary>
+    public bool Update(double now, bool onTarget, bool barShowing)
+    {
+        if (Locked) return false;
+        if (barShowing) { Locked = true; return false; }
+        if (!onTarget) { _since = -1; return false; }
+        if (_since < 0) { _since = now; return false; }
+        if (now - _since < DwellSeconds) return false;
+        _index = (_index + 1) % Tries.Length;
+        _since = -1;
+        return true;
+    }
+}
+
 /// <summary>Has the game's target bar been up lately? It flickers as a shot throws the crosshair, so one gap proves nothing.</summary>
 internal sealed class SightWatch(double holdSeconds = 1)
 {

@@ -710,6 +710,17 @@ try
             }));
             return 0;
         }
+        case "walkcheck":
+        {
+            // walkcheck <world> x,y,z x,y,z: offline, the walk between two points, where it ends, and whether the straight line stays on the floor.
+            var nav = BakeLogged(DefaultInstall, int.Parse(rest[0]));
+            Vector3 P(string t) { var v = t.Split(',').Select(x => float.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray(); return new(v[0], v[1], v[2]); }
+            var (a, b) = (P(rest[1]), P(rest[2]));
+            var route = nav.RouteNear(a, b, out bool ok);
+            Console.WriteLine($"route ok={ok} corners={route.Count} length={(route.Count > 1 ? new RouteFollower(route).Total : 0):F0} ends {(route.Count > 0 ? $"{route[^1].X:F0},{route[^1].Y:F0},{route[^1].Z:F0}" : "-")} clear={nav.Clear(a, b)}");
+            foreach (var c in route) Console.WriteLine($"  {c.X:F0},{c.Y:F0},{c.Z:F0}");
+            return 0;
+        }
         case "sweepplan":
         {
             // sweepplan <world>: offline, the dungeon sweep's points in walking order from the arrival, and how far the whole walk is.
