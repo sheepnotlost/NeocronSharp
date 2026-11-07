@@ -761,6 +761,7 @@ class Detector:
         return None
 
     def pixel_tooltip_recipe(self, frame, point):
+        self.last_tooltip_raw = ""
         texts = self.pixel_tooltips(frame, point)
         if not texts:
             return None

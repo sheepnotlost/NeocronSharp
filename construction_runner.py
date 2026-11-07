@@ -169,6 +169,21 @@ class ConstructionRunner(VisualRunner):
                     self.emit("status",f"{self.name}: Inventory did not scroll to the top; searching down from here.")
         self.step_aside()
 
+    def note_hover(self, candidate, identity, hover):
+        """A hovered stack that wasn't this recipe's blueprint: say what its tooltip read as, and keep the picture
+        (diagnostics/hover_row<r>_col<c>.png, this run's latest per cell) so a miss can be told from a real other item."""
+        row,col=candidate["cell"]
+        seen={None:"no tooltip seen","unknown":"tooltip not readable","other":"another item"}.get(identity,identity)
+        raw=" ".join(str(getattr(self.detector,"last_tooltip_raw","") or "").split())
+        self.emit("status",f"{self.name}: row {row+1} column {col+1}: {seen}"+(f" (read: {raw[:80]})" if raw and identity is not None else "")+".")
+        folder=getattr(self,"diagnostic_dir",None)
+        if folder is None or not hasattr(hover,"shape"):return
+        try:
+            import cv2
+            folder.mkdir(parents=True,exist_ok=True)
+            cv2.imwrite(str(folder/f"hover_row{row+1}_col{col+1}.png"),cv2.cvtColor(hover,cv2.COLOR_RGB2BGR))
+        except Exception:pass
+
     TOOLTIP_WAIT=.9  # s a hovered stack gets to show its tooltip; the game takes about .3 s (7 Nov)
 
     def locate_blueprint(self):
@@ -191,6 +206,11 @@ class ConstructionRunner(VisualRunner):
                     if cached is not None and cached not in candidates:candidates.insert(0,cached)
             else:inventory,candidates=self.detector.inventory_cells(frame,checkpoint=self.guard,**extra)
             if reuse:known=self.last_inventory=inventory
+            font=getattr(self.detector,"pixel",None)
+            if font is not None and getattr(self,"font_said",None)!=font:
+                self.font_said=font
+                self.emit("status","Inventory found; the game draws the pixel font (1024x768, UI scale 1.0), read letter by letter."
+                          if font is True else "Inventory found; the game draws its usual font.")
             if page==0 and self.detector.quantity(frame,checkpoint=self.guard) is not None:
                 raise Interrupted("A quantity dialog is already open. Resolve it before starting construction.")
             current_snapshot=snapshot(self.detector,frame,inventory) if hasattr(frame,"shape") else None
@@ -239,6 +259,7 @@ class ConstructionRunner(VisualRunner):
                 clear_hover=identity is not None
                 if relocated:
                     break
+                if identity!=self.recipe:self.note_hover(candidate,identity,hover)
                 if identity==self.recipe:
                     # Do not inherit a previous cell's tooltip. Observe its
                     # disappearance outside Inventory before confirming this
@@ -864,6 +885,8 @@ class ConstructionRunner(VisualRunner):
 
     def execute(self):
         config=self.profile["construction"]
+        from macro_core import version
+        self.emit("status",f"Construction: NeocronSharp version {version()}.")
         # Fail before any inventory scan when a previous interrupted transfer
         # left an unprocessed item behind. Do not spend a whole search finding
         # the same stack only to discover that the Processor cannot accept it.
