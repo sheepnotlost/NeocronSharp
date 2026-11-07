@@ -85,6 +85,7 @@ class Detector:
         self.tooltip_text_scale = None
         self.last_tooltip_raw = ""
         self.last_start_score = 0.
+        self.text_processor = None
         self.recipes=RECIPES
         self.reader=None
         self.last_tooltip_text=""
@@ -167,6 +168,87 @@ class Detector:
         return frame[y1:y2, x1:x2]
 
     def processor(self, frame, checkpoint=lambda: None):
+        """The Processor by its pictures; failing that, by its words on screen (any font)."""
+        held = self.processor_held(frame)
+        if held is not None:
+            return held
+        try:
+            return self.processor_by_pictures(frame, checkpoint)
+        except NotFound as missed:
+            try:
+                return self.processor_by_words(frame, checkpoint)
+            except NotFound:
+                raise missed from None
+
+    # Where "PROCESSOR" starts and where the Start button's middle is, in window units:
+    # the same in every font (the VM's game draws them in blocky capitals, 7 Nov).
+    TITLE_AT, START_AT, STOP_BELOW = (18, 3), (421, 174), 16
+
+    def processor_held(self, frame):
+        """The window found by its words last time, while its title is still there."""
+        if self.text_processor is None:
+            return None
+        anchor, (x, y), title = self.text_processor
+        h, w = title.shape
+        gray = self.gray(frame)
+        patch = gray[max(0, y-3):y+h+3, max(0, x-3):x+w+3]
+        if patch.shape[0] < h or patch.shape[1] < w or                 float(cv2.matchTemplate(patch, title, cv2.TM_CCOEFF_NORMED).max()) < .80:
+            self.text_processor = None
+            return None
+        return anchor
+
+    def processor_by_words(self, frame, checkpoint=lambda: None):
+        """Read "PROCESSOR" and "START" (or "STOP") on screen and place the window from them.
+
+        The menu bar has a PROCESSOR too; only a title with its Start button where the
+        window puts it counts."""
+        gray = self.gray(frame)
+        try:
+            reader = self.text_reader()
+            # The VM's title is dark on green but START and STOP light on dark, so both
+            # readings count; small blocky letters may need the larger zoom.
+            words = []
+            for up in (2, 3):
+                for image in (gray, 255-gray):
+                    checkpoint()
+                    words += reader.read_words(image, up=up)
+                if any(w[0].upper().startswith("PROCESSOR") for w in words) and any(w[0].upper().strip(".:") in ("START", "STOP") for w in words):
+                    break
+        except (ImportError, OSError, RuntimeError) as error:
+            raise NotFound(f"Processor words could not be read: {error}") from None
+        titles = [w for w in words if w[0].upper().startswith("PROCESSOR")]
+        buttons = [w for w in words if w[0].upper().strip(".:") in ("START", "STOP")]
+        tx_at, ty_at = self.START_AT[0]-self.TITLE_AT[0], self.START_AT[1]-self.TITLE_AT[1]
+        found = []
+        for _, x, y, w, h in titles:
+            for text, bx, by, bw, bh in buttons:
+                cx, cy = bx + bw/2, by + bh/2
+                across, down = (cx-x)/tx_at, (cy-y)/ty_at
+                if text.upper().strip(".:") == "STOP":
+                    down = (cy-y)/(ty_at+self.STOP_BELOW)
+                if not (.5 <= across <= 2.2) or abs(down-across) > .12*across:
+                    continue
+                scale = round(across, 3)
+                start = (math.floor(cx+.5), math.floor(cy - (self.STOP_BELOW*scale if text.upper().strip(".:") == "STOP" else 0)+.5))
+                anchor = Anchor(math.floor(x-self.TITLE_AT[0]*scale+.5), math.floor(y-self.TITLE_AT[1]*scale+.5),
+                                scale, 1., start)
+                try:
+                    self.region(frame, anchor, (-26, 0, 490, 208))
+                except NotFound:
+                    continue
+                found.append((anchor, (x, y, w, h)))
+                break
+        # Each reading finds the same window again; only one apart from the first is a second window.
+        if any(abs(a.x-found[0][0].x) > 20*a.scale or abs(a.y-found[0][0].y) > 20*a.scale for a, _ in found[1:]):
+            raise Ambiguous("Multiple possible Processor windows found; no position selected.")
+        if not found:
+            raise NotFound("Processor window not found: its title and Start button could not be read either.")
+        anchor, (x, y, w, h) = found[0]
+        self.text_processor = (anchor, (x, y), gray[y:y+h, x:x+w].copy())
+        self.last_scale = anchor.scale
+        return anchor
+
+    def processor_by_pictures(self, frame, checkpoint=lambda: None):
         """Propose titles at half resolution, then verify original pixels and Start."""
         gray = self.gray(frame)
         small = cv2.resize(gray, None, fx=.5, fy=.5, interpolation=cv2.INTER_AREA)

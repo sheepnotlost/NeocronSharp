@@ -284,5 +284,48 @@ class DetectionTests(unittest.TestCase):
                 self.assertEqual(len(found[name]), 1, (scale, name, found))
 
 
+class WordsReader:
+    """Stands in for Windows text recognition: the words it would read, in frame pixels."""
+    def __init__(self, words):
+        self.words = words
+
+    def read_words(self, gray, up=3):
+        return list(self.words)
+
+
+class ProcessorByWordsTests(unittest.TestCase):
+    """The VM's game draws PROCESSOR and START in blocky capitals the pictures don't match (7 Nov)."""
+    def frame(self):
+        frame = np.full((768, 1024, 3), 60, dtype=np.uint8)
+        frame[300:308, 100:160] = np.random.default_rng(1).integers(0, 255, (8, 60, 1), dtype=np.uint8)
+        return frame
+
+    def detector(self, words):
+        detector = Detector()
+        detector.reader = WordsReader(words)
+        return detector
+
+    def test_title_and_start_place_the_window_and_the_menu_bar_word_is_ignored(self):
+        detector = self.detector([("PROCESSOR", 600, 5, 60, 8), ("PROCESSOR", 100, 300, 60, 8), ("START", 385, 424, 34, 8)])
+        frame = self.frame()
+        anchor = detector.processor(frame)
+        self.assertAlmostEqual(anchor.scale, .749, places=2)
+        self.assertEqual((anchor.x, anchor.y), (87, 298))
+        self.assertEqual(anchor.start_point(), [402, 428])
+        detector.reader = WordsReader([])
+        self.assertEqual(detector.processor(frame), anchor)          # held while its title is there
+        frame[300:308, 100:160] = 0
+        with self.assertRaises(NotFound):
+            detector.processor(frame)
+
+    def test_stop_alone_still_gives_start_above_it(self):
+        anchor = self.detector([("PROCESSOR", 100, 300, 60, 8), ("STOP", 385, 436, 34, 8)]).processor_by_words(self.frame())
+        self.assertEqual(anchor.start_point(), [402, 428])
+
+    def test_a_title_with_no_button_where_the_window_puts_it_is_not_the_processor(self):
+        with self.assertRaises(NotFound):
+            self.detector([("PROCESSOR", 600, 5, 60, 8), ("START", 385, 600, 34, 8)]).processor_by_words(self.frame())
+
+
 if __name__ == "__main__":
     unittest.main()
