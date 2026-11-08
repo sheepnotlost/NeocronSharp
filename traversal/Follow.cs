@@ -581,7 +581,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                     }
                     casting = null;
                 }
-                if (watch.Read() is { } gone) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
+                // In team mode the run goes on while any ally is still here.
+                if (watch.Read() is { } gone && (team == null || team.Positions.Count == 0)) { input.Walk(false); Record("lost", s, new { gone, seenAt = new[] { watch.SeenAt.X, watch.SeenAt.Y, watch.SeenAt.Z } }); hud.Post(Hud.Cyan, title, gone); return gone; }
 
                 goal = watch.SeenAt;
                 if (place != null)
@@ -608,7 +609,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                         mob = around.Where(e => SweepTargets.Hunted(e) && !FollowCommand.Dead(e)).Select(e => e.Position)
                             .OrderBy(p => PointNavigation.Distance(p, centre)).Cast<Vector3?>().FirstOrDefault();
                     }
-                    team.ReadPanel(now, wasMoving ? 5 : 1.5);
+                    // Reading the panel takes a moment: only while standing, never with W held.
+                    if (!wasMoving) team.ReadPanel(now, 1.5);
                     teamPlan = casting != null ? new TeamHeal.Move(null, null, null, 0) : team.Decide(now, s.Position, mob, band.Distance);
                     if (teamPlan.Goal is { } g) { teamGoal = g; teamStop = teamPlan.Stop; }
                     goal = teamGoal;
@@ -653,7 +655,8 @@ internal sealed class FollowWalk(PlayerReader reader, NavWorld nav, int sector, 
                 bool moving;
                 if (team != null)
                 {
-                    teamMove = teamPlan!.Goal != null && (teamMove ? straight > teamStop : straight > teamStop + 50);
+                    // To a due ally out of reach: go at once. To the station: only when well away from it, so it doesn't fidget.
+                    teamMove = teamPlan!.Goal != null && (teamMove || teamPlan.Due != null ? straight > teamStop : straight > teamStop + 50);
                     moving = teamMove;
                 }
                 else moving = arrive || (place != null ? place.Update(s.Position, watch.SeenAt, band.Distance, band.Resume) : band.Update(gap));

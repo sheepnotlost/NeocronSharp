@@ -91,7 +91,7 @@ internal sealed class TeamHeal
     /// </summary>
     public Move Decide(double now, Vector3 self, Vector3? mob, float reach)
     {
-        var due = Rounds.Next(now);
+        var due = Rounds.Next(now, who => who == TeamRounds.Self || _at.ContainsKey(who));
         if (due != null && due.Who == TeamRounds.Self) return new Move(due, null, null, 0);
         if (due != null && Position(due.Who) is { } at)
         {

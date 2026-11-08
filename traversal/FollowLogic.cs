@@ -570,10 +570,13 @@ internal sealed class TeamRounds
     private double RunsOut(string who, Spell spell) => _runsOut.TryGetValue((who, spell.Slot), out var t) ? t : double.NegativeInfinity;
 
     /// <summary>The most overdue cast at <paramref name="now"/>, heals before buffs when equally overdue; null while all are running.</summary>
-    public Due? Next(double now)
+    /// <param name="here">Who can be cast on now (an ally out of sight or dead is passed over, not waited for); null: everyone.</param>
+    public Due? Next(double now, Func<string, bool>? here = null)
     {
         Due? best = null;
         foreach (var who in _who)
+        {
+            if (here != null && !here(who)) continue;
             foreach (var spell in _spells)
             {
                 double left = RunsOut(who, spell) - now;
@@ -581,6 +584,7 @@ internal sealed class TeamRounds
                 double over = double.IsNegativeInfinity(left) ? double.MaxValue : -left;
                 if (best == null || Better(who, spell, over, best)) best = new Due(who, spell, over);
             }
+        }
         return best;
     }
 

@@ -30,6 +30,8 @@ internal static class FollowTests
             Check(team.Next(30)!.Who == "Cy", "a heal gone in the bar is cast at once, before others still running");
             team.Seen("Cy", heal, 25, 30);
             Check(!(team.Next(31) is { Who: "Cy", Spell.Slot: 1 }), "a bar showing time left puts the clock right");
+            var away = new TeamRounds(["Ann", "Bob"], [heal]);
+            Check(away.Next(0, w => w != "Ann") is { Who: "Bob" }, "an ally out of sight is passed over, not waited for");
         });
 
         test("Team heal: casts where it stands when the ally is in reach, walks to one out of reach, trusts the panel", () =>
@@ -46,6 +48,9 @@ internal static class FollowTests
             foreach (var spell in TeamHeal.Spells) { team.Cast("Bob", spell, 0); team.Cast(TeamRounds.Self, spell, 0); }
             var idle = team.Decide(5, self, new Vector3(-1000, 0, 0), 150);
             Check(idle.Due == null && idle.Goal is { } spot && spot.X > 100, "nothing due: at the station behind the group");
+            var gone = new TeamHeal(["Ann", "Cy"]);
+            gone.Observe([Actor("Ann", new Vector3(100, 0, 0))]);
+            Check(gone.Decide(0, self, null, 150).Who == "Ann", "Cy, not here and never cast on, does not hold up Ann's heal");
             // The panel: a heal timer read puts the clock right; a buff missing right after a cast is not believed, later it is.
             team.Apply([new PanelMember("BOB", 90, 0, new Dictionary<int, int?> { [1] = 25 })], 10);
             Check(team.Rounds.Next(10) is not { Who: "Bob", Spell.Slot: 1 }, "the heal shows 25 s left");

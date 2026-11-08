@@ -35,11 +35,14 @@ internal sealed class TeamPanel
             string digits = string.Concat(words.Where(t => t.X > 210 * s && t.Text.All(char.IsDigit)).OrderBy(t => t.X).Select(t => t.Text));
             var buffs = new Dictionary<int, int?>();
             int top = y + h + (int)MathF.Round(2 * s), tile = (int)MathF.Round(Icon * s);
+            int dark = 0;
             for (int i = 0; i < MaxIcons; i++)
             {
                 int left = x + (int)MathF.Round(i * Pitch * s);
                 if (left + tile > width || top + tile > height) break;
-                if (Mean(bgra, width, left, top, tile, tile) < 60) break;       // the dark background: no more icons
+                // A dark tile is skipped (a dim icon, a gap); two in a row are the background: no more icons.
+                if (Mean(bgra, width, left, top, tile, tile) < 60) { if (++dark >= 2) break; continue; }
+                dark = 0;
                 int? slot = Classify(bgra, width, left, top, tile);
                 if (slot == null) continue;
                 int ly = top + tile - (int)MathF.Round(s), lh = (int)MathF.Round(20 * s), lx = Math.Max(0, left - (int)MathF.Round(s)), lw = Math.Min(width - lx, (int)MathF.Round(36.5f * s));

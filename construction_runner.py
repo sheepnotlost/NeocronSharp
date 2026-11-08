@@ -262,7 +262,7 @@ class ConstructionRunner(VisualRunner):
                 clear_hover=identity is not None
                 if relocated:
                     break
-                if identity!=self.recipe:self.note_hover(candidate,identity,hover)
+                if identity=="unknown":self.note_hover(candidate,identity,hover)   # another item is normal: no line, no picture
                 if identity==self.recipe:
                     match=candidate;break
                 elif identity=="unknown":
@@ -444,32 +444,44 @@ class ConstructionRunner(VisualRunner):
         if self.detector.quantity(self.frame(),checkpoint=self.guard) is not None:
             raise Interrupted("A quantity dialog would not close.")
 
-    def transfer(self,label,source,destination,amount,have=None):
+    def transfer(self,label,source,destination,amount,have=None,held=0):
         """Drag source to destination() and enter amount in the dialog, tried again when the game lags. A dialog
         that opened late belongs to the last drag: it is filled in, not dragged a second time. With `have` (the
         stack's count now), every try moves only what is still missing, so a transfer that already landed is never
         repeated (7 Nov: stacks of 23, 24 and 29)."""
+        entered={"done":False}     # a dialog was found and filled in: something may have moved
+        def fill(need):
+            try:self.enter_quantity(need)
+            except RuntimeError as exc:
+                if not str(exc).startswith("Expected quantity dialog was not detected"):entered["done"]=True
+                raise
         def step(attempt):
-            need=amount if have is None else amount-have()
+            count=have() if have is not None else None
+            need=amount-(held if count is None else count)     # held: the count before, when have() can't read one
             dialog=attempt>1 and self.detector.quantity(self.frame(),checkpoint=self.guard) is not None
             if need<=0:
                 if dialog:self.close_dialog(self.detector.quantity(self.frame(),checkpoint=self.guard))
                 return
             if dialog:
-                return self.enter_quantity(need)
+                return fill(need)
+            if count is None and entered["done"]:
+                # The last try filled a dialog in and no count says it didn't land: never drag the same thing twice
+                # (a second 15 blueprints, or whatever now sits in the emptied cell).
+                self.emit("status",f"{label}: the last try was entered; not dragging again.")
+                return
             where=destination()
             self.drag(source,where);self.step_aside()
-            self.enter_quantity(need)
+            fill(need)
         self.retrying(label,step)
 
     def have(self,code):
-        """The count of the Inventory stack labelled `code`: 0 with no such stack or no readable count."""
+        """The count of the Inventory stack labelled `code`: 0 with no such stack, None when its count can't be read."""
         frame=self.frame();inventory=self.detector.inventory(frame,checkpoint=self.guard)
         reader=self.detector.text_reader()
         for (col,row),(mask,words) in gogo.inventory_labels(reader,frame,inventory).items():
             if any(gogo._close(word,code) for word in words):
                 below=gogo.inventory_cell(frame,inventory,col,row+1) if row+1<gogo.INVENTORY_ROWS else None
-                return gogo.read_count(reader,[gogo.inventory_cell(frame,inventory,col,row),below]) or 0
+                return gogo.read_count(reader,[gogo.inventory_cell(frame,inventory,col,row),below])
         return 0
 
     def learn_gogo_labels(self,reader,window,cells,missing):
@@ -529,12 +541,17 @@ class ConstructionRunner(VisualRunner):
             # Never above a full stack of 15 (grease may be); a stack already part full only gets the rest.
             grease="grease" in name.lower()
             held=0 if grease else self.have(code)
+            if held is None:
+                # A stack with no count to read (a single item shows none): count it as 1, and on a retry the
+                # transfer trusts its own record instead of a count it can't read.
+                self.emit("status",f"GoGuardian: {name} stack count unreadable; counting it as 1.")
+                held=1
             amount=amount if grease else min(amount,gogo.BATCH-held)
             if amount<=0:
                 self.emit("status",f"GoGuardian: {name} already at {held}; none moved.")
                 continue
             self.emit("status",f"GoGuardian: moving {amount} {name} to Inventory.")
-            self.transfer(f"GoGuardian {name}",point,destination,amount+held,None if grease else (lambda code=code:self.have(code)))
+            self.transfer(f"GoGuardian {name}",point,destination,amount+held,None if grease else (lambda code=code:self.have(code)),held)
         return len(plan)
 
     STASH_AT=gogo.BATCH  # finished parts go into GoGuardian once their Inventory stack holds 15 (the user's ask, 7 Nov)
@@ -838,7 +855,7 @@ class ConstructionRunner(VisualRunner):
                 else:self.slot_unread+=1
                 event.update(slot_counts=self.slot_counts.copy(),slot_unread=self.slot_unread,slot_na=self.slot_na)
             self.emit("construction_cycle", event)
-            if self.gogo_enabled():self.retrying(f"{self.name} into GoGuardian",lambda attempt:self.stash_product())
+            if self.gogo_enabled():self.stash_product()      # its transfer retries on its own
             if self.job_label and self.job_target:
                 self.emit("queue_update",{"index":self.job_row,"count":target-self.job_built or None})
             if self.stop_at_slots is not None and slots is not None and slots>=self.stop_at_slots:

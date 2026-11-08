@@ -85,11 +85,18 @@ def read(rgb, reader, references, wanted=None):
         member = Member(name, int(digits) if digits else None, (x, y, w, h))
         if wanted is None or name in wanted:
             top = y + h + round(2*s)
+            dark = 0
             for i in range(MAX_ICONS):
                 left = x + round(i*PITCH*s)
                 tile = rgb[top:top+round(ICON*s), left:left+round(ICON*s)]
-                if tile.shape[0] < 10 or tile.shape[1] < 10 or tile.reshape(-1, 3).mean() < 60:
-                    break                                       # no more icons (the dark background)
+                if tile.shape[0] < 10 or tile.shape[1] < 10:
+                    break
+                if tile.reshape(-1, 3).mean() < 60:           # a dim icon or gap is skipped; two in a row: no more icons
+                    dark += 1
+                    if dark >= 2:
+                        break
+                    continue
+                dark = 0
                 slot = classify(tile, references)
                 label = gray[top+round(ICON*s)-round(1*s):top+round(ICON*s)+round(19*s), left-round(1*s):left+round((ICON+1.5)*s)]
                 seconds = None

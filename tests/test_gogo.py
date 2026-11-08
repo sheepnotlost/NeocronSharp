@@ -222,10 +222,29 @@ class RefillSequenceTests(unittest.TestCase):
         runner.transfer("x", (1, 1), lambda: (2, 2), 15, lambda: held["GAM"])
         self.assertEqual(len(drags), 1)
 
+    def test_a_retry_after_an_entered_transfer_with_no_count_does_not_drag_again(self):
+        # Blueprints and the stash have no count to check: once a dialog was filled in, a retry never drags again.
+        runner, events, _ = self.runner()
+        drags = []
+        runner.drag = lambda a, b: drags.append(1)
+        def enter(amount):
+            raise Interrupted("Quantity dialog did not close after the GoGuardian transfer.")
+        runner.enter_quantity = enter
+        runner.detector.quantity = lambda f, checkpoint=None, expected=False: None
+        runner.transfer("x", (1, 1), lambda: (2, 2), 15)
+        self.assertEqual(len(drags), 1)
+
+    def test_an_unreadable_count_counts_as_one(self):
+        runner, events, _ = self.runner()
+        runner.have = lambda code: None
+        runner.refill_from_gogo()
+        typed = [e[1] for e in events if e[0] == "type"]
+        self.assertTrue(typed and all(n == gogo.BATCH - 1 for n in typed))
+
     def test_grease_is_not_capped(self):
         runner, events, _ = self.runner()
         moved = []
-        runner.transfer = lambda label, source, destination, amount, have=None: moved.append((amount, have))
+        runner.transfer = lambda label, source, destination, amount, have=None, held=0: moved.append((amount, have))
         from unittest import mock
         with mock.patch.object(gogo, "plan_refill", return_value=[("Construction Grease", "CGR", (5, 5), 40)]):
             runner.have = lambda code: 99
