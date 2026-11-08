@@ -39,6 +39,15 @@ class PickTests(unittest.TestCase):
         for faction in (16, 17, 18):
             self.assertIsNotNone(pick_target([actor("Genotoxic Parasite", faction=faction)]))
 
+    def test_only_attack_and_the_area_limit_the_pick(self):
+        snake, robot = actor("Sand Snake", distance=900, id="s", faction=18), actor("Dome of York Guardian", distance=50, id="r", faction=16)
+        far_snake = actor("Poisonous Sand Snake", distance=100, id="far", faction=18)
+        snake.update(x=-9000, z=-4000); robot.update(x=-9100, z=-4100); far_snake.update(x=-3000, z=5000)
+        self.assertEqual(pick_target([snake, robot, far_snake])["id"], "r")
+        self.assertEqual(pick_target([snake, robot, far_snake], only=["snake"])["id"], "far")
+        self.assertEqual(pick_target([snake, robot, far_snake], only=["snake"], area=(-9270, -4490, 2900))["id"], "s")
+        self.assertIsNone(pick_target([actor("Sand Snake", id="unplaced")], area=(0, 0, 2900)))   # no position: not known to be inside
+
     def test_anywhere_in_the_zone_unless_limited(self):
         self.assertEqual(pick_target([actor("Rat", distance=30000)])["distance"], 30000)
 

@@ -5,6 +5,7 @@ traversal.exe does the walking, the fighting and the running (one short run at a
 next and works the game's windows. NPCs only: a player is never picked, whatever the list says.
 """
 import ctypes
+import math
 import re
 import subprocess
 import threading
@@ -59,9 +60,25 @@ def hunted(actor, spare=()):
             and not any(part and part in name for part in (" ".join(s.lower().split()) for s in spare)))
 
 
-def pick_target(actors, spare=(), within=float("inf"), skip=()):
-    """The nearest living robot, mutant or animal not spared, anywhere in the zone unless limited."""
-    found = [a for a in actors if hunted(a, spare) and not a["dead"] and a["distance"] <= within and a["id"] not in skip]
+def wanted(actor, only=()):
+    """Named in Only attack, where a name may be part of one ("snake" takes Sand Snake and Poisonous Sand Snake); anything when empty."""
+    name = " ".join(actor["name"].lower().split())
+    parts = [" ".join(o.lower().split()) for o in only if o.strip()]
+    return not parts or any(part in name for part in parts)
+
+
+def inside(actor, area):
+    """Within the hunt's area, (x, z, radius), when it has one; a mob whose position is not known is not."""
+    if area is None:
+        return True
+    return "x" in actor and math.hypot(actor["x"]-area[0], actor["z"]-area[1]) <= area[2]
+
+
+def pick_target(actors, spare=(), within=float("inf"), skip=(), only=(), area=None):
+    """The nearest living robot, mutant or animal not spared, anywhere in the zone unless limited: by distance, by
+    Only attack, and by the area the hunt stays in."""
+    found = [a for a in actors if hunted(a, spare) and not a["dead"] and a["distance"] <= within and a["id"] not in skip
+             and wanted(a, only) and inside(a, area)]
     return min(found, key=lambda a: a["distance"], default=None)
 
 
@@ -86,8 +103,10 @@ class Engine:
         data = self.tool(["nearby"])
         if not data.get("live"):
             raise Interrupted(f"Cannot read the game: {data.get('why')}")
+        self.player = data.get("player")
         return [{"id": str(e["id"]), "name": e["name"], "kind": e["kind"], "distance": float(e["distance"]),
-                 "dead": bool(e.get("dead")), "faction": e.get("factionId")} for e in data.get("entities", [])]
+                 "dead": bool(e.get("dead")), "faction": e.get("factionId"),
+                 **({"x": float(e["x"]), "z": float(e["z"])} if "x" in e and "z" in e else {})} for e in data.get("entities", [])]
 
     def live(self, args, tick):
         """Run one live command to its end and return what it printed. tick() runs while it does, and may raise."""
@@ -182,6 +201,10 @@ class LootRunner(VisualRunner):
         self.kills = 0
         self.back = True             # until the weapon proves shorter than the target limit
         self.fleeing = False
+        self.only = []               # Only attack: names, or parts of names; empty for anything
+        self.stay = 0                # Stay within: units from where the hunt starts; 0 for the whole zone
+        self.centre = None           # Stay within's middle (x, z); None for where the hunt starts
+        self.area = None             # (x, z, radius) once started with a Stay within
 
     def guard(self):
         super().guard()
@@ -427,17 +450,28 @@ class LootRunner(VisualRunner):
         skip, waiting = set(), None
         self.hide_pointer()
         self.check_health()
+        if self.stay and self.centre:
+            self.area = (float(self.centre[0]), float(self.centre[1]), float(self.stay))
+            self.emit("log", f"Staying within {self.stay} units of {self.area[0]:.0f}, {self.area[1]:.0f}: only mobs inside that circle are picked.")
+        elif self.stay:
+            self.engine.nearby()
+            here = getattr(self.engine, "player", None)
+            if not here:
+                raise Interrupted("Could not read where you are, to stay near it. Stopped.")
+            self.area = (float(here["x"]), float(here["z"]), float(self.stay))
+            self.emit("log", f"Staying within {self.stay} units of where you are now: only mobs inside that circle are picked.")
         while True:
             try:
                 self.checkpoint()
                 self.hide_pointer()
-                target = pick_target(self.engine.nearby(), self.spare, skip=skip)
+                target = pick_target(self.engine.nearby(), self.spare, skip=skip, only=self.only, area=self.area)
                 if target is None:
                     waiting = self.clock() if waiting is None else waiting
                     if self.clock()-waiting >= IDLE_LIMIT:
                         self.emit("done", f"Nothing left to hunt: {len(skip)} left alone. {self.kills} killed.")
                         return
-                    self.emit("status", "No robot, mutant or animal to fight here: waiting for one to appear.")
+                    self.emit("status", "Nothing to fight inside your area: waiting for one to appear." if self.area
+                              else "No robot, mutant or animal to fight here: waiting for one to appear.")
                     self.my_health()
                     self.wait(3)
                     continue

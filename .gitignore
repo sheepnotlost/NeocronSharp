@@ -54,3 +54,6 @@ traversal/logs/*
 traversal/fighter.txt
 traversal/avoid.txt
 traversal/pin.txt
+traversal/only.txt
+traversal/stay.txt
+traversal/centre.txt

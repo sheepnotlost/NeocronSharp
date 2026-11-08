@@ -35,6 +35,11 @@ from macro_core import Control
 FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next time
 PIN_FILE = tt.PROJECT / "pin.txt"          # the Pin camera tick, kept for next time
+ONLY_FILE = tt.PROJECT / "only.txt"        # the Only attack box, kept for next time
+STAY_FILE = tt.PROJECT / "stay.txt"        # the Stay within box, kept for next time
+CENTRE_FILE = tt.PROJECT / "centre.txt"    # the Stay within centre box, kept for next time
+# The snakes' west side of K 11, circled on the map and widened by a quarter (8 Nov).
+SNAKES_K11 = ("2900", "-9270, -4490")
 NOTES_FILE = tt.PROJECT / "logs" / "notes.md"   # the hunt's notes, written by the engine after every fight
 MOB_MAP_FILE = tt.PROJECT / "logs" / "mob-map.md"   # traversal.exe mobs: every mob the game places, and how far each hits from
 MOBS_PICTURE = tt.PROJECT / "logs" / "mobs-on-map.png"   # Mobs on map: the sector you are in, mobs where they stand now
@@ -150,6 +155,21 @@ class TargetTab:
         self.avoid.trace_add("write", lambda *_: self.show_enemies() if getattr(self, "ready", False) else None)
         ttk.Entry(avoid_row, textvariable=self.avoid).grid(row=0, column=1, sticky="ew", padx=6)
         ttk.Label(avoid_row, text="e.g. parasite, slugger").grid(row=0, column=2, sticky="w")
+        # Only these, and only inside one circle: the snakes on the west side of K 11, away from the robots (8 Nov).
+        only_row = ttk.Frame(hunting)
+        only_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        only_row.columnconfigure(1, weight=1)
+        ttk.Label(only_row, text="Only attack:").grid(row=0, column=0, sticky="w")
+        self.only = tk.StringVar(value=self.kept(ONLY_FILE) if ONLY_FILE.exists() else "snake")
+        ttk.Entry(only_row, textvariable=self.only).grid(row=0, column=1, sticky="ew", padx=6)
+        ttk.Label(only_row, text="(empty: everything)").grid(row=0, column=2, sticky="w")
+        ttk.Label(only_row, text="Stay within").grid(row=0, column=3, sticky="w", padx=(12, 0))
+        self.stay = tk.StringVar(value=self.kept(STAY_FILE) or SNAKES_K11[0])
+        ttk.Entry(only_row, textvariable=self.stay, width=6).grid(row=0, column=4, padx=4)
+        ttk.Label(only_row, text="units of x, z").grid(row=0, column=5, sticky="w")
+        self.centre = tk.StringVar(value=self.kept(CENTRE_FILE) if CENTRE_FILE.exists() else SNAKES_K11[1])
+        ttk.Entry(only_row, textvariable=self.centre, width=14).grid(row=0, column=6, padx=4)
+        ttk.Label(only_row, text="(empty: where you start; 0 units: whole zone)").grid(row=0, column=7, sticky="w")
         self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
         for column, text, width, anchor in (("hunt", "Spare", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
                                             ("nearest", "Nearest", 70, "e")):
@@ -533,6 +553,31 @@ class TargetTab:
             engine.pin = bool(self.pin.get())
         return runner
 
+    @staticmethod
+    def kept(path):
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
+    def hunt_limits(self):
+        """(Only attack names; Stay within units, or None when that box isn't a whole number; its centre (x, z), None for
+        where you start, or False when it can't be read). All three are kept for next time."""
+        only, stay, centre = typed_names(self.only.get()), self.stay.get().strip() or "0", self.centre.get().strip()
+        for path, text in ((ONLY_FILE, ", ".join(only)), (STAY_FILE, stay), (CENTRE_FILE, centre)):
+            try:
+                path.write_text(text, encoding="utf-8")
+            except OSError:
+                pass
+        point = None
+        if centre:
+            try:
+                x, z = (float(v) for v in centre.replace(",", " ").split())
+                point = (x, z)
+            except ValueError:
+                point = False
+        return only, int(stay) if stay.isdigit() else None, point
+
     def avoid_names(self):
         """Names ticked in the list and names, or parts of names, typed in Don't attack; the box is kept for next time."""
         typed = typed_names(self.avoid.get())
@@ -547,16 +592,22 @@ class TargetTab:
         if self.sector in (INSIDE, OUTSIDE) and self.dungeon_runner:
             return self.start_dungeon()         # Regant's Legacy: the sweep through it, not the zone hunt
         names, reach = self.avoid_names(), self.reach_units()
-        problem = self.hunt_problem(None, reach)
+        only, stay, centre = self.hunt_limits()
+        problem = (self.hunt_problem(None, reach)
+                   or (None if stay is not None else "Stay within must be a whole number of units (0 for the whole zone).")
+                   or (None if centre is not False else "The Stay within centre must be two numbers, x and z, like -9270, -4490 (or empty)."))
         if problem:
             self.status.set(problem)
             self.append(problem)
             return
         self.looting = Control()
         spared = f", leaving {', '.join(names)} alone" if names else ""
-        self.append(f"Hunt: every robot, mutant and animal here{spared}; never humans or players. Click into Neocron now. Starting in 5 s...")
+        which = f"only {', '.join(only)}" if only else "every robot, mutant and animal here"
+        near = ((f", within {stay} units of {centre[0]:.0f}, {centre[1]:.0f}" if centre else f", within {stay} units of where you stand")
+                if stay else "")
+        self.append(f"Hunt: {which}{near}{spared}; never humans or players. Click into Neocron now. Starting in 5 s...")
         self.update_buttons()
-        self.loot_start = self.root.after(5000, self.begin_hunt, names, reach)
+        self.loot_start = self.root.after(5000, self.begin_hunt, names, reach, only, stay, centre)
 
     def hunt_problem(self, names, reach):
         if self.busy:
@@ -571,11 +622,12 @@ class TargetTab:
             return f"Attack from must be a whole number from 40 to {REACH_MOST}."
         return None
 
-    def begin_hunt(self, names, reach):
+    def begin_hunt(self, names, reach, only=(), stay=0, centre=None):
         self.loot_start = None
         try:
             clients.focus()         # no need to have clicked into the game in time
             runner = self.pinned(self.loot_runner(names, reach, lambda kind, payload: self.queue.put(("loot", (kind, payload))), self.looting))
+            runner.only, runner.stay, runner.centre = list(only), stay or 0, centre or None
             threading.Thread(target=runner.run, daemon=True, name="hunt").start()
         except Exception as exc:
             self.loot_event("done", f"Hunt could not start: {exc}")
