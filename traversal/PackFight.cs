@@ -168,7 +168,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         Vector3 targetAt = first.Position;
         int way = 0;
         PackPhase was = PackPhase.Shoot;
-        double phaseSince = 0, aimedAt = 0, lookingSince = -1, crouchedAt = -1;
+        double phaseSince = 0, aimedAt = 0, lookingSince = -1, crouchedAt = -1, heldAt = 0;
         var circle = new AimCircle();
 
         void Aim(WorldEntity e)
@@ -246,15 +246,16 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                         PackPhase.Vantage => $"{target.Name} is out of sight: round the ring for a clear view.",
                         _ => $"One is {nearestAway:F0} units away: sprinting clear.",
                     });
-                    // Ctrl held only to shoot: let go before running.
-                    if ((phase == PackPhase.Shoot) != input.Crouched)
-                    {
-                        input.HoldLeft(false);
-                        input.Crouch(phase == PackPhase.Shoot);
-                        crouchedAt = input.Crouched ? now : -1;
-                        Record("crouch", s, new { crouched = input.Crouched });
-                    }
                     was = phase; phaseSince = now;
+                }
+                // Ctrl held whenever shooting, let go before running. Done every tick, not on a change of phase: the fight
+                // starts in Shoot, so on a change only it never crouched, and never fired, for 43 s (8 Nov).
+                if ((phase == PackPhase.Shoot) != input.Crouched)
+                {
+                    input.HoldLeft(false);
+                    input.Crouch(phase == PackPhase.Shoot);
+                    crouchedAt = input.Crouched ? now : -1;
+                    Record("crouch", s, new { crouched = input.Crouched });
                 }
 
                 var view = View(s);
@@ -317,6 +318,13 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                     input.HoldLeft(onBody);
                     Record("fire", s, new { on = onBody, away, target = target.Name, spread = circle.Spread });
                     if (onBody && firedSince < 0) firedSince = now;
+                }
+                // Shooting but not firing: once a second, why not.
+                if (phase == PackPhase.Shoot && !onBody && now - heldAt >= 1)
+                {
+                    heldAt = now;
+                    Record("held", s, new { crouched = input.Crouched, steady, spread = circle.Spread, seen = now - screen.SeenAt,
+                        inside = now - screen.InsideAt, looking, away, target = target.Name });
                 }
                 if (firedSince >= 0 && plan.GiveUpSeconds > 0 && now - Math.Max(hurtAt, firedSince) > plan.GiveUpSeconds)
                 {
