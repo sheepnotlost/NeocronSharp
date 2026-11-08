@@ -306,6 +306,19 @@ try
             }
             return 0;
         }
+        case "mobs":
+        {
+            // mobs [least level]: logs/mob-map.md, every robot, mutant and animal the game's files place, and where.
+            string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
+            string install = Directory.Exists(DefaultInstall) ? DefaultInstall : Path.GetDirectoryName(FollowCommand.ClientExecutable())!;
+            var travel = new Travel(install, id => throw new NotSupportedException(), new Hud(), logs, pulse, run);
+            int least = rest.Count > 0 && int.TryParse(rest[0], out int l) ? l : 0;
+            var mobs = MobMap.Build(install, travel);
+            string file = Path.Combine(logs, "mob-map.md");
+            File.WriteAllText(file, MobMap.Write(mobs, MobMap.Reach.Load(Path.Combine(logs, "mob-reach.json")), least));
+            Console.WriteLine($"{mobs.Count(m => m.Level >= least)} mobs written to {file}");
+            return 0;
+        }
         case "zones":
         {
             // JSON for the Traversal tab: every sector reachable on foot from Plaza 1, with its hop count.

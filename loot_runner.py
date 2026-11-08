@@ -9,6 +9,7 @@ import re
 import subprocess
 import threading
 
+import mob_reach
 import traversal_tab as tt
 from macro_core import Interrupted
 from navray_runner import NavRayRunner
@@ -31,6 +32,8 @@ HEALTH_EVERY = 1.0           # seconds between readings during a fight
 GIVE_UP = 20                 # seconds of no damage before going closer
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
 START_TRIES = 3              # readings of your health before the hunt refuses to start without one
+HIT_EVERY = 3.0              # seconds between notes of where the mob that hurt you was
+REACH_FILE = tt.PROJECT / "logs" / "mob-reach.json"
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
 ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
               "Nobody with id", " is dead", " is still alive", "The door did not open", "Kept leaving the route", "Could not face the route",
@@ -200,7 +203,24 @@ class LootRunner(VisualRunner):
         return last
 
     def my_health(self):
-        return self.judge(self.health(self.reader(), self.frame()))
+        reading = self.health(self.reader(), self.frame())
+        self.note_hit(reading)
+        return self.judge(reading)
+
+    def note_hit(self, reading):
+        """Health fell: write down how far away the mob that did it was (mob_reach), at most once every HIT_EVERY s."""
+        last = getattr(self, "last_health", None)
+        if reading:
+            self.last_health = reading[0]
+        if not reading or last is None or reading[0] >= last or self.clock() < getattr(self, "next_hit", 0.):
+            return
+        self.next_hit = self.clock()+HIT_EVERY
+        try:
+            hit = mob_reach.record(REACH_FILE, self.engine.nearby(), hunted)
+        except Interrupted:
+            return
+        if hit:
+            self.emit("log", f"{hit[0]} hit you from {hit[1]:.0f} units.")
 
     def judge(self, reading):
         if reading and reading[0] < reading[1]*HEALTH_FLOOR and not self.fleeing:

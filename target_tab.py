@@ -32,6 +32,7 @@ FIGHTER_FILE = tt.PROJECT / "fighter.txt"
 AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next time
 PIN_FILE = tt.PROJECT / "pin.txt"          # the Pin camera tick, kept for next time
 NOTES_FILE = tt.PROJECT / "logs" / "notes.md"   # the hunt's notes, written by the engine after every fight
+MOB_MAP_FILE = tt.PROJECT / "logs" / "mob-map.md"   # traversal.exe mobs: every mob the game places, and how far each hits from
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
@@ -192,6 +193,7 @@ class TargetTab:
         # Beside Don't attack: the button row below is full (the Regant's button was squeezed to "Hun", 7 Nov).
         ttk.Checkbutton(avoid_row, text="Pin camera (writes game memory)", variable=self.pin).grid(row=0, column=3, sticky="w", padx=(12, 0))
         ttk.Button(avoid_row, text="Hunt notes", command=self.open_notes).grid(row=0, column=4, sticky="e", padx=(12, 0))
+        ttk.Button(avoid_row, text="Mob map", command=self.open_mob_map).grid(row=0, column=5, sticky="e", padx=(6, 0))
         self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
@@ -478,6 +480,17 @@ class TargetTab:
             os.startfile(NOTES_FILE)
         except OSError as exc:
             self.append(f"Could not open the hunt notes: {exc}")
+
+    def open_mob_map(self):
+        """Every mob the game's files place (level, attack, where), with how far each hit you from, written fresh and opened."""
+        def make():
+            try:
+                subprocess.run([str(tt.EXE), "mobs"], cwd=tt.PROJECT, capture_output=True, timeout=120, creationflags=tt.NO_WINDOW, check=True)
+                os.startfile(MOB_MAP_FILE)
+            except (OSError, subprocess.SubprocessError) as exc:
+                self.queue.put(("log", f"Could not make the mob map: {exc}\n"))
+        self.append("Making the mob map...")
+        threading.Thread(target=make, daemon=True, name="mob-map").start()
 
     def keep_pin(self):
         try:
