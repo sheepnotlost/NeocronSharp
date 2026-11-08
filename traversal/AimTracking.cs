@@ -130,14 +130,43 @@ internal static class Pushers
 }
 
 /// <summary>
+/// Kiting a pack (Keep away): one snake pulled brings the rest (8 Nov). The mobs other than the target: how close the
+/// nearest is, which way to step so backing away doesn't walk into it (away from its side of your line to the target;
+/// right is (z, -x) of that line, as ClearSide has it), and whether it is so much nearer that it should be shot first.
+/// </summary>
+internal static class Crowd
+{
+    /// <summary>Another mob is shot first once it is this share of the target's distance, or nearer, and inside the margin.</summary>
+    public const float SwitchShare = .75f;
+
+    public static (float Nearest, int Side, int Closer) Of(Vector3 me, Vector3 target, IReadOnlyList<Vector3> others, float keepAway)
+    {
+        if (others.Count == 0) return (float.MaxValue, 0, -1);
+        int nearest = 0;
+        for (int i = 1; i < others.Count; i++)
+            if (PointNavigation.Distance(me, others[i]) < PointNavigation.Distance(me, others[nearest])) nearest = i;
+        float away = PointNavigation.Distance(me, others[nearest]), targetAway = PointNavigation.Distance(me, target);
+        var line = target - me;
+        float onRight = (others[nearest].X - me.X) * line.Z - (others[nearest].Z - me.Z) * line.X;
+        int side = away < keepAway * 2 ? (onRight > 0 ? -1 : 1) : 0;
+        int closer = away < targetAway * SwitchShare && away < keepAway * Kite.Margin ? nearest : -1;
+        return (away, side, closer);
+    }
+}
+
+/// <summary>
 /// Keeps a mob out in front. In third person a small one close up drops under the view (it stops 43 degrees down) and
 /// behind your own back, out of the crosshair's reach: so with the target this close, it walks backwards until there is
 /// room again. Once a wall stops the walk it stands there for the rest of the fight, back to the wall, and shoots: mobs
 /// can only come at you from the front, and stepping sideways along the wall only cost shots (7 Nov).
 /// </summary>
-internal sealed class Kite
+/// <param name="tooClose">Units: back away once it is this close (the hunt's Keep away box; 150 by default, too close to see).</param>
+internal sealed class Kite(float tooClose = Kite.TooClose)
 {
-    public const float TooClose = 150, Enough = 220, Stuck = 10;
+    public const float TooClose = 150, Stuck = 10;
+    /// <summary>Backing stops this much further out than it started, so it doesn't stutter at the line.</summary>
+    public const float Margin = 1.4f;
+    private readonly float _enough = tooClose * Margin;
     public const double StuckSeconds = .6;
     private bool _backing;
     private double _since = -1;
@@ -151,8 +180,8 @@ internal sealed class Kite
     public (bool Back, int Side) Step(double now, float away, Vector3 me)
     {
         if (Cornered) return (false, 0);
-        if (!_backing && away < TooClose) { _backing = true; _since = now; _from = me; }
-        else if (_backing && away > Enough) _backing = false;
+        if (!_backing && away < tooClose) { _backing = true; _since = now; _from = me; }
+        else if (_backing && away > _enough) _backing = false;
         if (!_backing) return (false, 0);
         if (now - _since >= StuckSeconds)
         {

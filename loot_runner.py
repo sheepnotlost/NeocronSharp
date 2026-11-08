@@ -93,6 +93,7 @@ class Engine:
         self.pin = False             # set the camera's angles in the game's memory instead of moving the mouse
         self.pushers = False         # a mob on you is fought first
         self.kite = False            # walk backwards from a mob too close to see
+        self.keep_away = 0           # units: back away while shooting from a mob this close (Keep away: kiting melee mobs)
         self.avoid = ()              # names, or parts of names, never to fight
         self.stay = False            # never take a step: a blocked shot ends the fight instead of stepping aside
 
@@ -168,6 +169,8 @@ class Engine:
         """Only shoots with a clear line to it, and first backs away from it when asked."""
         extra = (["--pin"] if self.pin else []) + (["--pushers"] if self.pushers else []) + (["--kite"] if self.kite else [])
         extra += ["--stay"] if getattr(self, "stay", False) else []
+        keep = getattr(self, "keep_away", 0)
+        extra += ["--kite", "--kite-at", str(keep)] if keep else []
         if self.pushers and self.avoid:
             extra += ["--avoid", ",".join(name.replace(",", " ") for name in self.avoid)]
         text = self.run([actor["id"], "--hold-left", "--give-up", str(GIVE_UP), "--sight", *(["--back-off", str(SAFE)] if back else []), *extra], tick)
@@ -204,6 +207,7 @@ class LootRunner(VisualRunner):
         self.only = []               # Only attack: names, or parts of names; empty for anything
         self.stay = 0                # Stay within: units from where the hunt starts; 0 for the whole zone
         self.centre = None           # Stay within's middle (x, z); None for where the hunt starts
+        self.keep_away = 0           # Keep away: units a mob is kept beyond while it is shot; 0 for off
         self.area = None             # (x, z, radius) once started with a Stay within
 
     def guard(self):
@@ -275,7 +279,8 @@ class LootRunner(VisualRunner):
         """True when it died. A mob that gets on you meanwhile is fought first, then this one again. No clear shot, or hurting nothing, means going closer and trying again, as far as CLOSE,
         instead of leaving for the next enemy. A weapon shorter than the target limit shows by hurting nothing: the range
         that worked then is kept for the rest of the hunt, and it stops backing away."""
-        reach, close, closer, unhurt, switches = self.reach, min(CLOSE, self.reach), False, False, 0
+        # Keep away: never walked in closer than where backing away would stop (the engine's margin is 1.4).
+        reach, close, closer, unhurt, switches = self.reach, max(min(CLOSE, self.reach), int(self.keep_away*1.4)), False, False, 0
         pushers = getattr(self.engine, "pushers", False)
         while True:
             here = next((a for a in self.engine.nearby() if a["id"] == actor["id"]), None)
@@ -287,13 +292,19 @@ class LootRunner(VisualRunner):
                 return False
             self.engine.pushers = pushers and depth == 0 and switches < MOST_SWITCHES
             try:
-                last = self.fight(here, self.back and not closer)
+                # Kiting a pack, a switched-to mob is already close: the kite keeps it off, not a back-off before the first shot.
+                last = self.fight(here, self.back and not closer and not (self.keep_away and switches))
             finally:
                 self.engine.pushers = pushers
             found = SWITCH.search(last)
             if found:
                 switches += 1
                 other = {"id": found.group(1), "name": found.group(2), "kind": "npc", "distance": 0., "dead": False}
+                if self.keep_away:
+                    # Kiting: the nearest of the pack is shot instead, and the one before it is picked again later.
+                    self.emit("log", f"{other['name']} is nearer: shooting it instead.")
+                    actor, reach, closer, unhurt = other, self.reach, False, False
+                    continue
                 self.emit("log", f"{other['name']} is on you: fighting it first.")
                 if self.attack(other, depth+1):
                     self.kills += 1
@@ -302,6 +313,7 @@ class LootRunner(VisualRunner):
             if " died." in last:
                 if unhurt:
                     self.reach, self.back = reach, False
+                self.killed = actor            # the body to loot: kiting may have switched to another
                 return True
             unhurt = unhurt or "No damage to" in last
             if not any(word in last for word in ("No damage to", "No line of sight")) or (closer and reach <= close):
@@ -448,6 +460,9 @@ class LootRunner(VisualRunner):
 
     def execute(self):
         skip, waiting = set(), None
+        self.engine.keep_away = self.keep_away
+        if self.keep_away:
+            self.emit("log", f"Keeping every mob further than {self.keep_away} units: backing away while shooting when one comes closer.")
         self.hide_pointer()
         self.check_health()
         if self.stay and self.centre:
@@ -476,12 +491,13 @@ class LootRunner(VisualRunner):
                     self.wait(3)
                     continue
                 waiting = None
+                self.killed = None
                 if not self.attack(target):
                     self.emit("log", f"Leaving {target['name']} alone: it can't be reached or hurt.")
                     skip.add(target["id"])
                     continue
                 self.kills += 1
-                self.loot(target)
+                self.loot(getattr(self, "killed", None) or target)
                 self.hide_pointer()
             except LowHealth as low:
                 self.retreat(str(low))

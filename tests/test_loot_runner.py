@@ -75,6 +75,15 @@ class WalkTests(unittest.TestCase):
         engine.fight(actor("Rat"), None, True)
         self.assertEqual(sent[1][sent[1].index("--back-off")+1], "2500")
 
+    def test_keep_away_kites_from_that_far(self):
+        engine = loot_runner.Engine(None, None)
+        sent = []
+        engine.live = lambda args, tick: sent.append(args) or "Rat died."
+        engine.keep_away = 800
+        engine.fight(actor("Rat"), None)
+        self.assertEqual(sent[0][sent[0].index("--kite-at")+1], "800")
+        self.assertIn("--kite", sent[0])
+
     def test_a_walk_to_a_body_says_so(self):
         engine = loot_runner.Engine(None, None)
         sent = []

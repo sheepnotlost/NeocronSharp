@@ -425,6 +425,9 @@ internal static class FollowCommand
         var avoid = (Option("--avoid") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(n => string.Join(' ', n.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))).Where(n => n.Length > 0).ToList();
         float backTo = float.Parse(Option("--back-off") ?? "0", CultureInfo.InvariantCulture);
+        // --kite-at N: keep a melee mob further than N units: back away while shooting once it comes that close (8 Nov: no hits from the snakes).
+        float kiteAt = float.Parse(Option("--kite-at") ?? Kite.TooClose.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+        kite |= kiteAt != Kite.TooClose;
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
             ? (float.Parse(yaw, CultureInfo.InvariantCulture), float.Parse(pitch, CultureInfo.InvariantCulture)) : null;
@@ -436,7 +439,7 @@ internal static class FollowCommand
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
         Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use,
-            Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite, Stay: stay), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
+            Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite, Stay: stay, KiteAt: kiteAt), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;
     }
 }

@@ -67,7 +67,7 @@ internal sealed class TargetWatch(WorldEntity target, Func<IReadOnlyList<WorldEn
 internal sealed record CameraPlan(bool HoldLeft = false, bool Now = false, (float Yaw, float Pitch)? Gains = null, double GiveUpSeconds = 0, bool Box = false,
     bool MeasureOnly = false, bool Sight = false, float BackTo = 0, ShotLine? Shots = null, bool Use = false,
     bool Pin = false, bool Pushers = false, IReadOnlyCollection<string>? Avoid = null, bool Kite = false,
-    bool Stay = false);   // never take a step: a blocked shot ends the fight instead of stepping aside (Stand and hunt)
+    bool Stay = false, float KiteAt = Kite.TooClose);   // KiteAt: --kite backs away from it once this close. Stay: never take a step: a blocked shot ends the fight instead of stepping aside (Stand and hunt)
 
 /// <summary>
 /// The live camera follow: mouse pulses only, turning left, right, up and down to keep facing the
@@ -301,7 +301,11 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
             bool pinned = pin != null;
             if (notes != null) notes.Pin = pinned;
             long pushAt = 0;
-            var kite = new Kite();
+            var kite = new Kite(plan.KiteAt);
+            // Keep away: the rest of the pack, read with the pushers (8 Nov: one snake pulled brings the others).
+            bool kiting = plan.Kite && plan.KiteAt > Kite.TooClose;
+            float crowdAway = float.MaxValue;
+            int crowdSide = 0;
             bool cornerSaid = false;
             var backOff = new BackOff(plan.BackTo);
             double aimedAt = -1, clearAt = -1, stepFrom = -1;
@@ -370,13 +374,32 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     input.LookSteps(x, y);
                     track.Sent(now, x * yawGain, y * pitchGain);
                 }
-                if (plan.Pushers && clock.ElapsedMilliseconds >= pushAt)
+                if ((plan.Pushers || kiting) && clock.ElapsedMilliseconds >= pushAt)
                 {
                     pushAt = clock.ElapsedMilliseconds + PushEveryMs;
                     IReadOnlyList<WorldEntity> around;
                     try { around = FollowCommand.ReadSnapshot(reader).Entities; }
                     catch (InvalidOperationException) { around = Array.Empty<WorldEntity>(); }   // caught mid-update: next time
-                    if (Pushers.OnYou(s.Position, around, target, away, plan.Avoid) is { } pusher)
+                    if (kiting)
+                    {
+                        string id = FollowCommand.Id(target);
+                        var pack = around.Where(e => SweepTargets.Hunted(e) && !FollowCommand.Dead(e) && FollowCommand.Id(e) != id
+                            && !(plan.Avoid is { Count: > 0 } && SweepTargets.Spared(e.Name, plan.Avoid))
+                            && PointNavigation.Distance(s.Position, e.Position) < plan.KiteAt * 3).ToList();
+                        var crowd = Crowd.Of(s.Position, watch.SeenAt, pack.Select(e => e.Position).ToList(), plan.KiteAt);
+                        (crowdAway, crowdSide) = (crowd.Nearest, crowd.Side);
+                        if (crowd.Closer >= 0)
+                        {
+                            var nearer = pack[crowd.Closer];
+                            input.HoldLeft(false);
+                            input.Back(false); input.Strafe(0);
+                            string other = $"Switching to {FollowCommand.Id(nearer)} {nearer.Name}: it is on you.";
+                            Record("switch", s, new { to = nearer.Name, id = FollowCommand.Id(nearer), away, nearest = crowd.Nearest });
+                            hud.Post(Hud.Amber, title, other);
+                            return Done(other);
+                        }
+                    }
+                    if (plan.Pushers && Pushers.OnYou(s.Position, around, target, away, plan.Avoid) is { } pusher)
                     {
                         input.HoldLeft(false);
                         string other = $"Switching to {FollowCommand.Id(pusher)} {pusher.Name}: it is on you.";
@@ -410,7 +433,9 @@ internal sealed class CameraWatch(PlayerReader reader, WorldEntity target, int p
                     if (was == BackOff.Phase.Backing && backOff.Now == BackOff.Phase.Returning)
                         Console.WriteLine($"Target limit {backOff.Limit:F0} units.");
                     if (input.LeftHeld && (!screen.Firing(now, away) || blocker != null)) input.HoldLeft(false);   // Off the body, or something in the way: the shots would only hit that.
-                    var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, away, s.Position) : (Back: false, Side: 0);
+                    // Kiting a pack backs away from whichever is nearest, stepping away from the others' side.
+                    var keep = plan.Kite && backOff.Now == BackOff.Phase.Done ? kite.Step(now, Math.Min(away, crowdAway), s.Position) : (Back: false, Side: 0);
+                    if (kiting && keep.Back) keep.Side = crowdSide;
                     if (keep.Back) input.Back(true);
                     if (kite.Cornered && !cornerSaid)
                     {

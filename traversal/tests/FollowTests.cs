@@ -236,6 +236,27 @@ internal static class FollowTests
             Check(kite.Step(6, 40, new Vector3(82, 0, 0)) == (false, 0), "and stays, however close the mob");
         });
 
+        test("Kite at 800 (Keep away): a snake is backed away from at 800 units, until it is 1,120 out", () =>
+        {
+            var kite = new Kite(800);
+            Check(kite.Step(0, 900, Vector3.Zero) == (false, 0), "900: stays and shoots");
+            Check(kite.Step(1, 780, Vector3.Zero) == (true, 0), "780: backs away");
+            Check(kite.Step(1.5, 1000, new Vector3(60, 0, 0)) == (true, 0), "1,000: still backing");
+            Check(kite.Step(2, 1130, new Vector3(120, 0, 0)) == (false, 0), "1,130: stops");
+        });
+
+        test("Crowd (kiting a pack): steps away from the nearest other snake's side, and shoots it first once it is much nearer", () =>
+        {
+            var me = Vector3.Zero; var target = new Vector3(0, 0, 1000);     // the line to the target: +z; its right: +x (ClearSide)
+            var crowd = Crowd.Of(me, target, new[] { new Vector3(-600, 0, 0), new Vector3(3000, 0, 0) }, 800);
+            Check(crowd.Nearest == 600 && crowd.Side == 1 && crowd.Closer == 0, $"one on the left at 600: step right, shoot it first ({crowd})");
+            crowd = Crowd.Of(me, target, new[] { new Vector3(700, 0, 0) }, 800);
+            Check(crowd.Side == -1 && crowd.Closer == 0, $"one on the right at 700: step left, and it is nearer than 750 of 1000 and inside 1,120 ({crowd})");
+            crowd = Crowd.Of(me, new Vector3(0, 0, 500), new[] { new Vector3(450, 0, 0) }, 800);
+            Check(crowd.Closer == -1, "not much nearer than the target: keep shooting the target");
+            Check(Crowd.Of(me, target, Array.Empty<Vector3>(), 800) == (float.MaxValue, 0, -1), "alone: nothing changes");
+        });
+
         test("Read lapse: a fight rides out failed reads of your character, and stops after 3 s of them", () =>
         {
             var lapse = new ReadLapse();
