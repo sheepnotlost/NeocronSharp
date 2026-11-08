@@ -428,6 +428,7 @@ internal static class FollowCommand
         // --kite-at N: keep a melee mob further than N units: back away while shooting once it comes that close (8 Nov: no hits from the snakes).
         float kiteAt = float.Parse(Option("--kite-at") ?? Kite.TooClose.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
         kite |= kiteAt != Kite.TooClose;
+        string? pack = Option("--pack");   // x,z,ring,area: kite the whole pack round that ring (PackFight)
         double giveUp = double.Parse(Option("--give-up") ?? "0", CultureInfo.InvariantCulture);
         (float, float)? gains = Option("--gains")?.Split(',') is [var yaw, var pitch]
             ? (float.Parse(yaw, CultureInfo.InvariantCulture), float.Parse(pitch, CultureInfo.InvariantCulture)) : null;
@@ -438,6 +439,24 @@ internal static class FollowCommand
         string logs = Path.Combine(root, "logs"); Directory.CreateDirectory(logs);
         using var hud = new Hud();
         Travel.FocusGame(reader.Window);
+        if (pack != null)
+        {
+            // --pack: the whole pack in one run, kited round a ring (PackFight). The mouse gains first, if not known yet.
+            if (gains == null)
+            {
+                var measure = new CameraWatch(reader, target, pulse, new CameraPlan(Now: true, MeasureOnly: true), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}-gain.jsonl"));
+                measure.Run();
+                gains = measure.Measured ?? throw new InvalidOperationException("The mouse gains could not be measured.");
+            }
+            var parts = pack.Split(',').Select(p => float.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+            if (parts.Length != 4) throw new InvalidOperationException("--pack wants x,z,ring,area.");
+            var only = (Option("--only") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(n => string.Join(' ', n.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))).Where(n => n.Length > 0).ToList();
+            var fight = new PackFight(reader, target, pulse, new PackPlan(new Vector2(parts[0], parts[1]), parts[2], kiteAt, parts[3], only, avoid,
+                gains.Value, pin, giveUp), hud, Path.Combine(logs, $"pack-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl"));
+            Console.WriteLine(fight.Run());
+            return 0;
+        }
         Console.WriteLine(new CameraWatch(reader, target, pulse, new CameraPlan(holdLeft, now, gains, giveUp, box, Sight: sight, BackTo: backTo, Shots: sight ? Shots(reader) : null, Use: use,
             Pin: pin, Pushers: pushers, Avoid: avoid, Kite: kite, Stay: stay, KiteAt: kiteAt), hud, Path.Combine(logs, $"camera-{DateTime.UtcNow:yyyyMMdd-HHmmss}.jsonl")).Run());
         return 0;

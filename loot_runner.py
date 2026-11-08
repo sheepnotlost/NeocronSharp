@@ -33,10 +33,11 @@ HEALTH_EVERY = 1.0           # seconds between readings during a fight
 GIVE_UP = 20                 # seconds of no damage before going closer
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
 START_TRIES = 3              # readings of your health before the hunt refuses to start without one
+PACK_SHOOT_SHARE = 1.8        # of Keep away: where the pack fight shoots from (PackFight.ShootShare)
 HIT_EVERY = 3.0              # seconds between notes of where the mob that hurt you was
 REACH_FILE = tt.PROJECT / "logs" / "mob-reach.json"
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.
-ONE_TARGET = ("Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
+ONE_TARGET = ("Pack cleared", "Reached ", "Right-clicked", " died.", "No damage to", "No walkable way", "Blocked ", " is gone", "crossed the zone line",
               "Nobody with id", " is dead", " is still alive", "The door did not open", "Kept leaving the route", "Could not face the route",
               "Could not reach the body", "Could not aim at the body", "No line of sight", "Switching to ")
 SWITCH = re.compile(r"^Switching to (\S+) (.+): it is on you\.$")
@@ -178,6 +179,16 @@ class Engine:
         if found:
             self.limit = int(found.group(1))
         return text
+
+    def pack(self, actor, tick, area, ring, only):
+        """Kite the whole pack round a ring and kill it, in one run (PackFight): (last line, [(id, name) killed])."""
+        args = [actor["id"], "--pack", ",".join(str(round(v)) for v in (area[0], area[1], ring, area[2])),
+                "--kite-at", str(self.keep_away), "--give-up", str(GIVE_UP)]
+        args += ["--only", ",".join(n.replace(",", " ") for n in only)] if only else []
+        args += ["--avoid", ",".join(n.replace(",", " ") for n in self.avoid)] if self.avoid else []
+        args += ["--pin"] if self.pin else []
+        text = self.run(args, tick)
+        return text, re.findall(r"^Killed (\S+) (.+)$", text, re.M)
 
     def box(self, actor, tick):
         return self.run([actor["id"], "--box"], tick)
@@ -462,7 +473,8 @@ class LootRunner(VisualRunner):
         skip, waiting = set(), None
         self.engine.keep_away = self.keep_away
         if self.keep_away:
-            self.emit("log", f"Keeping every mob further than {self.keep_away} units: backing away while shooting when one comes closer.")
+            self.emit("log", f"Keeping every mob further than {self.keep_away} units: " + ("kiting the pack round a ring inside your area, shooting only while standing."
+                      if self.stay else "backing away while shooting when one comes closer."))
         self.hide_pointer()
         self.check_health()
         if self.stay and self.centre:
@@ -491,6 +503,9 @@ class LootRunner(VisualRunner):
                     self.wait(3)
                     continue
                 waiting = None
+                if self.keep_away and self.area:
+                    self.hunt_pack(target, skip)
+                    continue
                 self.killed = None
                 if not self.attack(target):
                     self.emit("log", f"Leaving {target['name']} alone: it can't be reached or hurt.")
@@ -501,6 +516,26 @@ class LootRunner(VisualRunner):
                 self.hide_pointer()
             except LowHealth as low:
                 self.retreat(str(low))
+
+    def hunt_pack(self, target, skip):
+        """Keep away with an area: walk in to shooting range, kite the whole pack round a ring inside the area until it is
+        dead, then loot every body. Nothing killed means the pull failed: that one is left alone."""
+        shoot_from = int(self.keep_away*PACK_SHOOT_SHARE)
+        if target["distance"] > shoot_from*1.3 and not self.walk_to(target, int(shoot_from*1.2)):
+            skip.add(target["id"])
+            return
+        ring = max(self.keep_away*2, self.area[2]/2)
+        self.emit("log", f"Pulling {target['name']}: kiting the pack round a {ring:.0f}-unit ring, shooting from {shoot_from} units.")
+        text, killed = self.engine.pack(target, self.watch_health, self.area, ring, self.only)
+        self.emit("log", self.ended(text))
+        if not killed:
+            skip.add(target["id"])
+        for id_, name in killed:
+            self.kills += 1
+            self.emit("log", f"{name} killed ({self.kills} so far).")
+        for id_, name in killed:
+            self.loot({"id": id_, "name": name})
+            self.hide_pointer()
 
     def run(self):
         try:

@@ -202,11 +202,22 @@ internal sealed class SteerInput : IDisposable
         if (Walking) Key(Shift, !on);
     }
 
+    /// <summary>Shift held on its own, for strafing and backing at a run (<see cref="Run"/> off: Walk leaves Shift alone).</summary>
+    public void RunKey(bool on)
+    {
+        if (Run || on == _shiftHeld) return;
+        if (on) _reader.RequireForeground();
+        _shiftHeld = on;
+        Key(Shift, !on);
+    }
+    private bool _shiftHeld;
+
     public void Dispose()
     {
         try { HoldLeft(false); }
         finally
         {
+            RunKey(false);
             if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); }
             if (Backing) { Backing = false; Key(S, true); }
             Strafe(0);

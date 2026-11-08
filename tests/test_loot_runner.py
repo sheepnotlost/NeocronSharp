@@ -285,6 +285,37 @@ class SequenceTests(unittest.TestCase):
         runner.run()
         self.assertIn("Could not read your health", events[-1][1])
 
+    def test_keep_away_with_an_area_kites_the_pack_in_one_run_then_loots_every_body(self):
+        seen, events, clock = [], [], {"now": 0.}
+
+        class PackEngine(Engine):
+            def nearby(self):
+                return [dict(actor(n, distance=1500., dead=n in self.dead, faction=18), x=-9000., z=-4000.) for n in ("Sand Snake", "Poisonous Sand Snake")]
+
+            def pack(self, target, tick, area, ring, only):
+                self.seen.append(("pack", target["name"], tuple(round(v) for v in area), ring, tuple(only)))
+                self.dead.update({"Sand Snake", "Poisonous Sand Snake"})
+                return ("Killed Sand Snake Sand Snake\nKilled Poisonous Sand Snake Poisonous Sand Snake\nPack cleared: 2 killed.",
+                        [("Sand Snake", "Sand Snake"), ("Poisonous Sand Snake", "Poisonous Sand Snake")])
+
+        engine = PackEngine([], seen)
+        detect = Detect()
+        engine.detect = detect
+        profile = default_profile()
+        profile["client_size"] = [2000, 1125]
+        runner = Sequence(profile, Backend(), Control(), lambda kind, text: events.append((kind, text)), engine=engine, detector=detect,
+                          clock=lambda: clock["now"], sleep=lambda s: clock.__setitem__("now", clock["now"]+s))
+        runner.health_readings = [(900, 900)]
+        runner.click = lambda point: (seen.append(("close",)), setattr(detect, "shut", True))
+        runner.move, runner.save_failure = (lambda point: None), (lambda error: None)
+        runner.only, runner.stay, runner.centre, runner.keep_away = ["snake"], 2900, (-9270, -4490), 800
+        loot_runner.IDLE_LIMIT, limit = 0, loot_runner.IDLE_LIMIT
+        self.addCleanup(setattr, loot_runner, "IDLE_LIMIT", limit)
+        runner.run()
+        self.assertEqual(seen[0], ("pack", "Sand Snake", (-9270, -4490, 2900), 1600, ("snake",)))
+        self.assertEqual([s for s in seen if s[0] == "box"], [("box", "Sand Snake"), ("box", "Poisonous Sand Snake")])
+        self.assertIn("2 killed", events[-1][1])
+
     def test_kill_then_loot_then_the_next(self):
         seen, events = self.run_sequence([True, True], names=("Rat", "Spider"))
         self.assertEqual(seen, [("fight", "Rat"), ("box", "Rat"), ("close",), ("fight", "Spider"), ("box", "Spider"), ("close",)])

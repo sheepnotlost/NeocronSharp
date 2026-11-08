@@ -257,6 +257,41 @@ internal static class FollowTests
             Check(Crowd.Of(me, target, Array.Empty<Vector3>(), 800) == (float.MaxValue, 0, -1), "alone: nothing changes");
         });
 
+        test("Pack phases: shoot standing, move at 800, sprint inside 480, shoot again past 1,440", () =>
+        {
+            var p = new PackPhases(800);
+            Check(p.Update(2000) == PackPhase.Shoot, "far: shoot");
+            Check(p.Update(790) == PackPhase.Move, "790: move");
+            Check(p.Update(1200) == PackPhase.Move, "1,200: still moving (not past 1,440)");
+            Check(p.Update(470) == PackPhase.Escape, "470: sprint clear");
+            Check(p.Update(700) == PackPhase.Escape, "700: still sprinting");
+            Check(p.Update(820) == PackPhase.Move, "past 800: face them again, keep moving");
+            Check(p.Update(1450) == PackPhase.Shoot, "1,450: stop and shoot");
+            Check(new PackPhases(800).Update(300) == PackPhase.Escape, "one already at 300 when shooting: sprint at once");
+        });
+
+        test("Pack ring: round the ring away from the pack, back onto it, and away from a close one", () =>
+        {
+            var centre = Vector2.Zero;
+            var me = new Vector2(1000, 0);                       // on a 1,000 ring, east of the centre
+            int way = PackRing.Way(me, centre, new Vector2(1000, 800));
+            var heading = PackRing.Heading(me, centre, 1000, way, new Vector2(1000, 800), 400);   // pack far (800 > 400): no push
+            Check(MathF.Abs(heading.X) < .05f && heading.Y < -.99f, $"along the ring, away from the pack to the north (+z): {heading}");
+            heading = PackRing.Heading(new Vector2(500, 0), centre, 1000, way, new Vector2(0, 5000), 400);
+            Check(heading.X > .3f, $"inside the ring: out towards it as well ({heading})");
+            heading = PackRing.Heading(me, centre, 1000, way, new Vector2(1000, -100), 400);
+            Check(heading.Y > 0, $"one 100 ahead on the ring: away from it wins ({heading})");
+        });
+
+        test("Pack keys: a heading behind is S, to the right is D, ahead-right is W and D", () =>
+        {
+            var facing = new Vector2(0, 1);                      // looking +z; its right is (1, 0)
+            Check(PackRing.Keys(facing, new Vector2(0, -1)) == (false, true, 0), "behind: back");
+            Check(PackRing.Keys(facing, new Vector2(1, 0)) == (false, false, 1), "right: strafe right");
+            Check(PackRing.Keys(facing, Vector2.Normalize(new Vector2(1, 1))) == (true, false, 1), "ahead-right: both");
+            Check(PackRing.Keys(facing, Vector2.Normalize(new Vector2(-1, -1))) == (false, true, -1), "behind-left: back and left");
+        });
+
         test("Read lapse: a fight rides out failed reads of your character, and stops after 3 s of them", () =>
         {
             var lapse = new ReadLapse();
