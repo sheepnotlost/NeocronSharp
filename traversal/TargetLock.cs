@@ -27,14 +27,44 @@ internal static class TargetLock
     public const float SmallWidth = .05f, SmallHeight = .025f;
 
     /// <summary>The marks on screen now, and the client area's height; null when the screen could not be read.</summary>
-    public static (List<TargetMark> Marks, int ClientHeight)? Look(nint window)
+    public static (List<TargetMark> Marks, int ClientHeight, float? Spread)? Look(nint window)
     {
         var grab = TargetBar.Grab(window, (w, h) =>
         {
             int half = (int)(h * Reach);
             return (w / 2 - half, h / 2 - half, 2 * half, 2 * half);
         });
-        return grab is { } g ? (Find(g.Pixels, g.Width, g.ClientHeight), g.ClientHeight) : null;
+        return grab is { } g ? (Find(g.Pixels, g.Width, g.ClientHeight), g.ClientHeight, Spread(g.Pixels, g.Width, g.ClientHeight)) : null;
+    }
+
+    /// <summary>Rays looked along from the crosshair for the aim circle, and how many must meet it.</summary>
+    public const int SpreadRays = 32, SpreadHits = 8;
+
+    /// <summary>
+    /// The green aim circle round the crosshair, its radius as a share of the client height: along each ray from the
+    /// crosshair, the farthest bright green pixel, and the middle of those. Null when too few rays meet any green. (8 Nov
+    /// video at 1080: 14 pixels settled, 64 while firing standing.)
+    /// </summary>
+    public static float? Spread(byte[] bgra, int size, int clientHeight)
+    {
+        int half = size / 2;
+        var radii = new List<int>(SpreadRays);
+        for (int k = 0; k < SpreadRays; k++)
+        {
+            double a = 2 * Math.PI * k / SpreadRays;
+            int far = -1;
+            for (int r = 4; r < half; r++)
+            {
+                int x = half + (int)(r * Math.Cos(a)), y = half + (int)(r * Math.Sin(a));
+                if (x < 0 || y < 0 || x >= size || y >= size) break;
+                int i = (y * size + x) * 4, b = bgra[i], g = bgra[i + 1], red = bgra[i + 2];
+                if (g > 120 && g - red > 50 && g - b > 30) far = r;
+            }
+            if (far >= 0) radii.Add(far);
+        }
+        if (radii.Count < SpreadHits || clientHeight <= 0) return null;
+        radii.Sort();
+        return radii[radii.Count / 2] / (float)clientHeight;
     }
 
     /// <summary>The marks in a square picture centred on the crosshair, top-down BGRA, from a client area this many pixels high.</summary>

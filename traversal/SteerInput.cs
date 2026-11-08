@@ -195,15 +195,17 @@ internal sealed class SteerInput : IDisposable
     }
 
     /// <summary>
-    /// One tap of Ctrl (keys.ini: CONTROL = Crouch), which crouches or stands up: crouched, the aim is steadier (the user, 8 Nov).
+    /// Hold or let go of Ctrl (keys.ini: CONTROL = Crouch): crouched while it is held, and the aim circle narrows faster
+    /// (the user, 8 Nov; a tap did nothing). Let go in <see cref="Dispose"/> however a run ends.
     /// </summary>
-    public void CrouchTap()
+    public void Crouch(bool on)
     {
-        _reader.RequireForeground();
-        Key(Ctrl, false);
-        Thread.Sleep(50);
-        Key(Ctrl, true);
+        if (on == Crouched) return;
+        if (on) _reader.RequireForeground();
+        Crouched = on;
+        Key(Ctrl, !on);
     }
+    public bool Crouched { get; private set; }
 
     /// <summary>Run (Shift held) or walk while moving; only matters when <see cref="Run"/> is on.</summary>
     public void Sprint(bool on)
@@ -229,6 +231,7 @@ internal sealed class SteerInput : IDisposable
         finally
         {
             RunKey(false);
+            Crouch(false);
             if (Walking) { Walking = false; Key(W, true); if (Run) Key(Shift, true); }
             if (Backing) { Backing = false; Key(S, true); }
             Strafe(0);

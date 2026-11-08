@@ -257,13 +257,44 @@ internal static class FollowTests
             Check(Crowd.Of(me, target, Array.Empty<Vector3>(), 800) == (float.MaxValue, 0, -1), "alone: nothing changes");
         });
 
-        test("Pack phases: shoot, sprint inside 800 until past 1,200, round the ring while the target is hidden", () =>
+        test("Aim circle: read off the screen, 14 px settled is narrow, 64 px firing is not", () =>
+        {
+            const int size = 648, high = 1080;
+            byte[] Ring(int radius)
+            {
+                var picture = new byte[size * size * 4];
+                for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size; x++)
+                    {
+                        int i = (y * size + x) * 4;
+                        picture[i] = 120; picture[i + 1] = 140; picture[i + 2] = 160;   // sand
+                        double d = Math.Sqrt((x - size / 2) * (x - size / 2) + (y - size / 2) * (y - size / 2));
+                        if (Math.Abs(d - radius) < 2 || d < 5) { picture[i] = 120; picture[i + 1] = 220; picture[i + 2] = 90; }
+                    }
+                return picture;
+            }
+            float? narrow = TargetLock.Spread(Ring(14), size, high), wide = TargetLock.Spread(Ring(64), size, high);
+            Check(narrow is { } n && MathF.Abs(n * high - 15) < 3, $"settled: about 14 px ({narrow * high})");
+            Check(wide is { } w && MathF.Abs(w * high - 65) < 3, $"firing: about 64 px ({wide * high})");
+            Check(TargetLock.Spread(new byte[size * size * 4], size, high) == null, "no green: no reading");
+
+            var circle = new AimCircle();
+            circle.See(0, 14f / high);
+            Check(circle.Narrow(.1, false), "14 px: narrow");
+            circle.See(.2, 64f / high);
+            Check(!circle.Narrow(.3, true), "64 px: wait");
+            circle.See(.4, 17f / high);
+            Check(circle.Narrow(.5, false), "back to 17 px: narrow again");
+            Check(!circle.Narrow(2, false) && circle.Narrow(2, true), "no fresh reading: the settle time decides");
+        });
+
+        test("Pack phases: shoot, sprint inside 800 until past 1,000, round the ring while the target is hidden", () =>
         {
             var p = new PackPhases(800);
             Check(p.Update(2000) == PackPhase.Shoot, "far: shoot");
             Check(p.Update(790) == PackPhase.Escape, "790: sprint clear");
-            Check(p.Update(1100) == PackPhase.Escape, "1,100: still sprinting (not past 1,200)");
-            Check(p.Update(1210) == PackPhase.Shoot, "past 1,200: turn and shoot");
+            Check(p.Update(990) == PackPhase.Escape, "990: still sprinting (not past 1,000)");
+            Check(p.Update(1010) == PackPhase.Shoot, "past 1,000: turn and shoot");
             Check(p.Update(1100, hidden: true, inSight: false) == PackPhase.Vantage, "out of sight: round the ring");
             Check(p.Update(1000, inSight: false) == PackPhase.Vantage, "still hidden: keep going");
             Check(p.Update(950, inSight: true) == PackPhase.Shoot, "in sight again: stop and shoot");

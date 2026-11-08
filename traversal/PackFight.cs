@@ -11,13 +11,15 @@ namespace NavmeshPrototype;
 /// Kiting a pack of melee mobs round a fixed circle, all of it in one run (8 Nov, snakes in K 11: one pulled brings the
 /// rest). Never be hit, and never fire without the crosshair on a body, so it either shoots or runs:
 /// <list type="bullet">
-/// <item>Shoot: stand still and crouched (Ctrl), the camera on the nearest, the button down only while this very look has
-/// the crosshair inside its brackets.</item>
+/// <item>Shoot: stand still with Ctrl held (crouched), the camera on the nearest, the button down only while this very look
+/// has the crosshair inside its brackets and the green aim circle drawn in narrow: standing still and crouched it narrows
+/// fast, and firing widens it, so the shots come in bursts that land (the user, 8 Nov).</item>
 /// <item>Escape: once the nearest is within <see cref="PackPlan.RunAt"/>, stand up, turn and sprint away from the pack
 /// round the ring until it is out past <see cref="PackPlan.ShootFrom"/>, then turn back and shoot. (Strafing and backing
 /// with the camera on them lost ground: they closed from 800 to 475 every time and it never got to shoot, 8 Nov.)</item>
-/// <item>Vantage: shooting, but the target has been out of sight (a cactus, a hill) for <see cref="PackFight.HiddenSeconds"/>:
-/// run on round the ring, the camera on it, until its brackets show again.</item>
+/// <item>Vantage: shooting, but with the camera on the target for <see cref="PackFight.HiddenSeconds"/> no brackets have
+/// shown (a cactus, a hill): run on round the ring, the camera on it, until they do. Only time spent looking at it counts:
+/// counted from the turn back after a sprint, it went off every 2 s and fired for 1.5 s in 45 (8 Nov).</item>
 /// </list>
 /// Ends when no wanted mob is left near; every kill is printed as "Killed &lt;id&gt; &lt;name&gt;" for the loot that follows.
 /// </summary>
@@ -98,15 +100,13 @@ internal static class PackRing
 internal sealed class PackFight(PlayerReader reader, WorldEntity first, int pulse, PackPlan plan, Hud hud, string logPath)
 {
     /// <summary>Of RunAt: the sprint goes on until the nearest is this far, then it turns and shoots.</summary>
-    public const float ShootShare = 1.5f;
+    public const float ShootShare = 1.25f;   // 1.5 sprinted for 3 to 5 s each time: more standing and shooting (8 Nov)
     /// <summary>Seconds: shooting with no brackets on the target this long, it is hidden; brackets this recent, it is in sight.</summary>
     public const double HiddenSeconds = 1.5, InSightSeconds = .2;
-    /// <summary>
-    /// Crouch is a tap that toggles. Measured over this window after standing up to run, a speed under
-    /// <see cref="CrouchedSpeed"/> units a second (a sprint is about 280) means you are still crouched, so it taps once more.
-    /// </summary>
-    public const double StandCheckFrom = .4, StandCheckTo = 1.2;
-    public const float CrouchedSpeed = 150, StuckSpeed = 15;
+    /// <summary>Radians: the camera this near the target's memory point is looking at it.</summary>
+    public const float LookingRadians = .12f;
+    /// <summary>Seconds crouched before the first shot, when the aim circle can't be read.</summary>
+    public const double SettleSeconds = .6;
     /// <summary>Seconds: the crosshair counts as on the body only if a look this recent had it inside the brackets.</summary>
     public const double OnBodySeconds = .15;
     /// <summary>Of RunAt: a mob nearer than the target by this share is shot first instead.</summary>
@@ -168,9 +168,8 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         Vector3 targetAt = first.Position;
         int way = 0;
         PackPhase was = PackPhase.Shoot;
-        double phaseSince = 0, aimedAt = 0, standAt = -1;
-        bool crouched = false;
-        Vector3? standFrom = null;
+        double phaseSince = 0, aimedAt = 0, lookingSince = -1, crouchedAt = -1;
+        var circle = new AimCircle();
 
         void Aim(WorldEntity e)
         {
@@ -233,7 +232,8 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 }
                 float nearestAway = pack.Count > 0 ? pack.Min(e => PointNavigation.Distance(s.Position, e.Position)) : float.MaxValue;
                 var nearestAt = pack.Count > 0 ? pack.MinBy(e => PointNavigation.Distance(s.Position, e.Position))!.Position : targetAt;
-                bool hidden = was == PackPhase.Shoot && now - Math.Max(screen.SeenAt, Math.Max(phaseSince, aimedAt)) > HiddenSeconds;
+                bool hidden = was == PackPhase.Shoot && lookingSince >= 0
+                    && now - Math.Max(screen.SeenAt, Math.Max(lookingSince, Math.Max(phaseSince, aimedAt))) > HiddenSeconds;
                 bool inSight = now - screen.SeenAt <= InSightSeconds;
                 var phase = phases.Update(Math.Min(nearestAway, PointNavigation.Distance(s.Position, targetAt)), hidden, inSight);
                 if (phase != was)
@@ -246,29 +246,15 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                         PackPhase.Vantage => $"{target.Name} is out of sight: round the ring for a clear view.",
                         _ => $"One is {nearestAway:F0} units away: sprinting clear.",
                     });
-                    // Crouched only to shoot: stand up (a tap) before running.
-                    if ((phase == PackPhase.Shoot) != crouched)
+                    // Ctrl held only to shoot: let go before running.
+                    if ((phase == PackPhase.Shoot) != input.Crouched)
                     {
                         input.HoldLeft(false);
-                        input.CrouchTap();
-                        crouched = phase == PackPhase.Shoot;
-                        standAt = crouched ? -1 : now; standFrom = null;
-                        Record("crouch", s, new { crouched });
+                        input.Crouch(phase == PackPhase.Shoot);
+                        crouchedAt = input.Crouched ? now : -1;
+                        Record("crouch", s, new { crouched = input.Crouched });
                     }
                     was = phase; phaseSince = now;
-                }
-                // Still crouched after all? Running crouched is too slow to keep them off.
-                if (standAt >= 0 && now - standAt >= StandCheckFrom && standFrom == null) standFrom = s.Position;
-                else if (standAt >= 0 && now - standAt >= StandCheckTo && standFrom is { } from)
-                {
-                    float speed = Vector2.Distance(Flat(from), Flat(s.Position)) / (float)(StandCheckTo - StandCheckFrom);
-                    if (speed > StuckSpeed && speed < CrouchedSpeed)
-                    {
-                        input.CrouchTap();
-                        Record("crouch-fix", s, new { speed });
-                        Console.WriteLine($"Running at only {speed:F0} units a second: still crouched, standing up.");
-                    }
-                    standAt = -1; standFrom = null;
                 }
 
                 var view = View(s);
@@ -280,7 +266,10 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 {
                     markAt = clock.ElapsedMilliseconds + MarkEveryMs;
                     if (TargetLock.Look(reader.Window) is { } look)
+                    {
                         screen.See(now, look.Marks, yawToMemory, pitchToMemory, look.ClientHeight, MathF.Sign(yawGain), away);
+                        circle.See(now, look.Spread);
+                    }
                 }
 
                 // Where the camera should look: the target (Shoot and Move), or the way out (Escape).
@@ -315,12 +304,18 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                     input.Walk(keys.Forward); input.Back(keys.Back); input.Strafe(keys.Side);
                 }
 
-                // The trigger: only standing, and only with this look's crosshair inside the brackets.
-                bool onBody = phase == PackPhase.Shoot && now - screen.InsideAt <= OnBodySeconds;
+                // Looking at it (for the hidden check): the camera near where it is, the learned correction included.
+                bool looking = MathF.Abs(yawToMemory + screen.Offset.Yaw) < LookingRadians && MathF.Abs(pitchToMemory + screen.Offset.Pitch) < LookingRadians;
+                lookingSince = looking ? (lookingSince < 0 ? now : lookingSince) : -1;
+
+                // The trigger: only still and crouched, only with this look's crosshair inside the brackets, and only with
+                // the aim circle narrow (unread, after a moment crouched).
+                bool steady = crouchedAt >= 0 && circle.Narrow(now, now - crouchedAt >= SettleSeconds);
+                bool onBody = phase == PackPhase.Shoot && input.Crouched && steady && now - screen.InsideAt <= OnBodySeconds;
                 if (onBody != input.LeftHeld)
                 {
                     input.HoldLeft(onBody);
-                    Record("fire", s, new { on = onBody, away, target = target.Name });
+                    Record("fire", s, new { on = onBody, away, target = target.Name, spread = circle.Spread });
                     if (onBody && firedSince < 0) firedSince = now;
                 }
                 if (firedSince >= 0 && plan.GiveUpSeconds > 0 && now - Math.Max(hurtAt, firedSince) > plan.GiveUpSeconds)
@@ -341,9 +336,38 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         }
         finally
         {
-            if (crouched) try { input.CrouchTap(); } catch (InvalidOperationException) { }   // stand up for the loot run
+            input.Crouch(false);   // stand up for the loot run
         }
     }
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
+}
+
+/// <summary>
+/// The green aim circle round the crosshair (<see cref="TargetLock.Spread"/>): narrow is near the least it has been, and
+/// never wider than <see cref="NarrowShare"/> of the client height. From the 8 Nov video at 1080: 14 pixels settled, 64 while
+/// firing standing.
+/// </summary>
+internal sealed class AimCircle
+{
+    public const float NarrowShare = .022f, LeastShare = .008f, WiderThanLeast = 1.4f;
+    /// <summary>Seconds: a reading older than this is no reading.</summary>
+    public const double FreshSeconds = .2;
+    private float _least = float.MaxValue;
+    private double _at = double.NegativeInfinity;
+    public float? Spread { get; private set; }
+
+    public void See(double now, float? spread)
+    {
+        if (spread is not { } r) return;
+        Spread = r; _at = now;
+        _least = Math.Min(_least, Math.Max(r, LeastShare));
+    }
+
+    /// <summary>Narrow enough to shoot; with no fresh reading, <paramref name="otherwise"/>.</summary>
+    public bool Narrow(double now, bool otherwise)
+    {
+        if (Spread is not { } r || now - _at > FreshSeconds) return otherwise;
+        return r <= Math.Min(NarrowShare, _least * WiderThanLeast) || r <= LeastShare * WiderThanLeast;
+    }
 }
