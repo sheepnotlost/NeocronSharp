@@ -264,7 +264,16 @@ class ConstructionRunner(VisualRunner):
                     break
                 if identity=="unknown":self.note_hover(candidate,identity,hover)   # another item is normal: no line, no picture
                 if identity==self.recipe:
-                    match=candidate;break
+                    # The previous stack's tooltip can still be on screen: step off, come back and read again.
+                    self.step_aside();self.wait(.02);self.move(candidate["point"])
+                    again,start=None,self.clock()
+                    while again in (None,"unknown") and self.clock()-start<1.:
+                        self.wait(.10)
+                        again=self.detector.tooltip_recipe(self.inventory_frame(inventory,candidate["point"]),candidate["point"],inventory.scale)
+                    if again==self.recipe:
+                        match=candidate;break
+                    identity=again
+                    if identity=="unknown":unreadable+=1
                 elif identity=="unknown":
                     unreadable+=1
                 empty=current_snapshot is not None and float((current_snapshot[candidate["cell"]]**2).sum())<.5
