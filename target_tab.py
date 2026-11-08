@@ -175,7 +175,7 @@ class TargetTab:
         ttk.Label(only_row, text="Keep away:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.keep = tk.StringVar(value=self.kept(KEEP_FILE) or KEEP_AWAY)
         ttk.Entry(only_row, textvariable=self.keep, width=6).grid(row=1, column=1, sticky="w", padx=6, pady=(6, 0))
-        ttk.Label(only_row, text="units: backs away while shooting from a mob closer than this (0: off)").grid(row=1, column=2, columnspan=6, sticky="w", pady=(6, 0))
+        ttk.Label(only_row, text="units: sprints clear of a mob this close (0: off)").grid(row=1, column=2, columnspan=6, sticky="w", pady=(6, 0))
         self.enemies = ttk.Treeview(hunting, columns=("hunt", "name", "alive", "nearest"), show="headings", selectmode="none", height=8)
         for column, text, width, anchor in (("hunt", "Spare", 54, "center"), ("name", "Enemy", 190, "w"), ("alive", "Alive", 50, "e"),
                                             ("nearest", "Nearest", 70, "e")):

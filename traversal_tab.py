@@ -34,9 +34,30 @@ GREY = "#8a9590"
 OTHER_LIVE = "Target Acquisition or the TL 60 Job Loop is running on another tab. Stop it first."
 
 
+ENGINE_SOURCES = (PROJECT, ROOT / "NeocronSharp" / "src")   # the engine's code, and the reader code it builds in
+
+
+def engine_stale():
+    """True when traversal.exe is missing or older than any of the engine's code. Only a missing one was built once, so
+    fixes never reached the game: a whole day of hunt runs used the morning's engine (8 Nov)."""
+    try:
+        built = EXE.stat().st_mtime
+    except OSError:
+        return True
+    for folder in ENGINE_SOURCES:
+        for path in folder.rglob("*"):
+            if path.suffix in (".cs", ".csproj") and not {"bin", "obj", "tests"} & set(path.relative_to(folder).parts):
+                try:
+                    if path.stat().st_mtime > built:
+                        return True
+                except OSError:
+                    pass
+    return False
+
+
 def build_tool(progress=None):
-    """Build traversal.exe with the .NET SDK if it is missing; returns an error text or None."""
-    if EXE.exists():
+    """Build traversal.exe with the .NET SDK if it is missing or older than its code; returns an error text or None."""
+    if not engine_stale():
         return None
     if not PROJECT.is_dir():
         return f"The Traversal engine is missing: {PROJECT} not found."
@@ -46,11 +67,15 @@ def build_tool(progress=None):
         done = subprocess.run(["dotnet", "build", "-c", "Release", "-nologo", "-v", "q"], cwd=PROJECT,
                               capture_output=True, text=True, timeout=600, creationflags=NO_WINDOW)
     except FileNotFoundError:
+        if EXE.exists():
+            return None   # no .NET SDK (the VM copy): its traversal.exe was built with the code beside it
         return ("traversal.exe is missing, and this PC has no .NET 9 SDK to build it. On your main PC, double-click "
                 "Make VM Copy.cmd and use the NeocronSharp VM folder it makes.")
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"Could not build the Traversal engine: {exc}"
-    return None if EXE.exists() else "Building the Traversal engine failed: " + (done.stdout + done.stderr)[-400:].strip()
+    if done.returncode == 0 and EXE.exists():
+        return None
+    return "Building the Traversal engine failed: " + (done.stdout + done.stderr)[-400:].strip()
 
 
 def run_tool(args, timeout=300, track=None):

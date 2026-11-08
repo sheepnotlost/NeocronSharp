@@ -12,6 +12,18 @@ import target_tab
 from test_traversal_tab import NEARBY
 
 
+def blank_hunt_limits(test):
+    """Only attack, Stay within, its centre and Keep away all off, in files of the test's own: the saved boxes of a real
+    hunt (snake, 2900, ...) are not what these tests are about, and must not be written over."""
+    folder = Path(tempfile.mkdtemp())
+    for name, text in (("ONLY_FILE", ""), ("STAY_FILE", "0"), ("CENTRE_FILE", ""), ("KEEP_FILE", "0")):
+        path = folder / f"{name}.txt"
+        path.write_text(text, encoding="utf-8")
+        kept = patch.object(target_tab, name, path)
+        kept.start()
+        test.addCleanup(kept.stop)
+
+
 class TargetTabTests(unittest.TestCase):
     def setUp(self):
         self.root = tk.Tk()
@@ -25,6 +37,7 @@ class TargetTabTests(unittest.TestCase):
         pin = patch.object(target_tab, "PIN_FILE", Path(tempfile.mkdtemp()) / "pin.txt")
         pin.start()
         self.addCleanup(pin.stop)
+        blank_hunt_limits(self)
         with patch.object(target_tab, "FIGHTER_FILE", Path(tempfile.gettempdir()) / "no-such-fighter.txt"):
             self.tab = target_tab.TargetTab(self.frame, self.root, autoload=False, other_live=lambda: self.walking)
         self.tab.show_nearby(("ok", NEARBY))
@@ -195,7 +208,7 @@ class TargetTabTests(unittest.TestCase):
         with patch.object(self.tab.root, "after", return_value="id") as after:
             self.tab.start_hunt()
         self.assertTrue(self.tab.steering())
-        self.assertEqual(after.call_args.args[2:], (["Copbot"], 300))
+        self.assertEqual(after.call_args.args[2:], (["Copbot"], 300, [], 0, None, 0))
         self.tab.loot_event("done", "0 killed.")
 
     def test_regants_legacy_needs_no_ticks_and_starts_after_the_countdown(self):
@@ -328,6 +341,37 @@ class NoDotNetTests(unittest.TestCase):
                 patch.object(target_tab.tt.subprocess, "run", side_effect=FileNotFoundError):
             self.assertIn("Make VM Copy.cmd", target_tab.tt.build_tool())
 
+    def test_rebuilds_when_the_code_is_newer_than_the_engine(self):
+        import os
+        tt = target_tab.tt
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder) / "traversal"
+            exe = project / "bin" / "Release" / "net9.0" / "traversal.exe"
+            exe.parent.mkdir(parents=True)
+            exe.write_text("old")
+            code = project / "PackFight.cs"
+            code.write_text("// code")
+            os.utime(exe, (1000, 1000))
+            os.utime(code, (2000, 2000))
+            ran = []
+
+            class Done:
+                returncode, stdout, stderr = 0, "", ""
+
+            with patch.object(tt, "EXE", exe), patch.object(tt, "PROJECT", project), \
+                    patch.object(tt, "ENGINE_SOURCES", (project,)), \
+                    patch.object(tt.subprocess, "run", lambda *a, **k: ran.append(a) or Done()):
+                self.assertIsNone(tt.build_tool())
+                self.assertEqual(len(ran), 1, "code newer than traversal.exe: built")
+                os.utime(exe, (3000, 3000))
+                self.assertIsNone(tt.build_tool())
+                self.assertEqual(len(ran), 1, "traversal.exe newer than its code: not built again")
+                os.utime(exe, (1000, 1000))
+            with patch.object(tt, "EXE", exe), patch.object(tt, "PROJECT", project), \
+                    patch.object(tt, "ENGINE_SOURCES", (project,)), \
+                    patch.object(tt.subprocess, "run", side_effect=FileNotFoundError):
+                self.assertIsNone(tt.build_tool(), "no SDK but an engine there (the VM copy): use it")
+
     def test_the_vm_copy_leaves_out_what_only_a_developer_needs(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("make_vm_copy", target_tab.tt.ROOT / "tools" / "make_vm_copy.py")
@@ -391,6 +435,7 @@ class SpareTests(unittest.TestCase):
         pin = patch.object(target_tab, "PIN_FILE", Path(tempfile.mkdtemp()) / "pin.txt")
         pin.start()
         self.addCleanup(pin.stop)
+        blank_hunt_limits(self)
 
     def test_nothing_ticked_starts_the_hunt_and_regants_legacy_starts_the_sweep(self):
         root = tk.Tk(); root.withdraw()
