@@ -21,7 +21,7 @@ internal static class StopRequest
 /// </summary>
 internal sealed class SteerInput : IDisposable
 {
-    private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, 1 = Slot 1
+    private const ushort W = 0x11, S = 0x1f, A = 0x1e, D = 0x20, Shift = 0x2a, Space = 0x39, Ctrl = 0x1d, FirstSlot = 0x02;   // keys.ini: W = Forward, S = Back, A and D = Strafe, SHIFT = Run, SPACE = Jump, CONTROL = Crouch, 1 = Slot 1
     private const int BurstStep = 6;   // the size the gains are measured at
     private const int GlideMsPerStep = 4, GlideMostMs = 350;   // a turn sweeps round, easing in and out, not a snap: the user's word (3 Nov)
     private readonly PlayerReader _reader;
@@ -192,6 +192,17 @@ internal sealed class SteerInput : IDisposable
         Key(Space, false);
         Thread.Sleep(60);
         Key(Space, true);
+    }
+
+    /// <summary>
+    /// One tap of Ctrl (keys.ini: CONTROL = Crouch), which crouches or stands up: crouched, the aim is steadier (the user, 8 Nov).
+    /// </summary>
+    public void CrouchTap()
+    {
+        _reader.RequireForeground();
+        Key(Ctrl, false);
+        Thread.Sleep(50);
+        Key(Ctrl, true);
     }
 
     /// <summary>Run (Shift held) or walk while moving; only matters when <see cref="Run"/> is on.</summary>

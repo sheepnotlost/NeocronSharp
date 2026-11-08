@@ -9,41 +9,42 @@ namespace NavmeshPrototype;
 
 /// <summary>
 /// Kiting a pack of melee mobs round a fixed circle, all of it in one run (8 Nov, snakes in K 11: one pulled brings the
-/// rest; fights started one target at a time switched back and forth between two and stood still between them, and the
-/// user was nearly killed). Never be hit, and never fire without the crosshair on a body, so it either shoots or moves:
+/// rest). Never be hit, and never fire without the crosshair on a body, so it either shoots or runs:
 /// <list type="bullet">
-/// <item>Shoot: stand still, the camera on the nearest, the button down only while this very look has the crosshair inside
-/// its brackets.</item>
-/// <item>Move: once the nearest is within <see cref="PackPlan.RunAt"/>, the button up; the camera stays on it (in view all
-/// along) while you strafe and back, at a run, along the ring round the plan's centre, away from the pack, until the
-/// nearest is out past <see cref="PackPlan.ShootFrom"/>.</item>
-/// <item>Escape: if one still gets within <see cref="EscapeShare"/> of RunAt, turn the way the ring goes and sprint, then
-/// turn back to it once it is past RunAt again.</item>
+/// <item>Shoot: stand still and crouched (Ctrl), the camera on the nearest, the button down only while this very look has
+/// the crosshair inside its brackets.</item>
+/// <item>Escape: once the nearest is within <see cref="PackPlan.RunAt"/>, stand up, turn and sprint away from the pack
+/// round the ring until it is out past <see cref="PackPlan.ShootFrom"/>, then turn back and shoot. (Strafing and backing
+/// with the camera on them lost ground: they closed from 800 to 475 every time and it never got to shoot, 8 Nov.)</item>
+/// <item>Vantage: shooting, but the target has been out of sight (a cactus, a hill) for <see cref="PackFight.HiddenSeconds"/>:
+/// run on round the ring, the camera on it, until its brackets show again.</item>
 /// </list>
 /// Ends when no wanted mob is left near; every kill is printed as "Killed &lt;id&gt; &lt;name&gt;" for the loot that follows.
 /// </summary>
 internal sealed record PackPlan(Vector2 Centre, float Ring, float RunAt, float Area, IReadOnlyCollection<string> Only,
     IReadOnlyCollection<string> Avoid, (float Yaw, float Pitch) Gains, bool Pin, double GiveUpSeconds)
 {
-    /// <summary>Units: shooting starts again this far out, so a stop has time to kill before the next move.</summary>
+    /// <summary>Units: past this the sprint stops and shooting starts again.</summary>
     public float ShootFrom => RunAt * PackFight.ShootShare;
 }
 
-internal enum PackPhase { Shoot, Move, Escape }
+internal enum PackPhase { Shoot, Vantage, Escape }
 
-/// <summary>The phase from the nearest mob's distance: pure, so it can be tested.</summary>
+/// <summary>The phase from the nearest mob's distance and whether the target is in sight: pure, so it can be tested.</summary>
 internal sealed class PackPhases(float runAt)
 {
     public PackPhase Now { get; private set; } = PackPhase.Shoot;
 
-    public PackPhase Update(float nearest)
+    /// <param name="hidden">Shooting, and no brackets on the target for <see cref="PackFight.HiddenSeconds"/>.</param>
+    /// <param name="inSight">Its brackets were on screen just now.</param>
+    public PackPhase Update(float nearest, bool hidden = false, bool inSight = true)
     {
         Now = Now switch
         {
-            PackPhase.Shoot when nearest < runAt => nearest < runAt * PackFight.EscapeShare ? PackPhase.Escape : PackPhase.Move,
-            PackPhase.Move when nearest < runAt * PackFight.EscapeShare => PackPhase.Escape,
-            PackPhase.Move when nearest > runAt * PackFight.ShootShare => PackPhase.Shoot,
-            PackPhase.Escape when nearest > runAt => PackPhase.Move,
+            not PackPhase.Escape when nearest < runAt => PackPhase.Escape,
+            PackPhase.Escape when nearest > runAt * PackFight.ShootShare => PackPhase.Shoot,
+            PackPhase.Shoot when hidden => PackPhase.Vantage,
+            PackPhase.Vantage when inSight => PackPhase.Shoot,
             _ => Now,
         };
         return Now;
@@ -56,7 +57,8 @@ internal static class PackRing
     /// Which way to go, on the flat (x, z), to kite round the ring: along it (way +1 or -1), pulled back onto it when off
     /// it, and pushed straight away from the nearest mob as it closes in.
     /// </summary>
-    public static Vector2 Heading(Vector2 me, Vector2 centre, float ring, int way, Vector2 nearest, float runAt)
+    /// <param name="leastPush">At least this much straight away from the nearest (1 sprinting: a ring bent round lets them cut across).</param>
+    public static Vector2 Heading(Vector2 me, Vector2 centre, float ring, int way, Vector2 nearest, float runAt, float leastPush = 0)
     {
         var out_ = me - centre;
         float r = out_.Length();
@@ -65,7 +67,7 @@ internal static class PackRing
         float back = Math.Clamp((ring - r) / Math.Max(ring, 1) * 2, -1, 1);       // + outwards when inside the ring
         var away = me - nearest;
         float d = away.Length();
-        float push = d > 1 ? Math.Clamp((runAt - d) / runAt * 2, 0, 1.5f) : 1.5f;
+        float push = d > 1 ? Math.Max(leastPush, Math.Clamp((runAt - d) / runAt * 2, 0, 1.5f)) : 1.5f;
         var dir = along + radial * back + (d > 1 ? away / d : Vector2.Zero) * push;
         return dir.LengthSquared() > 1e-6f ? Vector2.Normalize(dir) : along;
     }
@@ -95,8 +97,16 @@ internal static class PackRing
 
 internal sealed class PackFight(PlayerReader reader, WorldEntity first, int pulse, PackPlan plan, Hud hud, string logPath)
 {
-    /// <summary>Of RunAt: shoot again from this far; sprint away inside this share of it.</summary>
-    public const float ShootShare = 1.8f, EscapeShare = .6f;
+    /// <summary>Of RunAt: the sprint goes on until the nearest is this far, then it turns and shoots.</summary>
+    public const float ShootShare = 1.5f;
+    /// <summary>Seconds: shooting with no brackets on the target this long, it is hidden; brackets this recent, it is in sight.</summary>
+    public const double HiddenSeconds = 1.5, InSightSeconds = .2;
+    /// <summary>
+    /// Crouch is a tap that toggles. Measured over this window after standing up to run, a speed under
+    /// <see cref="CrouchedSpeed"/> units a second (a sprint is about 280) means you are still crouched, so it taps once more.
+    /// </summary>
+    public const double StandCheckFrom = .4, StandCheckTo = 1.2;
+    public const float CrouchedSpeed = 150, StuckSpeed = 15;
     /// <summary>Seconds: the crosshair counts as on the body only if a look this recent had it inside the brackets.</summary>
     public const double OnBodySeconds = .15;
     /// <summary>Of RunAt: a mob nearer than the target by this share is shot first instead.</summary>
@@ -158,6 +168,9 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         Vector3 targetAt = first.Position;
         int way = 0;
         PackPhase was = PackPhase.Shoot;
+        double phaseSince = 0, aimedAt = 0, standAt = -1;
+        bool crouched = false;
+        Vector3? standFrom = null;
 
         void Aim(WorldEntity e)
         {
@@ -167,12 +180,12 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
             screen = new ScreenAim(learned is { WidthAtRange: { } w, HeightAtRange: { } h } ? (w, h) : null);
             track = new TrackAim();
             health = e.Stats?.Health?.RawCurrent;
-            hurtAt = clock.Elapsed.TotalSeconds; firedSince = -1;
+            hurtAt = aimedAt = clock.Elapsed.TotalSeconds; firedSince = -1;
             Console.WriteLine($"Target: {e.Name} ({TargetId()}).");
         }
         Aim(first);
 
-        Console.WriteLine($"Pack fight: shooting from {plan.ShootFrom:F0} units, moving round the ring once one is within {plan.RunAt:F0}. F8 stops.");
+        Console.WriteLine($"Pack fight: shooting crouched, sprinting round the ring once one is within {plan.RunAt:F0} until it is past {plan.ShootFrom:F0}. F8 stops.");
         try
         {
             while (true)
@@ -220,18 +233,42 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 }
                 float nearestAway = pack.Count > 0 ? pack.Min(e => PointNavigation.Distance(s.Position, e.Position)) : float.MaxValue;
                 var nearestAt = pack.Count > 0 ? pack.MinBy(e => PointNavigation.Distance(s.Position, e.Position))!.Position : targetAt;
-                var phase = phases.Update(Math.Min(nearestAway, PointNavigation.Distance(s.Position, targetAt)));
+                bool hidden = was == PackPhase.Shoot && now - Math.Max(screen.SeenAt, Math.Max(phaseSince, aimedAt)) > HiddenSeconds;
+                bool inSight = now - screen.SeenAt <= InSightSeconds;
+                var phase = phases.Update(Math.Min(nearestAway, PointNavigation.Distance(s.Position, targetAt)), hidden, inSight);
                 if (phase != was)
                 {
                     Record("phase", s, new { phase = phase.ToString(), nearest = nearestAway });
-                    if (phase != PackPhase.Shoot && way == 0) way = PackRing.Way(Flat(s.Position), plan.Centre, Flat(nearestAt));
+                    if (way == 0) way = PackRing.Way(Flat(s.Position), plan.Centre, Flat(nearestAt));
                     Console.WriteLine(phase switch
                     {
-                        PackPhase.Shoot => $"Room again ({nearestAway:F0} units): shooting.",
-                        PackPhase.Move => $"One is {nearestAway:F0} units away: moving round the ring.",
+                        PackPhase.Shoot => $"Room ({nearestAway:F0} units) and in sight: crouching to shoot.",
+                        PackPhase.Vantage => $"{target.Name} is out of sight: round the ring for a clear view.",
                         _ => $"One is {nearestAway:F0} units away: sprinting clear.",
                     });
-                    was = phase;
+                    // Crouched only to shoot: stand up (a tap) before running.
+                    if ((phase == PackPhase.Shoot) != crouched)
+                    {
+                        input.HoldLeft(false);
+                        input.CrouchTap();
+                        crouched = phase == PackPhase.Shoot;
+                        standAt = crouched ? -1 : now; standFrom = null;
+                        Record("crouch", s, new { crouched });
+                    }
+                    was = phase; phaseSince = now;
+                }
+                // Still crouched after all? Running crouched is too slow to keep them off.
+                if (standAt >= 0 && now - standAt >= StandCheckFrom && standFrom == null) standFrom = s.Position;
+                else if (standAt >= 0 && now - standAt >= StandCheckTo && standFrom is { } from)
+                {
+                    float speed = Vector2.Distance(Flat(from), Flat(s.Position)) / (float)(StandCheckTo - StandCheckFrom);
+                    if (speed > StuckSpeed && speed < CrouchedSpeed)
+                    {
+                        input.CrouchTap();
+                        Record("crouch-fix", s, new { speed });
+                        Console.WriteLine($"Running at only {speed:F0} units a second: still crouched, standing up.");
+                    }
+                    standAt = -1; standFrom = null;
                 }
 
                 var view = View(s);
@@ -247,7 +284,8 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 }
 
                 // Where the camera should look: the target (Shoot and Move), or the way out (Escape).
-                var heading = PackRing.Heading(Flat(s.Position), plan.Centre, plan.Ring, way == 0 ? 1 : way, Flat(nearestAt), plan.RunAt);
+                var heading = PackRing.Heading(Flat(s.Position), plan.Centre, plan.Ring, way == 0 ? 1 : way, Flat(nearestAt), plan.RunAt,
+                    phase == PackPhase.Escape ? 1 : 0);
                 (float Yaw, float Pitch) error = phase == PackPhase.Escape
                     ? (PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), new Vector3(heading.X, 0, heading.Y)), -view.Pitch)
                     : screen.Error(now, yawToMemory, pitchToMemory, away);
@@ -265,7 +303,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                     track.Sent(now, x * yawGain, y * pitchGain);
                 }
 
-                // Feet: still while shooting; along the ring at a run otherwise.
+                // Feet: still while shooting; along the ring at a run otherwise (sprinting forward when escaping).
                 if (phase == PackPhase.Shoot)
                 {
                     input.Walk(false); input.Back(false); input.Strafe(0); input.RunKey(false);
@@ -282,6 +320,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 if (onBody != input.LeftHeld)
                 {
                     input.HoldLeft(onBody);
+                    Record("fire", s, new { on = onBody, away, target = target.Name });
                     if (onBody && firedSince < 0) firedSince = now;
                 }
                 if (firedSince >= 0 && plan.GiveUpSeconds > 0 && now - Math.Max(hurtAt, firedSince) > plan.GiveUpSeconds)
@@ -299,6 +338,10 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
             Record("stopped", previous, new { error.Message });
             hud.Post(Hud.Red, "PACK  stopped", error.Message);
             throw;
+        }
+        finally
+        {
+            if (crouched) try { input.CrouchTap(); } catch (InvalidOperationException) { }   // stand up for the loot run
         }
     }
 

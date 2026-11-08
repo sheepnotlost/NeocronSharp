@@ -257,17 +257,19 @@ internal static class FollowTests
             Check(Crowd.Of(me, target, Array.Empty<Vector3>(), 800) == (float.MaxValue, 0, -1), "alone: nothing changes");
         });
 
-        test("Pack phases: shoot standing, move at 800, sprint inside 480, shoot again past 1,440", () =>
+        test("Pack phases: shoot, sprint inside 800 until past 1,200, round the ring while the target is hidden", () =>
         {
             var p = new PackPhases(800);
             Check(p.Update(2000) == PackPhase.Shoot, "far: shoot");
-            Check(p.Update(790) == PackPhase.Move, "790: move");
-            Check(p.Update(1200) == PackPhase.Move, "1,200: still moving (not past 1,440)");
-            Check(p.Update(470) == PackPhase.Escape, "470: sprint clear");
-            Check(p.Update(700) == PackPhase.Escape, "700: still sprinting");
-            Check(p.Update(820) == PackPhase.Move, "past 800: face them again, keep moving");
-            Check(p.Update(1450) == PackPhase.Shoot, "1,450: stop and shoot");
-            Check(new PackPhases(800).Update(300) == PackPhase.Escape, "one already at 300 when shooting: sprint at once");
+            Check(p.Update(790) == PackPhase.Escape, "790: sprint clear");
+            Check(p.Update(1100) == PackPhase.Escape, "1,100: still sprinting (not past 1,200)");
+            Check(p.Update(1210) == PackPhase.Shoot, "past 1,200: turn and shoot");
+            Check(p.Update(1100, hidden: true, inSight: false) == PackPhase.Vantage, "out of sight: round the ring");
+            Check(p.Update(1000, inSight: false) == PackPhase.Vantage, "still hidden: keep going");
+            Check(p.Update(950, inSight: true) == PackPhase.Shoot, "in sight again: stop and shoot");
+            p.Update(1000, hidden: true, inSight: false);
+            Check(p.Update(700, inSight: false) == PackPhase.Escape, "hidden and one within 800: sprint");
+            Check(new PackPhases(800).Update(300) == PackPhase.Escape, "one already at 300: sprint at once");
         });
 
         test("Pack ring: round the ring away from the pack, back onto it, and away from a close one", () =>
