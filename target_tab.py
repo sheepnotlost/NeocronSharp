@@ -21,7 +21,11 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+import cv2
+import numpy as np
+
 import clients
+import mob_overlay
 import traversal_tab as tt
 from dungeon_runner import INSIDE, OUTSIDE
 from loot_runner import REACH_MOST, hunted
@@ -33,6 +37,7 @@ AVOID_FILE = tt.PROJECT / "avoid.txt"      # the Don't attack box, kept for next
 PIN_FILE = tt.PROJECT / "pin.txt"          # the Pin camera tick, kept for next time
 NOTES_FILE = tt.PROJECT / "logs" / "notes.md"   # the hunt's notes, written by the engine after every fight
 MOB_MAP_FILE = tt.PROJECT / "logs" / "mob-map.md"   # traversal.exe mobs: every mob the game places, and how far each hits from
+MOBS_PICTURE = tt.PROJECT / "logs" / "mobs-on-map.png"   # Mobs on map: the sector you are in, mobs where they stand now
 HEAL_DISTANCE = 120          # units from the fighter the healer stops at
 HEAL_RETRY = 10              # seconds before a healer alone looks for the fighter again
 OTHER_LIVE = "A walk, follow or TL 60 Job Loop is running on another tab. Stop it first."
@@ -194,6 +199,7 @@ class TargetTab:
         ttk.Checkbutton(avoid_row, text="Pin camera (writes game memory)", variable=self.pin).grid(row=0, column=3, sticky="w", padx=(12, 0))
         ttk.Button(avoid_row, text="Hunt notes", command=self.open_notes).grid(row=0, column=4, sticky="e", padx=(12, 0))
         ttk.Button(avoid_row, text="Mob map", command=self.open_mob_map).grid(row=0, column=5, sticky="e", padx=(6, 0))
+        ttk.Button(avoid_row, text="Mobs on map", command=self.open_mobs_on_map).grid(row=0, column=6, sticky="e", padx=(6, 0))
         self.hunt_button = ttk.Button(hunt_buttons, text="Start hunt", command=self.start_hunt)
         self.hunt_button.pack(side="right")
         self.dungeon_button = ttk.Button(hunt_buttons, text="Hunt Regant's Legacy", command=self.start_dungeon)
@@ -480,6 +486,28 @@ class TargetTab:
             os.startfile(NOTES_FILE)
         except OSError as exc:
             self.append(f"Could not open the hunt notes: {exc}")
+
+    def open_mobs_on_map(self):
+        """The sector you are in, with every mob the game reports around you where it stands now, opened as a picture."""
+        def make():
+            try:
+                data = tt.run_tool(["nearby"], timeout=60)
+                if not data.get("live"):
+                    self.queue.put(("log", f"Cannot read the game: {data.get('why')}\n"))
+                    return
+                heights, half = None, None
+                raw = MOBS_PICTURE.with_suffix(".heights")
+                if data.get("sector") is not None:
+                    terrain = tt.run_tool(["heights", str(data["sector"]), str(raw)], timeout=60)
+                    if terrain.get("ok"):
+                        heights, half = np.fromfile(raw, np.float32), terrain["half"]
+                MOBS_PICTURE.parent.mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(MOBS_PICTURE), mob_overlay.render(data, heights, half=half))
+                os.startfile(MOBS_PICTURE)
+            except Exception as exc:  # a picture that can't be made only says so
+                self.queue.put(("log", f"Could not draw the mobs on the map: {exc}\n"))
+        self.append("Drawing the mobs on the map...")
+        threading.Thread(target=make, daemon=True, name="mobs-on-map").start()
 
     def open_mob_map(self):
         """Every mob the game's files place (level, attack, where), with how far each hit you from, written fresh and opened."""

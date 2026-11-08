@@ -306,6 +306,19 @@ try
             }
             return 0;
         }
+        case "heights":
+        {
+            // heights <wasteland sector> <file>: its 512 x 512 heightfield (float32, row = z, column = x), for Mobs on map.
+            int id = int.Parse(rest[0]);
+            string install = Directory.Exists(DefaultInstall) ? DefaultInstall : Path.GetDirectoryName(FollowCommand.ClientExecutable())!;
+            if (!TerrainCell.Exists(install, id)) { Console.WriteLine("{\"ok\":false}"); return 0; }
+            var heights = TerrainCell.ReadHeights(install, id);
+            var bytes = new byte[heights.Length * 4];
+            Buffer.BlockCopy(heights, 0, bytes, 0, bytes.Length);
+            File.WriteAllBytes(rest[1], bytes);
+            Console.WriteLine($"{{\"ok\":true,\"samples\":{TerrainCell.Samples},\"half\":{TerrainCell.Half}}}");
+            return 0;
+        }
         case "mobs":
         {
             // mobs [least level]: logs/mob-map.md, every robot, mutant and animal the game's files place, and where.
