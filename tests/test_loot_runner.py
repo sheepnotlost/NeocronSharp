@@ -312,7 +312,7 @@ class SequenceTests(unittest.TestCase):
         loot_runner.IDLE_LIMIT, limit = 0, loot_runner.IDLE_LIMIT
         self.addCleanup(setattr, loot_runner, "IDLE_LIMIT", limit)
         runner.run()
-        self.assertEqual(seen[0], ("walk", "Sand Snake", 1200), "farther than 1,300: walks in to 1,200 first")
+        self.assertEqual(seen[0], ("walk", "Sand Snake", 1344), "farther than 1,456: walks in to 1,344 first")
         self.assertEqual(seen[1], ("pack", "Sand Snake", (-9270, -4490, 2900), 1600, ("snake",)))
         self.assertEqual([s for s in seen if s[0] == "box"], [("box", "Sand Snake"), ("box", "Poisonous Sand Snake")])
         self.assertIn("2 killed", events[-1][1])

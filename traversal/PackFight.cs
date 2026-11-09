@@ -60,17 +60,37 @@ internal static class PackRing
     /// it, and pushed straight away from the nearest mob as it closes in.
     /// </summary>
     /// <param name="leastPush">At least this much straight away from the nearest (1 sprinting: a ring bent round lets them cut across).</param>
-    public static Vector2 Heading(Vector2 me, Vector2 centre, float ring, int way, Vector2 nearest, float runAt, float leastPush = 0)
+    public static Vector2 Heading(Vector2 me, Vector2 centre, float ring, int way, Vector2 nearest, float runAt, float leastPush = 0, float area = 2900)
     {
         var out_ = me - centre;
         float r = out_.Length();
         var radial = r > 1 ? out_ / r : Vector2.UnitX;
         var along = new Vector2(radial.Y, -radial.X) * way;
-        float back = Math.Clamp((ring - r) / Math.Max(ring, 1) * 2, -1, 1);       // + outwards when inside the ring
+        // + outwards when inside the ring; much stronger inwards once outside it, so the run-away push can't drag the kite out
+        // of the circle (it went to 4,500 units from the centre of a 2,900 circle, 8 Nov).
+        float back = Math.Clamp((ring - r) / Math.Max(ring, 1) * 2, -3.5f, 1);
         var away = me - nearest;
         float d = away.Length();
         float push = d > 1 ? Math.Max(leastPush, Math.Clamp((runAt - d) / runAt * 2, 0, 1.5f)) : 1.5f;
-        var dir = along + radial * back + (d > 1 ? away / d : Vector2.Zero) * push;
+        var pull = radial * back;
+        if (d > 1 && d < runAt * 1.5f)
+        {
+            // Never pull into a snake that is on the way back: only the part of the pull that doesn't go at it.
+            var at = -away / d;
+            float into = Vector2.Dot(pull, at);
+            if (into > 0) pull -= at * into;
+        }
+        var flee = (d > 1 ? away / d : Vector2.Zero) * push;
+        // Past the ring, running straight away from a pack that is inside the circle runs out of it (3,500 units from the
+        // centre of a 2,900 circle, and live 4,300, out of the zone): the outward part of the flight goes, bit by bit, until
+        // at the edge only the part along it is left. The pack is then rounded, not run from.
+        float outward = Vector2.Dot(flee, radial);
+        if (outward > 0)
+        {
+            float edge = Math.Clamp((r - ring) / Math.Max(area - ring, 1), 0, 1);
+            flee -= radial * outward * edge;
+        }
+        var dir = along + pull + flee;
         return dir.LengthSquared() > 1e-6f ? Vector2.Normalize(dir) : along;
     }
 
@@ -100,7 +120,9 @@ internal static class PackRing
 internal sealed class PackFight(PlayerReader reader, WorldEntity first, int pulse, PackPlan plan, Hud hud, string logPath)
 {
     /// <summary>Of RunAt: the sprint goes on until the nearest is this far, then it turns and shoots.</summary>
-    public const float ShootShare = 1.25f;   // 1.5 sprinted for 3 to 5 s each time: more standing and shooting (8 Nov)
+    // 1.25 gave 200 units of room: two shots a stop. 1.75 gave 600 (six), but at 1,400 units a snake is too small for the
+    // game to draw its brackets on, so nothing could be locked: 1.4 is 320 units of room, with them still drawn (8 Nov).
+    public const float ShootShare = 1.4f;
     /// <summary>Seconds: shooting with no brackets on the target this long, it is hidden; brackets this recent, it is in sight.</summary>
     public const double HiddenSeconds = 1.5, InSightSeconds = .2;
     /// <summary>Radians: the camera this near the target's memory point is looking at it.</summary>
@@ -110,7 +132,10 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
     /// <summary>Seconds: the crosshair counts as on the body only if a look this recent had it inside the brackets.</summary>
     public const double OnBodySeconds = .15;
     /// <summary>Of RunAt: a mob nearer than the target by this share is shot first instead.</summary>
-    public const float SwitchShare = .75f;
+    public const float SwitchShare = .6f;
+    /// <summary>Seconds a target is kept before another may take over while it is alive: two snakes at about the same range
+    /// swapped it 13 times in 18 s, every swap threw the lock away, and not a shot was fired (8 Nov).</summary>
+    public const double SwitchDwell = 4;
     private const int Tick = 16, ReadEveryMs = 150, MarkEveryMs = 60;
 
     public List<(string Id, string Name)> Killed { get; } = new();
@@ -129,9 +154,17 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         using var pin = plan.Pin ? CameraWriter.Open(reader.Process.Id) : null;
         bool pinned = pin != null;
 
-        void Record(string kind, PlayerSample s, object? detail = null) => log.WriteLine(JsonSerializer.Serialize(new {
-            timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
-            position = new { s.Position.X, s.Position.Z }, detail }));
+        // A log line must never stop a fight: one bad value did, every run (8 Nov).
+        void Record(string kind, PlayerSample s, object? detail = null)
+        {
+            try
+            {
+                log.WriteLine(JsonSerializer.Serialize(new {
+                    timeUtc = DateTimeOffset.UtcNow, elapsedSeconds = clock.Elapsed.TotalSeconds, kind,
+                    position = new { s.Position.X, s.Position.Z }, detail }));
+            }
+            catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException or InvalidOperationException) { }
+        }
 
         PlayerSample Guard()
         {
@@ -168,7 +201,8 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
         Vector3 targetAt = first.Position;
         int way = 0;
         PackPhase was = PackPhase.Shoot;
-        double phaseSince = 0, aimedAt = 0, lookingSince = -1, crouchedAt = -1, heldAt = 0;
+        double phaseSince = 0, aimedAt = 0, lookingSince = -1, crouchedAt = -1, heldAt = 0, traceAt = 0;
+        (bool Forward, bool Back, int Side) lastKeys = (false, false, 0);
         var circle = new AimCircle();
 
         void Aim(WorldEntity e)
@@ -221,7 +255,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                         }
                         var nearest = pack.MinBy(e => PointNavigation.Distance(s.Position, e.Position))!;
                         bool targetGone = live == null || FollowCommand.Dead(live) || !pack.Any(e => FollowCommand.Id(e) == TargetId());
-                        if (targetGone || (FollowCommand.Id(nearest) != TargetId()
+                        if (targetGone || (FollowCommand.Id(nearest) != TargetId() && now - aimedAt >= SwitchDwell
                             && PointNavigation.Distance(s.Position, nearest.Position) < PointNavigation.Distance(s.Position, targetAt) * SwitchShare))
                         {
                             input.HoldLeft(false);
@@ -275,10 +309,14 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
 
                 // Where the camera should look: the target (Shoot and Move), or the way out (Escape).
                 var heading = PackRing.Heading(Flat(s.Position), plan.Centre, plan.Ring, way == 0 ? 1 : way, Flat(nearestAt), plan.RunAt,
-                    phase == PackPhase.Escape ? 1 : 0);
+                    phase == PackPhase.Escape ? 1 : 0, plan.Area);
                 (float Yaw, float Pitch) error = phase == PackPhase.Escape
                     ? (PointNavigation.SignedAngle(CameraAim.Facing(view.Yaw), new Vector3(heading.X, 0, heading.Y)), -view.Pitch)
                     : screen.Error(now, yawToMemory, pitchToMemory, away);
+                // Locked on: the crosshair inside the brackets, so not a pixel of mouse (the learned offset swings a little
+                // each look, and following it was the twitching and swaying, 8 Nov). Off the body, the correction goes in.
+                bool locked = phase == PackPhase.Shoot && now - screen.InsideAt <= OnBodySeconds;
+                if (locked) error = (0, 0);
                 if (pinned && !pin!.Turn(s.Player, error.Yaw, error.Pitch) && !pin.Works)
                 {
                     pinned = false;
@@ -303,6 +341,16 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                     var keys = PackRing.Keys(Flat(CameraAim.Facing(view.Yaw)), heading);
                     input.RunKey(true);
                     input.Walk(keys.Forward); input.Back(keys.Back); input.Strafe(keys.Side);
+                    lastKeys = keys;
+                }
+                // Every half second: where it is, which way the camera faces, where it means to go and what keys that is.
+                if (now - traceAt >= .5)
+                {
+                    traceAt = now;
+                    var face = Flat(CameraAim.Facing(view.Yaw));
+                    Record("trace", s, new { phase = phase.ToString(), nearest = nearestAway, fromCentre = Vector2.Distance(Flat(s.Position), plan.Centre),
+                        facing = new[] { face.X, face.Y }, heading = new[] { heading.X, heading.Y }, way, fwd = lastKeys.Forward, back = lastKeys.Back, side = lastKeys.Side,
+                        target = target.Name });
                 }
 
                 // Looking at it (for the hidden check): the camera near where it is, the learned correction included.
@@ -311,7 +359,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
 
                 // The trigger: only still and crouched, only with this look's crosshair inside the brackets, and only with
                 // the aim circle narrow (unread, after a moment crouched).
-                bool steady = crouchedAt >= 0 && circle.Narrow(now, now - crouchedAt >= SettleSeconds);
+                bool steady = crouchedAt >= 0 && circle.Narrow(now, now - crouchedAt >= SettleSeconds, input.LeftHeld);
                 bool onBody = phase == PackPhase.Shoot && input.Crouched && steady && now - screen.InsideAt <= OnBodySeconds;
                 if (onBody != input.LeftHeld)
                 {
@@ -323,8 +371,8 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
                 if (phase == PackPhase.Shoot && !onBody && now - heldAt >= 1)
                 {
                     heldAt = now;
-                    Record("held", s, new { crouched = input.Crouched, steady, spread = circle.Spread, seen = now - screen.SeenAt,
-                        inside = now - screen.InsideAt, looking, away, target = target.Name });
+                    Record("held", s, new { crouched = input.Crouched, steady, spread = circle.Spread, seen = Ago(now, screen.SeenAt),
+                        inside = Ago(now, screen.InsideAt), looking, away, target = target.Name });
                 }
                 if (firedSince >= 0 && plan.GiveUpSeconds > 0 && now - Math.Max(hurtAt, firedSince) > plan.GiveUpSeconds)
                 {
@@ -349,6 +397,9 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
     }
 
     private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
+
+    /// <summary>Seconds since a moment, or -1 if it never happened (infinity cannot be written as JSON: it crashed every run, 8 Nov).</summary>
+    internal static double Ago(double now, double at) => double.IsFinite(at) ? now - at : -1;
 }
 
 /// <summary>
@@ -358,7 +409,7 @@ internal sealed class PackFight(PlayerReader reader, WorldEntity first, int puls
 /// </summary>
 internal sealed class AimCircle
 {
-    public const float NarrowShare = .022f, LeastShare = .008f, WiderThanLeast = 1.4f;
+    public const float NarrowShare = .022f, WideShare = .045f, LeastShare = .008f, WiderThanLeast = 1.4f;
     /// <summary>Seconds: a reading older than this is no reading.</summary>
     public const double FreshSeconds = .2;
     private float _least = float.MaxValue;
@@ -373,9 +424,12 @@ internal sealed class AimCircle
     }
 
     /// <summary>Narrow enough to shoot; with no fresh reading, <paramref name="otherwise"/>.</summary>
-    public bool Narrow(double now, bool otherwise)
+    public bool Narrow(double now, bool otherwise, bool firing = false)
     {
         if (Spread is not { } r || now - _at > FreshSeconds) return otherwise;
-        return r <= Math.Min(NarrowShare, _least * WiderThanLeast) || r <= LeastShare * WiderThanLeast;
+        if (firing) return r <= WideShare;   // each shot widens it a little: keep on until it is clearly wide
+        // A fixed width: comparing with the narrowest ever read let one stray small reading make "narrow" impossible, so it
+        // was crouched, on the body, and never fired (8 Nov).
+        return r <= NarrowShare;
     }
 }

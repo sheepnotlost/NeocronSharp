@@ -33,7 +33,7 @@ HEALTH_EVERY = 1.0           # seconds between readings during a fight
 GIVE_UP = 20                 # seconds of no damage before going closer
 IDLE_LIMIT = 600             # seconds with nothing to fight before the hunt ends: time for them to respawn
 START_TRIES = 3              # readings of your health before the hunt refuses to start without one
-PACK_SHOOT_SHARE = 1.25       # of Keep away: where the pack fight shoots from (PackFight.ShootShare)
+PACK_SHOOT_SHARE = 1.4       # of Keep away: where the pack fight shoots from (PackFight.ShootShare)
 HIT_EVERY = 3.0              # seconds between notes of where the mob that hurt you was
 REACH_FILE = tt.PROJECT / "logs" / "mob-reach.json"
 # How a run ends when the trouble is that one target. Any other ending (Stop, focus, a zone change, mouse-look) stops the hunt.

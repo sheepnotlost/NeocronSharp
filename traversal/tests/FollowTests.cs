@@ -285,22 +285,83 @@ internal static class FollowTests
             Check(!circle.Narrow(.3, true), "64 px: wait");
             circle.See(.4, 17f / high);
             Check(circle.Narrow(.5, false), "back to 17 px: narrow again");
+            circle.See(.6, 30f / high);
+            Check(!circle.Narrow(.7, false) && circle.Narrow(.7, false, firing: true), "30 px: not to start on, but firing carries on");
+            circle.See(.8, 64f / high);
+            Check(!circle.Narrow(.9, true, firing: true), "64 px: stop even when firing");
             Check(!circle.Narrow(2, false) && circle.Narrow(2, true), "no fresh reading: the settle time decides");
         });
 
-        test("Pack phases: shoot, sprint inside 800 until past 1,000, round the ring while the target is hidden", () =>
+        test("Pack phases: shoot, sprint inside 800 until past 1,120, round the ring while the target is hidden", () =>
         {
             var p = new PackPhases(800);
             Check(p.Update(2000) == PackPhase.Shoot, "far: shoot");
             Check(p.Update(790) == PackPhase.Escape, "790: sprint clear");
-            Check(p.Update(990) == PackPhase.Escape, "990: still sprinting (not past 1,000)");
-            Check(p.Update(1010) == PackPhase.Shoot, "past 1,000: turn and shoot");
+            Check(p.Update(1110) == PackPhase.Escape, "1,110: still sprinting (not past 1,120)");
+            Check(p.Update(1130) == PackPhase.Shoot, "past 1,120: turn and shoot");
             Check(p.Update(1100, hidden: true, inSight: false) == PackPhase.Vantage, "out of sight: round the ring");
             Check(p.Update(1000, inSight: false) == PackPhase.Vantage, "still hidden: keep going");
             Check(p.Update(950, inSight: true) == PackPhase.Shoot, "in sight again: stop and shoot");
             p.Update(1000, hidden: true, inSight: false);
             Check(p.Update(700, inSight: false) == PackPhase.Escape, "hidden and one within 800: sprint");
             Check(new PackPhases(800).Update(300) == PackPhase.Escape, "one already at 300: sprint at once");
+        });
+
+        test("Pack kite simulation: two snakes chase; never hit, never out of the circle, both killed", () =>
+        {
+            var centre = Vector2.Zero;
+            const float area = 2900, ring = 1600, runAt = 800, hitRange = 150, playerSpeed = 300, snakeSpeed = 215;
+            var starts = new (Vector2 Me, Vector2 A, Vector2 B)[]
+            {
+                (new(-1500, -1000), new(-2600, -500), new(-2800, -1500)),        // pulled on the west side, as in K 11
+                (new(-2400, 0), new(-3400, 200), new(-3300, -400)),              // already near the circle's edge, the pack outside it
+                (new(0, 1600), new(900, 2400), new(1500, 1900)),                 // on the ring, the pack to one side
+                (new(1200, -300), new(300, -400), new(-200, -900)),              // pack between you and the centre
+                (new(2700, 300), new(1900, 200), new(1800, 700)),                // at the circle's edge, the pack inside it and closing
+                (new(-2800, -300), new(-2000, -200), new(-1900, 400)),           // the same on the other side
+            };
+            foreach (var start in starts)
+            {
+                var phases = new PackPhases(runAt);
+                var me = start.Me;
+                var snakes = new[] { start.A, start.B };
+                var left = new[] { 6f, 6f };   // seconds of shooting each takes
+                float time = 0, dt = .05f, shooting = 0, closest = 1e9f, farthest = 0;
+                int way = 0, flips = 0;
+                var was = PackPhase.Shoot;
+                while (time < 300 && left.Any(l => l > 0))
+                {
+                    for (int i = 0; i < 2; i++)
+                    {
+                        if (left[i] <= 0) continue;
+                        var gap = me - snakes[i];
+                        if (gap.Length() > 40) snakes[i] += Vector2.Normalize(gap) * snakeSpeed * dt;
+                    }
+                    int near = left[0] <= 0 ? 1 : left[1] <= 0 ? 0 : Vector2.Distance(me, snakes[0]) <= Vector2.Distance(me, snakes[1]) ? 0 : 1;
+                    float nearest = Vector2.Distance(me, snakes[near]);
+                    var phase = phases.Update(nearest);
+                    if (phase != was) { flips++; was = phase; }
+                    if (way == 0) way = PackRing.Way(me, centre, snakes[near]);
+                    if (phase == PackPhase.Shoot) { left[near] -= dt; shooting += dt; }
+                    else
+                    {
+                        var heading = PackRing.Heading(me, centre, ring, way, snakes[near], runAt, phase == PackPhase.Escape ? 1 : 0, area);
+                        var facing = phase == PackPhase.Escape ? heading : Vector2.Normalize(snakes[near] - me);
+                        var keys = PackRing.Keys(facing, heading);
+                        var f = Vector2.Normalize(facing);
+                        var move = f * ((keys.Forward ? 1 : 0) - (keys.Back ? 1 : 0)) + new Vector2(f.Y, -f.X) * keys.Side;
+                        if (move.LengthSquared() > 0) me += Vector2.Normalize(move) * playerSpeed * dt;
+                    }
+                    closest = MathF.Min(closest, nearest);
+                    farthest = MathF.Max(farthest, Vector2.Distance(me, centre));
+                    time += dt;
+                }
+                string said = $"start {start.Me}: {time:F0} s, {shooting:F0} s shooting, closest {closest:F0}, farthest from centre {farthest:F0}, {flips} phase changes";
+                Console.WriteLine("    sim " + said);
+                Check(left.All(l => l <= 0), "both killed: " + said);
+                Check(closest > hitRange * 2, "never within reach: " + said);
+                Check(farthest < area + 300, "stays in the circle: " + said);
+            }
         });
 
         test("Pack ring: round the ring away from the pack, back onto it, and away from a close one", () =>
@@ -314,6 +375,10 @@ internal static class FollowTests
             Check(heading.X > .3f, $"inside the ring: out towards it as well ({heading})");
             heading = PackRing.Heading(me, centre, 1000, way, new Vector2(1000, -100), 400);
             Check(heading.Y > 0, $"one 100 ahead on the ring: away from it wins ({heading})");
+            heading = PackRing.Heading(new Vector2(3000, 0), centre, 1000, way, new Vector2(3300, 0), 800, 1);   // far out, a snake on the outside
+            Check(heading.X < -.5f, $"3,000 out with the pack outside: back towards the circle, not away ({heading})");
+            heading = PackRing.Heading(new Vector2(3000, 0), centre, 1000, way, new Vector2(2700, 0), 800, 1);   // far out, a snake between you and the centre
+            Check(heading.X > 0 || MathF.Abs(heading.Y) > .5f, $"3,000 out with a snake close inside: round it, not into it ({heading})");
         });
 
         test("Pack keys: a heading behind is S, to the right is D, ahead-right is W and D", () =>
